@@ -288,6 +288,42 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
 <script src="airports.js"></script>
 <script>
+// Build lookup maps
+const schedByCode = {};
+const schedByIata = {};
+DB_SCHED.forEach(r => {
+  if(r[0]) schedByCode[r[0]] = r;
+  if(r[1]) schedByIata[r[1]] = r;
+});
+
+function lookupAirport(code) {
+  const c = code.toUpperCase().trim();
+  return schedByCode[c] || schedByIata[c] || null;
+}
+
+// Nearest scheduled airport to lat/lon using Euclidean distance
+function nearestScheduled(lat, lon, continentFilter) {
+  let best = null, bestD = Infinity;
+  const pool = continentFilter && continentFilter.length > 0
+    ? DB_SCHED.filter(r => continentFilter.includes(r[5]))
+    : DB_SCHED;
+  for (const r of pool) {
+    const d = Math.hypot(r[3] - lat, r[4] - lon);
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  return best;
+}
+
+function randFrom(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+// Country code → name (partial)
+const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',NZ:'New Zealand',AU:'Australia',NP:'Nepal',BT:'Bhutan',IN:'India',JP:'Japan',CN:'China',SG:'Singapore',TH:'Thailand',MY:'Malaysia',BR:'Brazil',AR:'Argentina',CO:'Colombia',PE:'Peru',EC:'Ecuador',VE:'Venezuela',MX:'Mexico',HN:'Honduras',CR:'Costa Rica',SX:'Sint Maarten',BL:'St. Barthelemy',KN:'St. Kitts',CA:'Canada',IS:'Iceland',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',GR:'Greece',HR:'Croatia',ME:'Montenegro',PH:'Philippines',ID:'Indonesia',PG:'Papua New Guinea',CD:'DR Congo',ZA:'South Africa',EG:'Egypt',ET:'Ethiopia',NG:'Nigeria',GI:'Gibraltar',MT:'Malta',PT:'Portugal',LU:'Luxembourg',PL:'Poland',CZ:'Czechia',HU:'Hungary',RO:'Romania',BG:'Bulgaria',RS:'Serbia',SK:'Slovakia',SI:'Slovenia',LT:'Lithuania',LV:'Latvia',EE:'Estonia',UA:'Ukraine',RU:'Russia',TR:'Turkey',IL:'Israel',AE:'UAE',SA:'Saudi Arabia',QA:'Qatar',KW:'Kuwait',BH:'Bahrain',OM:'Oman',KR:'South Korea',TW:'Taiwan',HK:'Hong Kong',MN:'Mongolia',KZ:'Kazakhstan',UZ:'Uzbekistan',PK:'Pakistan',AF:'Afghanistan',IQ:'Iraq',IR:'Iran',JO:'Jordan',LB:'Lebanon',CY:'Cyprus',MK:'North Macedonia',AL:'Albania',BA:'Bosnia',XK:'Kosovo',MH:'Marshall Islands',FM:'Micronesia',PW:'Palau',WS:'Samoa',TO:'Tonga',FJ:'Fiji',VU:'Vanuatu',SB:'Solomon Islands',KI:'Kiribati',TV:'Tuvalu',NR:'Nauru',CK:'Cook Islands',NU:'Niue',TK:'Tokelau',WF:'Wallis & Futuna',PF:'French Polynesia',NC:'New Caledonia',GL:'Greenland',FO:'Faroe Islands'};
+function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
+
+// ═══════════════════════════════════════════════════════════
+// CATEGORIES
+// ═══════════════════════════════════════════════════════════
+
 const COLORS=['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
 
 let CATEGORIES = [
@@ -435,7 +471,6 @@ let CATEGORIES = [
   {name:'Zagreb',icao:'LDZA'},{name:'Tivat',icao:'LYTV'},{name:'Malta',icao:'LMML'},
 ]},
 ];
-
 
 // ═══════════════════════════════════════════════════════════
 // SUPABASE
