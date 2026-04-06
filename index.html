@@ -286,8 +286,16 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 </div><!-- main -->
 </div><!-- app -->
 
-<script src="airports.js"></script>
+<script src="airports.js" onload="airportsLoaded=true;initAfterAirports()"></script>
 <script>
+let airportsLoaded = false;
+let pendingInit = false;
+function initAfterAirports() {
+  if (typeof DB_SCHED !== 'undefined') {
+    airportsLoaded = true;
+    if (pendingInit) { pendingInit = false; rollAll(); }
+  }
+}
 // Build lookup maps
 const schedByCode = {};
 const schedByIata = {};
@@ -509,7 +517,12 @@ async function loadAllFromCloud() {
     if (data && data.length > 0) {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
-      CATEGORIES.forEach(cat => { if (byId[cat.id]) cat.items = byId[cat.id]; });
+      CATEGORIES.forEach(cat => { 
+        // Only replace if cloud has non-empty items array
+        if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
+          cat.items = byId[cat.id]; 
+        }
+      });
       setCloudStatus('✓ Synced', 'ok');
     } else {
       setCloudStatus('First run…', 'ing');
@@ -642,6 +655,12 @@ function getDisplayCity(dbEntry, userItem) {
 }
 
 function rollAll() {
+  if (typeof DB_SCHED === 'undefined' || !DB_SCHED.length) {
+    pendingInit = true;
+    document.getElementById('row-themes').innerHTML = '<div class="empty-state">Loading airport database, please wait...</div>';
+    setTimeout(rollAll, 500);
+    return;
+  }
   lastResults = CATEGORIES.map(cat => {
     let result = {icao:'',name:'',city:'',country:'',lat:null,lon:null,coord:false,diff:'',text:'',coordLat:null,coordLon:null};
 
@@ -665,7 +684,6 @@ function rollAll() {
       }
     }
     else if (cat.type === 'list-simple') {
-      // FIX 2: filter by continent via DB lookup
       let pool = cat.items;
       if (activeContFilter.length > 0) {
         const f = cat.items.filter(i => {
@@ -673,8 +691,9 @@ function rollAll() {
           return db && activeContFilter.includes(db[5]);
         });
         if (f.length > 0) pool = f;
+        // If no match in filter, fall back to full pool
       }
-      if (!pool.length) return {cat, result};
+      if (!pool.length) { result.text = '–'; return {cat, result}; }
       const item = pool[Math.floor(Math.random() * pool.length)];
       const db = item.icao ? (schedByCode[item.icao] || null) : null;
       result.icao = item.icao || '';
@@ -1105,7 +1124,7 @@ document.getElementById('view-dashboard').style.display = 'flex';
 renderResults();
 
 window.addEventListener('load', async () => {
-  initMap();
+  try { initMap(); } catch(e) { console.error('Map init error:', e); }
   await loadAllFromCloud();
   renderResults();
 });
