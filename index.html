@@ -11,6 +11,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.geodesic@2.7.1/dist/leaflet.geodesic.umd.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -193,6 +194,72 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .btn-saveroster{font-size:12px;font-weight:600;padding:8px 16px;border-radius:var(--r);border:none;background:#f85149;color:#fff;cursor:pointer;font-family:var(--ff);}
 .btn-saveroster:hover{opacity:.85;}
 .sec-label-sm{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px;}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:2000;height:4px;background:transparent;transition:height .25s ease;}
+.bottom-nav:hover,.bottom-nav.open{height:56px;}
+.bottom-nav-inner{display:flex;align-items:center;justify-content:center;gap:4px;height:56px;background:var(--surf);border-top:1px solid var(--bdr);padding:0 20px;opacity:0;transition:opacity .2s .05s;}
+.bottom-nav:hover .bottom-nav-inner,.bottom-nav.open .bottom-nav-inner{opacity:1;}
+.bottom-nav-handle{position:absolute;top:0;left:50%;transform:translateX(-50%);width:40px;height:4px;background:var(--bdr2);border-radius:2px;cursor:pointer;transition:background .15s;}
+.bottom-nav:hover .bottom-nav-handle{background:var(--acc);}
+.bn-btn{font-size:12px;font-weight:600;padding:6px 18px;border-radius:var(--r);border:1px solid transparent;background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);display:flex;align-items:center;gap:6px;transition:all .15s;}
+.bn-btn:hover{background:var(--surf2);color:var(--txt);}
+.bn-btn.active{background:var(--surf2);color:var(--txt);border-color:var(--bdr2);}
+.bn-btn svg{width:14px;height:14px;}
+.bn-sep{width:1px;height:20px;background:var(--bdr);margin:0 4px;}
+/* Push content up so bottom nav doesn't overlap */
+.app{padding-bottom:4px;}
+
+/* ── AIRLINE LOGO ── */
+.airline-logo-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:54px;}
+.airline-logo-img{width:44px;height:28px;object-fit:contain;border-radius:3px;background:var(--surf2);border:1px solid var(--bdr);}
+.airline-logo-name{font-size:9px;color:var(--txt3);text-align:center;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
+/* ── ROSTER LEG LAYOUT FIX ── */
+.leg-row{flex-wrap:wrap;}
+.leg-airport-full{display:flex;flex-direction:column;gap:1px;}
+.leg-airport-codes{font-size:13px;font-weight:700;color:var(--acc2);font-family:'SF Mono','Courier New',monospace;letter-spacing:.03em;}
+.leg-airport-codes .iata{color:var(--blue);font-size:11px;margin-left:4px;}
+.leg-airport-city{font-size:11px;color:var(--txt2);}
+.leg-airport-country{font-size:10px;color:var(--txt3);}
+
+/* ── DEPART FIELD FIX ── */
+.depart-resolved-full{font-size:11px;color:var(--blue);margin-top:2px;min-height:14px;}
+
+/* ── ROSTER ACTIONS INLINE ── */
+.leg-airline-inline{display:flex;flex-direction:column;gap:3px;min-width:70px;flex-shrink:0;}
+.leg-aircraft-inline{display:flex;flex-direction:column;gap:3px;min-width:70px;flex-shrink:0;}
+
+/* ── NEXT FLIGHT / ROSTER SPLIT VIEW ── */
+.split-main{display:flex;flex:1;overflow:hidden;}
+.split-pane{flex:1;display:flex;flex-direction:column;overflow:hidden;transition:flex .3s;}
+.split-divider{width:1px;background:var(--bdr);flex-shrink:0;cursor:col-resize;}
+
+/* ── ROSTER RETURN ARROW ── */
+.roster-back-btn{font-size:11px;padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);display:flex;align-items:center;gap:5px;}
+.roster-back-btn:hover{background:var(--surf2);color:var(--txt);}
+
+/* ── KNOWN AIRLINE LOGOS ── */
+
+/* ── DEPART FULL DISPLAY ── */
+.depart-full-display{font-size:12px;color:var(--txt);margin-top:2px;min-height:14px;font-weight:500;}
+.depart-full-display .icao{font-family:'SF Mono','Courier New',monospace;color:var(--acc2);font-weight:700;}
+.depart-full-display .iata{font-family:'SF Mono','Courier New',monospace;color:var(--blue);}
+
+/* ── BOTTOM TABS HIDE NORMAL TOPNAV (use bottom nav instead for dashboard/roster) ── */
+
+/* ── BACK ARROW ON ROSTER ── */
+.roster-header-bar{display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--bdr);flex-shrink:0;background:var(--surf);}
+.roster-header-title{font-size:13px;font-weight:600;color:var(--txt);}
+.roster-selected-info{font-size:11px;color:var(--txt2);margin-left:auto;}
+
+/* ── ROSTER SELECTED AIRPORT TAG ── */
+.selected-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(125,94,232,.15);border:1px solid var(--acc);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--acc2);cursor:pointer;}
+.selected-tag:hover{background:rgba(125,94,232,.25);}
+
+/* ──  NEXT/PREV ARROWS ── */
+
+/* ── END BOTTOM NAV CSS ── */
 
 /* ── LOGBOOK ── */
 .logbook-page{display:flex;flex-direction:column;flex:1;overflow:hidden;}
@@ -379,6 +446,36 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
   </div><!-- right-panel -->
 </div><!-- main -->
+<!-- BOTTOM NAV -->
+<div class="bottom-nav" id="bottom-nav">
+  <div class="bottom-nav-handle" onclick="document.getElementById('bottom-nav').classList.toggle('open')"></div>
+  <div class="bottom-nav-inner">
+    <button class="bn-btn" id="bn-dashboard" onclick="switchToMain('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Next Flight
+    </button>
+    <div class="bn-sep"></div>
+    <button class="bn-btn" id="bn-roster" onclick="switchToMain('roster')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+      Roster
+    </button>
+    <div class="bn-sep"></div>
+    <button class="bn-btn" id="bn-logbook" onclick="switchView('logbook')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Logbook
+    </button>
+    <div class="bn-sep"></div>
+    <button class="bn-btn" id="bn-categories" onclick="switchView('categories')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Categories
+    </button>
+    <div class="bn-sep"></div>
+    <button class="bn-btn" id="bn-data" onclick="switchView('data')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
+      Data
+    </button>
+  </div>
+</div>
 </div><!-- app -->
 
 <script src="airports.js" onload="airportsLoaded=true;initAfterAirports()"></script>
@@ -725,10 +822,16 @@ function departInput(val) {
 function selectDepart(code) {
   const ap = schedByCode[code]; if (!ap) return;
   departAirport = ap;
-  // FIX 1: Show "ICAO — City" in the input field itself
-  document.getElementById('depart-input').value = `${ap[0]} — ${ap[7] || ap[2]}`;
-  document.getElementById('depart-resolved').textContent = `${ap[0]} · ${ap[2]} · ${countryName(ap[6])}`;
+  const iata = ap[1] ? ` / ${ap[1]}` : '';
+  const city = ap[7] || ap[2];
+  document.getElementById('depart-input').value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
+  document.getElementById('depart-resolved').textContent = `${ap[0]}${iata} · ${city} · ${countryName(ap[6])}`;
   document.getElementById('depart-suggestions').style.display = 'none';
+  // Also update first leg dep if roster exists
+  if (legs.length > 0 && !legs[0].dep) {
+    legs[0].dep = ap;
+    renderLegs();
+  }
 }
 
 function hideSuggestions() {
@@ -1211,6 +1314,26 @@ function exportJSON() {
 // ═══════════════════════════════════════════════════════════
 // VIEW SWITCHING
 // ═══════════════════════════════════════════════════════════
+// Bottom nav: switch between main views (Next Flight = dashboard, or Roster)
+let lastMainView = 'dashboard'; // 'dashboard' or 'roster'
+
+function switchToMain(mainView) {
+  lastMainView = mainView;
+  // Update bottom nav active state
+  ['dashboard','roster','logbook','categories','data'].forEach(v => {
+    const btn = document.getElementById('bn-'+v);
+    if (btn) btn.className = 'bn-btn' + (v===mainView?' active':'');
+  });
+  
+  if (mainView === 'dashboard') {
+    switchView('dashboard');
+  } else if (mainView === 'roster') {
+    switchView('roster');
+  } else {
+    switchView(mainView);
+  }
+}
+
 function switchView(view) {
   currentView = view;
   const allViews = ['dashboard','categories','roster','logbook','data'];
@@ -1281,10 +1404,10 @@ function showLegSuggest(inputEl, results, onSelect) {
 // ── Leg row rendering ──
 function airportBox(ap, prefilled) {
   if (!ap) return `<div class="leg-box"><div class="leg-code" style="color:var(--txt3);">–</div></div>`;
+  const iata = ap[1] ? ` <span style="color:var(--blue);font-size:12px;">/ ${ap[1]}</span>` : '';
   return `<div class="leg-box${prefilled?' prefilled':''}">
-    <div class="leg-code">${ap[0]} <span style="font-size:11px;color:var(--txt2);font-family:var(--ff);">${ap[1]||''}</span></div>
-    <div class="leg-city">${ap[7]||ap[2]}</div>
-    <div class="leg-country">${countryName(ap[6])}</div>
+    <div class="leg-code">${ap[0]}${iata}</div>
+    <div class="leg-city">${ap[7]||ap[2]}, <span style="color:var(--txt3)">${countryName(ap[6])}</span></div>
   </div>`;
 }
 
@@ -1329,13 +1452,18 @@ function renderLegs() {
         <div class="leg-label">Destination</div>
         ${arrHtml}
       </div>
-      <div class="leg-col" style="margin-left:auto;">
-        <div class="leg-label">Airline</div>
+      <div class="leg-col" style="gap:2px;">
+        <div class="leg-label">Airline ICAO</div>
         <input class="leg-sm-input" placeholder="e.g. DLH" value="${leg.airline||''}" 
-          data-leg="${i}" data-field="airline" oninput="onLegFieldInput(this)" style="width:80px;">
-        <div class="leg-label" style="margin-top:4px;">Aircraft</div>
+          data-leg="${i}" data-field="airline" oninput="onLegFieldInput(this);updateAirlineLogo(this,${i})" style="width:78px;text-transform:uppercase;">
+        <div id="logo-${i}" class="airline-logo-wrap" style="margin-top:3px;display:${leg.airline?'flex':'none'}">
+          ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
+        </div>
+      </div>
+      <div class="leg-col" style="gap:2px;">
+        <div class="leg-label">Aircraft</div>
         <input class="leg-sm-input" placeholder="e.g. A388" value="${leg.aircraft||''}"
-          data-leg="${i}" data-field="aircraft" oninput="onLegFieldInput(this)" style="width:80px;">
+          data-leg="${i}" data-field="aircraft" oninput="onLegFieldInput(this)" style="width:78px;text-transform:uppercase;">
       </div>
       ${legs.length > 1 ? `<button class="leg-del" onclick="deleteLeg(${i})">✕</button>` : ''}`;
 
@@ -1368,6 +1496,94 @@ function onLegFieldInput(inputEl) {
   const idx = parseInt(inputEl.dataset.leg);
   const field = inputEl.dataset.field;
   legs[idx][field] = inputEl.value;
+}
+
+// ── Airline ICAO → Name and Logo ──
+const AIRLINE_NAMES = {
+  'DLH':'Lufthansa','BAW':'British Airways','AFR':'Air France','KLM':'KLM',
+  'UAL':'United Airlines','DAL':'Delta Air Lines','AAL':'American Airlines',
+  'SWR':'Swiss','AUA':'Austrian Airlines','TAP':'TAP Air Portugal',
+  'IBE':'Iberia','VUE':'Vueling','EZY':'easyJet','RYR':'Ryanair',
+  'SIA':'Singapore Airlines','CPA':'Cathay Pacific','ANA':'All Nippon Airways',
+  'JAL':'Japan Airlines','QFA':'Qantas','UAE':'Emirates','ETD':'Etihad',
+  'QTR':'Qatar Airways','THY':'Turkish Airlines','IRA':'Iran Air',
+  'TAM':'LATAM Brasil','LAN':'LATAM Airlines','AVA':'Avianca',
+  'VIR':'Virgin Atlantic','BAW':'British Airways','EIN':'Aer Lingus',
+  'FIN':'Finnair','SAS':'SAS','NOR':'Norwegian','WZZ':'Wizz Air',
+  'VTA':'Air Tahiti','ANE':'Air Nostrum','MEA':'Middle East Airlines',
+  'ASA':'Alaska Airlines','LNE':'Linea Aerea','LPE':'LAN Peru',
+  'ITY':'ITA Airways','RRR':'Royal Air Force','THT':'Air Tahiti Nui',
+  'FDY':'FedEx','HVN':'Vietnam Airlines','CSN':'China Southern',
+  'CCA':'Air China','CHH':'Hainan Airlines','MAS':'Malaysia Airlines',
+  'THA':'Thai Airways','GIA':'Garuda Indonesia','PAL':'Philippine Airlines',
+  'AMX':'Aeromexico','GLO':'Gol','AZU':'Azul','ABC':'Air Bridge Cargo',
+};
+
+// Wiki logos for common airlines (direct Wikipedia file URLs)
+const AIRLINE_LOGOS = {
+  'DLH':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Lufthansa_Logo_2018.svg/120px-Lufthansa_Logo_2018.svg.png',
+  'BAW':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/British_Airways_Logo.svg/120px-British_Airways_Logo.svg.png',
+  'AFR':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Air_France_Logo.svg/120px-Air_France_Logo.svg.png',
+  'KLM':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/KLM_logo.svg/120px-KLM_logo.svg.png',
+  'DAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Delta_logo.svg/120px-Delta_logo.svg.png',
+  'UAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/United_Airlines_logo.svg/120px-United_Airlines_logo.svg.png',
+  'AAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/American_Airlines_logo_2013.svg/120px-American_Airlines_logo_2013.svg.png',
+  'SWR':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Swiss_International_Air_Lines_Logo_2011.svg/120px-Swiss_International_Air_Lines_Logo_2011.svg.png',
+  'AUA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Austrian_Airlines_Logo.svg/120px-Austrian_Airlines_Logo.svg.png',
+  'TAP':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/TAP_Air_Portugal_logo.svg/120px-TAP_Air_Portugal_logo.svg.png',
+  'IBE':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Iberia_Airlines_logo.svg/120px-Iberia_Airlines_logo.svg.png',
+  'QTR':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Qatar_Airways_Logo.svg/120px-Qatar_Airways_Logo.svg.png',
+  'UAE':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Emirates_logo.svg/120px-Emirates_logo.svg.png',
+  'ETD':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Etihad_Airways_Logo.svg/120px-Etihad_Airways_Logo.svg.png',
+  'SIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Singapore_Airlines_Logo_2.svg/120px-Singapore_Airlines_Logo_2.svg.png',
+  'THA':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Thai_Airways_Logo.svg/120px-Thai_Airways_Logo.svg.png',
+  'QFA':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Qantas_logo_2016.svg/120px-Qantas_logo_2016.svg.png',
+  'EZY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/EasyJet_logo.svg/120px-EasyJet_logo.svg.png',
+  'RYR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Ryanair_Logo.svg/120px-Ryanair_Logo.svg.png',
+  'ANA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/ANA_logo_%282013%29.svg/120px-ANA_logo_%282013%29.svg.png',
+  'JAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/JAL_logo.svg/120px-JAL_logo.svg.png',
+  'THY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Turkish_Airlines_logo_2019_compact.svg/120px-Turkish_Airlines_logo_2019_compact.svg.png',
+  'VIR':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Virgin-atlantic-2014-logo.svg/120px-Virgin-atlantic-2014-logo.svg.png',
+  'FIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Finnair_Logo.svg/120px-Finnair_Logo.svg.png',
+  'SAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/SAS_logo.svg/120px-SAS_logo.svg.png',
+  'AMX':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Aeromexico_logo.svg/120px-Aeromexico_logo.svg.png',
+  'TAM':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/LATAM_Airlines_logo.svg/120px-LATAM_Airlines_logo.svg.png',
+  'MEA':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/MEA_logo.svg/120px-MEA_logo.svg.png',
+  'ASA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Alaska_Airlines_logo_2016.svg/120px-Alaska_Airlines_logo_2016.svg.png',
+  'ITY':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/ITA_Airways_logo.svg/120px-ITA_Airways_logo.svg.png',
+  'GLO':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Gol_Linhas_Aereas_logo.svg/120px-Gol_Linhas_Aereas_logo.svg.png',
+  'AZU':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Azul_Brazilian_Airlines_logo.svg/120px-Azul_Brazilian_Airlines_logo.svg.png',
+  'AVA':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Avianca_logo_2013.svg/120px-Avianca_logo_2013.svg.png',
+  'VTA':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/120px-Air_Tahiti_Nui_logo.svg.png',
+  'EIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Aer_Lingus_logo.svg/120px-Aer_Lingus_logo.svg.png',
+  'CPA':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Cathay_Pacific_Logo.svg/120px-Cathay_Pacific_Logo.svg.png',
+  'WZZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Wizz_Air_logo.svg/120px-Wizz_Air_logo.svg.png',
+};
+
+function airlineLogoHtml(icao) {
+  const code = (icao||'').toUpperCase().trim();
+  const name = AIRLINE_NAMES[code] || code;
+  const logoUrl = AIRLINE_LOGOS[code];
+  if (logoUrl) {
+    return `<img class="airline-logo-img" src="${logoUrl}" alt="${name}" title="${name}" 
+      onerror="this.style.display='none';this.nextSibling.style.display='block'">
+      <div class="airline-logo-name" style="display:none">${code}</div>`;
+  }
+  return `<div class="airline-logo-name" style="font-size:10px;color:var(--txt2);">${name}</div>`;
+}
+
+function updateAirlineLogo(inputEl, idx) {
+  const code = inputEl.value.toUpperCase().trim();
+  legs[idx].airline = code;
+  const logoWrap = document.getElementById('logo-'+idx);
+  if (logoWrap) {
+    if (code.length >= 2) {
+      logoWrap.style.display = 'flex';
+      logoWrap.innerHTML = airlineLogoHtml(code);
+    } else {
+      logoWrap.style.display = 'none';
+    }
+  }
 }
 
 function addLeg() {
@@ -1455,8 +1671,8 @@ function drawLogbookLines() {
     const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : depAp ? [depAp[3], depAp[4]] : null;
     const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : arrAp ? [arrAp[3], arrAp[4]] : null;
     if (depCoords && arrCoords) {
-      L.polyline([depCoords, arrCoords], {
-        color:'#484f58', weight:1.5, opacity:0.6, dashArray:'4,2'
+      new L.Geodesic([depCoords, arrCoords], {
+        color:'#5a6270', weight:1.2, opacity:0.55, steps:8
       }).addTo(rosterMap);
     }
   });
@@ -1470,9 +1686,9 @@ function updateRosterLines() {
   // Draw red lines for planned legs
   legs.forEach(leg => {
     if (leg.dep && leg.arr) {
-      const line = L.polyline(
-        [[leg.dep[3], leg.dep[4]], [leg.arr[3], leg.arr[4]]],
-        { color:'#f85149', weight:3, opacity:0.9 }
+      const line = new L.Geodesic(
+        [[[leg.dep[3], leg.dep[4]], [leg.arr[3], leg.arr[4]]]],
+        { color:'#f85149', weight:2.5, opacity:0.9, steps:12 }
       ).addTo(rosterMap);
       // Markers
       const depM = L.circleMarker([leg.dep[3], leg.dep[4]], {radius:6, color:'#0e1117', weight:2, fillColor:'#f85149', fillOpacity:1}).addTo(rosterMap);
@@ -1644,14 +1860,14 @@ function openInRoster(catId) {
   const res = lastResults.find(r => r.cat.id === catId);
   if (!res) return;
   const r = res.result;
-  if (!r.icao && !r.lat) return; // text-only result
+  if (!r.icao && !r.text) return;
+  if (r.text) return; // routing/text only - not plannable yet
   
-  // Find airport object from DB
-  const arrAp = r.icao ? DB_SCHED.find(ap => ap[0] === r.icao) || null : null;
+  const arrAp = r.icao ? (schedByCode[r.icao] || DB_SCHED.find(ap => ap[0] === r.icao) || null) : null;
   const depAp = departAirport || null;
   
   initRosterFromDashboard(depAp, arrAp);
-  switchView('roster');
+  switchToMain('roster');
 }
 
 
