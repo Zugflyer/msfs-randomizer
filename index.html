@@ -220,12 +220,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
       <!-- Results -->
       <div class="results-area" id="results-area">
-        <div class="results-row-label">Worldwide themes</div>
-        <div class="results-row" id="row-themes"></div>
-        <div class="results-row-label">Random — world &amp; regions</div>
-        <div class="results-row" id="row-randoms"></div>
-        <div class="results-row-label">Country networks</div>
-        <div class="results-row" id="row-networks"></div>
+        <div class="results-row-label">Difficult Airports &nbsp;·&nbsp; Interesting Airports &nbsp;·&nbsp; Routings</div>
+        <div class="results-row" id="row-r1"></div>
+        <div class="results-row-label">Mountain Climbing &nbsp;·&nbsp; Formula 1</div>
+        <div class="results-row" id="row-r2"></div>
+        <div class="results-row-label">Random World &nbsp;·&nbsp; Random ICAO &nbsp;·&nbsp; Random Non-Scheduled</div>
+        <div class="results-row" id="row-r3"></div>
+        <div class="results-row-label">Random Europe &nbsp;·&nbsp; Random North America &nbsp;·&nbsp; Random South America &nbsp;·&nbsp; Random Oceania</div>
+        <div class="results-row" id="row-r4"></div>
+        <div class="results-row-label">British Isles &nbsp;·&nbsp; Nordics &nbsp;·&nbsp; Central Europe</div>
+        <div class="results-row" id="row-r5"></div>
+        <div class="results-row-label">France / Belux &nbsp;·&nbsp; Iberia &nbsp;·&nbsp; Eastern Mediterranean</div>
+        <div class="results-row" id="row-r6"></div>
       </div>
     </div>
 
@@ -335,7 +341,7 @@ function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
 const COLORS=['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
 
 let CATEGORIES = [
-{id:'difficult',name:'Difficult Approaches',group:'themes',colorIdx:0,hasDiff:true,type:'list',items:[
+{id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,hasDiff:true,type:'list',items:[
   {icao:'OPGT',diff:'***',region:'AS'},{icao:'RJCH',diff:'**',region:'AS'},{icao:'RPUB',diff:'***',region:'AS'},
   {icao:'RPVE',diff:'**',region:'AS'},{icao:'VHHX',diff:'***',region:'AS'},{icao:'VILH',diff:'TBD',region:'AS'},
   {icao:'VNKT',diff:'**',region:'AS'},{icao:'VNLK',diff:'***',region:'AS'},{icao:'VQBT',diff:'***',region:'AS'},
@@ -399,9 +405,9 @@ let CATEGORIES = [
 {id:'rand_nonsched',name:'Random Non-Scheduled',group:'randoms',colorIdx:6,type:'rand-nonsched',items:[]},
 {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
 {id:'rand_europe',name:'Random Europe',group:'randoms',colorIdx:8,type:'rand-coord',region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
-{id:'rand_namerica',name:'Random N. America',group:'randoms',colorIdx:9,type:'rand-coord',region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
-{id:'rand_samerica',name:'Random S. America',group:'randoms',colorIdx:10,type:'rand-coord',region:{latMin:-56,latMax:13,lonMin:-82,lonMax:-34},items:[]},
-{id:'rand_australia',name:'Random Australia/NZ',group:'randoms',colorIdx:11,type:'rand-coord',region:{latMin:-47,latMax:-10,lonMin:113,lonMax:178},items:[]},
+{id:'rand_namerica',name:'Random North America',group:'randoms',colorIdx:9,type:'rand-coord',region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
+{id:'rand_samerica',name:'Random South America',group:'randoms',colorIdx:10,type:'rand-coord',region:{latMin:-56,latMax:13,lonMin:-82,lonMax:-34},items:[]},
+{id:'rand_australia',name:'Random Oceania',group:'randoms',colorIdx:11,type:'rand-coord',region:{latMin:-47,latMax:-10,lonMin:113,lonMax:178},items:[]},
 {id:'british',name:'British Isles',group:'networks',colorIdx:0,type:'list-simple',items:[
   {name:'Aberdeen',icao:'EGPD'},{name:'Edinburgh',icao:'EGPH'},{name:'Glasgow',icao:'EGPF'},
   {name:'London Heathrow',icao:'EGLL'},{name:'London Gatwick',icao:'EGKK'},{name:'London City',icao:'EGLC'},
@@ -465,7 +471,7 @@ let CATEGORIES = [
   {name:'Jerez',icao:'LEJR'},{name:'Granada',icao:'LEGR'},{name:'Almería',icao:'LEAM'},
   {name:'Gibraltar',icao:'LXGB'},
 ]},
-{id:'eastern_med',name:'Eastern Med. / Italy',group:'networks',colorIdx:5,type:'list-simple',items:[
+{id:'eastern_med',name:'Eastern Mediterranean',group:'networks',colorIdx:5,type:'list-simple',items:[
   {name:'Rome Fiumicino',icao:'LIRF'},{name:'Milan Malpensa',icao:'LIMC'},{name:'Milan Linate',icao:'LIML'},
   {name:'Venice',icao:'LIPZ'},{name:'Naples',icao:'LIRN'},{name:'Palermo',icao:'LICJ'},
   {name:'Catania',icao:'LICC'},{name:'Bologna',icao:'LIPE'},{name:'Florence',icao:'LIRQ'},
@@ -657,7 +663,8 @@ function getDisplayCity(dbEntry, userItem) {
 function rollAll() {
   if (typeof DB_SCHED === 'undefined' || !DB_SCHED.length) {
     pendingInit = true;
-    document.getElementById('row-themes').innerHTML = '<div class="empty-state">Loading airport database, please wait...</div>';
+    const el = document.getElementById('row-r1');
+    if (el) el.innerHTML = '<div class="empty-state">Loading airport database, please wait...</div>';
     setTimeout(rollAll, 500);
     return;
   }
@@ -754,12 +761,22 @@ function rollAll() {
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════
 function renderResults() {
-  const rowThemes = document.getElementById('row-themes');
-  const rowRandoms = document.getElementById('row-randoms');
-  const rowNetworks = document.getElementById('row-networks');
-  const themes = lastResults.filter(r => r.cat.group === 'themes');
-  const randoms = lastResults.filter(r => r.cat.group === 'randoms');
-  const networks = lastResults.filter(r => r.cat.group === 'networks');
+  // Row 1: Difficult Airports, Interesting Airports, Routings
+  // Row 2: Mountain Climbing, Formula 1
+  // Row 3: Random World, Random ICAO, Random Non-Scheduled
+  // Row 4: Random Europe, Random North America, Random South America, Random Oceania
+  // Row 5: British Isles, Nordics, Central Europe
+  // Row 6: France / Belux, Iberia, Eastern Mediterranean
+  const ROW_IDS = [
+    ['difficult','interesting','routings'],
+    ['mountain','formula1'],
+    ['rand_world','rand_icao','rand_nonsched'],
+    ['rand_europe','rand_namerica','rand_samerica','rand_australia'],
+    ['british','nordics','central_eu'],
+    ['france_belux','iberia','eastern_med'],
+  ];
+  const byId = {};
+  lastResults.forEach(r => { byId[r.cat.id] = r; });
 
   function renderCard({cat, result}) {
     const col = COLORS[cat.colorIdx % COLORS.length];
@@ -776,9 +793,12 @@ function renderResults() {
     return `<div class="res-card"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
   }
 
-  rowThemes.innerHTML = themes.length ? themes.map(renderCard).join('') : '<div class="empty-state">Click "Next Flight" to roll.</div>';
-  rowRandoms.innerHTML = randoms.map(renderCard).join('');
-  rowNetworks.innerHTML = networks.map(renderCard).join('');
+  ROW_IDS.forEach((ids, i) => {
+    const el = document.getElementById('row-r' + (i+1));
+    if (!el) return;
+    const cards = ids.map(id => byId[id] ? renderCard(byId[id]) : '').join('');
+    el.innerHTML = cards || (i===0 ? '<div class="empty-state">Click "Next Flight" to roll.</div>' : '');
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
