@@ -33,9 +33,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .map-col{flex:0 0 45%;position:relative;overflow:hidden;background:#06101e;}
 #map-svg{width:100%;height:100%;display:block;cursor:grab;}
 #map-svg:active{cursor:grabbing;}
-.map-overlay-legend{position:absolute;bottom:10px;left:10px;right:10px;pointer-events:none;display:flex;flex-wrap:wrap;gap:5px;}
-.leg-pill{display:flex;align-items:center;gap:4px;font-size:10px;color:var(--txt2);background:rgba(6,16,30,0.8);padding:2px 7px;border-radius:20px;border:1px solid var(--bdr);}
-.leg-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+
+
+
 
 /* RIGHT PANEL */
 .right-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;}
@@ -46,11 +46,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .nf-btn:hover{opacity:.85;}
 .nf-btn svg{width:18px;height:18px;}
 .nf-controls{display:flex;align-items:flex-start;gap:10px;flex:1;}
-.depart-wrap{display:flex;flex-direction:column;gap:3px;flex:0 0 200px;}
+.depart-wrap{display:flex;flex-direction:column;gap:3px;flex:0 0 220px;position:relative;}
 .depart-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;}
 .depart-input{font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:100%;}
 .depart-input:focus{outline:none;border-color:var(--acc);}
 .depart-resolved{font-size:11px;color:var(--blue);margin-top:2px;min-height:14px;}
+.suggest-item{padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--bdr);}
+.suggest-item:last-child{border-bottom:none;}
+.suggest-item:hover{background:var(--surf2);}
+.suggest-icao{font-family:'SF Mono','Fira Code','Courier New',monospace;font-weight:600;color:var(--blue);margin-right:6px;}
 .region-wrap{display:flex;flex-direction:column;gap:3px;flex:0 0 200px;position:relative;}
 .region-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;}
 .region-btn{font-size:12px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);cursor:pointer;text-align:left;font-family:var(--ff);display:flex;align-items:center;justify-content:space-between;}
@@ -145,7 +149,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <g id="geo-labels"></g>
       <g id="pin-layer"></g>
     </svg>
-    <div class="map-overlay-legend"><div id="map-legend"></div></div>
+    <div id="map-tooltip" style="display:none;position:absolute;background:rgba(6,16,30,0.92);border:1px solid #30363d;border-radius:6px;padding:7px 11px;font-size:12px;color:#e6edf3;pointer-events:none;z-index:50;max-width:200px;"></div>
   </div>
 
   <!-- RIGHT -->
@@ -162,8 +166,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div class="nf-controls">
           <div class="depart-wrap">
             <div class="depart-label">Depart from</div>
-            <input class="depart-input" id="depart-input" placeholder="ICAO / IATA code" oninput="resolveDepart(this.value)" onkeydown="if(event.key==='Enter')resolveDepart(this.value,true)">
+            <input class="depart-input" id="depart-input" placeholder="ICAO / IATA code" oninput="departInput(this.value)" onkeydown="if(event.key==='Escape')hideSuggestions()">
             <div class="depart-resolved" id="depart-resolved"></div>
+            <div id="depart-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
           </div>
           <div class="region-wrap">
             <div class="region-label">Region filter</div>
@@ -440,12 +445,12 @@ let CATEGORIES = [
 // STATE
 // ═══════════════════════════════════════════════════════════
 let lastResults = [];
-let activeContFilter = []; // empty = all
+let activeContFilter = [];
 let activeCatId = 'difficult';
 let currentView = 'dashboard';
-let proj = null;
-let mapTransform = {x:0, y:0, k:1};
+let proj0 = null; // base projection (no pan/zoom applied)
 let svgW = 900, svgH = 500;
+let worldData = null; // cached topology
 
 // ═══════════════════════════════════════════════════════════
 // REGION FILTER
@@ -459,65 +464,126 @@ document.addEventListener('click', e => {
 function updateRegionFilter() {
   const checks = document.querySelectorAll('#region-dd input[type=checkbox]');
   activeContFilter = [...checks].filter(c=>c.checked).map(c=>c.value);
+  const labels = {NA:'N. America & Carib.',SA:'S. America',EU:'Europe',AF:'Africa',AS:'Asia',OC:'Oceania',AN:'Antarctica'};
   const label = activeContFilter.length === 0 ? 'All regions'
-    : activeContFilter.length === 1 ? document.querySelector(`#region-dd input[value="${activeContFilter[0]}"]`).closest('.region-item').textContent.trim()
-    : `${activeContFilter.length} regions`;
+    : activeContFilter.length === 1 ? labels[activeContFilter[0]] || activeContFilter[0]
+    : `${activeContFilter.length} regions selected`;
   document.getElementById('region-btn-label').textContent = label;
 }
 
 // ═══════════════════════════════════════════════════════════
-// DEPART FIELD
+// DEPART FIELD with autocomplete
 // ═══════════════════════════════════════════════════════════
 let departAirport = null;
-function resolveDepart(val) {
+
+function departInput(val) {
   const code = val.trim().toUpperCase();
-  if (code.length < 2) { document.getElementById('depart-resolved').textContent = ''; departAirport = null; return; }
-  const ap = lookupAirport(code);
-  if (ap) {
-    departAirport = ap;
-    document.getElementById('depart-resolved').textContent = `${ap[0]} · ${ap[2]} · ${countryName(ap[6])}`;
-  } else {
+  const suggestEl = document.getElementById('depart-suggestions');
+  const resolvedEl = document.getElementById('depart-resolved');
+
+  if (code.length < 2) {
+    suggestEl.style.display = 'none';
+    resolvedEl.textContent = '';
     departAirport = null;
-    document.getElementById('depart-resolved').textContent = code.length >= 3 ? 'Airport not found' : '';
+    return;
   }
+
+  // Exact match first
+  const exact = schedByCode[code] || schedByIata[code];
+  if (exact && (code.length === 4 || code.length === 3)) {
+    departAirport = exact;
+    resolvedEl.textContent = `${exact[0]} · ${exact[2]} · ${countryName(exact[6])}`;
+    suggestEl.style.display = 'none';
+    return;
+  }
+
+  // Prefix search
+  const matches = DB_SCHED.filter(r =>
+    r[0].startsWith(code) || (r[1] && r[1].startsWith(code)) ||
+    r[2].toUpperCase().includes(code) || r[7].toUpperCase().includes(code)
+  ).slice(0, 8);
+
+  if (matches.length === 0) {
+    suggestEl.style.display = 'none';
+    resolvedEl.textContent = code.length >= 3 ? 'Not found' : '';
+    departAirport = null;
+    return;
+  }
+
+  suggestEl.innerHTML = matches.map(ap =>
+    `<div class="suggest-item" onclick="selectDepart(${JSON.stringify(ap[0])})">
+      <span class="suggest-icao">${ap[0]}</span>${ap[2]} <span style="color:var(--txt3);font-size:11px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  suggestEl.style.display = 'block';
+  resolvedEl.textContent = '';
 }
+
+function selectDepart(code) {
+  const ap = schedByCode[code];
+  if (!ap) return;
+  departAirport = ap;
+  document.getElementById('depart-input').value = ap[0];
+  document.getElementById('depart-resolved').textContent = `${ap[0]} · ${ap[2]} · ${countryName(ap[6])}`;
+  document.getElementById('depart-suggestions').style.display = 'none';
+}
+
+function hideSuggestions() {
+  document.getElementById('depart-suggestions').style.display = 'none';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.depart-wrap')) hideSuggestions();
+});
 
 // ═══════════════════════════════════════════════════════════
 // ROLL
 // ═══════════════════════════════════════════════════════════
 function rollAll() {
   lastResults = CATEGORIES.map(cat => {
-    let result = { icao:'', name:'', city:'', country:'', lat:null, lon:null, coord:false, nearest:null, diff:'', text:'' };
+    let result = { icao:'', name:'', city:'', country:'', lat:null, lon:null, coord:false, diff:'', text:'' };
 
-    if (cat.type === 'list' || cat.type === 'list-simple') {
-      // Filter by continent if active
+    if (cat.type === 'list') {
       let pool = cat.items;
-      if (activeContFilter.length > 0 && cat.type === 'list') {
+      // Apply continent filter: each item has a .region field (continent code)
+      if (activeContFilter.length > 0) {
         const filtered = cat.items.filter(item => activeContFilter.includes(item.region));
         if (filtered.length > 0) pool = filtered;
       }
       const item = pool[Math.floor(Math.random() * pool.length)];
-      const code = item.icao || '';
-      const dbEntry = code ? schedByCode[code] || null : null;
+      const dbEntry = item.icao ? (schedByCode[item.icao] || null) : null;
       if (dbEntry) {
-        result.icao = dbEntry[0];
-        result.name = dbEntry[2];
-        result.city = dbEntry[7] || dbEntry[2];
-        result.country = countryName(dbEntry[6]);
-        result.lat = dbEntry[3];
-        result.lon = dbEntry[4];
+        result.icao = dbEntry[0]; result.name = dbEntry[2];
+        result.city = dbEntry[7] || dbEntry[2]; result.country = countryName(dbEntry[6]);
+        result.lat = dbEntry[3]; result.lon = dbEntry[4];
       } else {
-        result.icao = code || item.name || '';
-        result.name = item.name || code;
-        result.city = item.name || '';
-        result.country = '';
+        result.icao = item.icao || ''; result.name = item.icao || ''; result.city = ''; result.country = '';
       }
       result.diff = item.diff || '';
+    }
+    else if (cat.type === 'list-simple') {
+      let pool = cat.items;
+      // For list-simple, look up continent from DB
+      if (activeContFilter.length > 0) {
+        const filtered = cat.items.filter(item => {
+          const db = item.icao ? schedByCode[item.icao] : null;
+          return db && activeContFilter.includes(db[5]);
+        });
+        if (filtered.length > 0) pool = filtered;
+      }
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      const dbEntry = item.icao ? (schedByCode[item.icao] || null) : null;
+      if (dbEntry) {
+        result.icao = dbEntry[0]; result.name = dbEntry[2];
+        result.city = dbEntry[7] || dbEntry[2]; result.country = countryName(dbEntry[6]);
+        result.lat = dbEntry[3]; result.lon = dbEntry[4];
+      } else {
+        result.icao = item.icao || ''; result.name = item.name || ''; result.city = item.name || ''; result.country = '';
+      }
     }
     else if (cat.type === 'text') {
       const item = cat.items[Math.floor(Math.random() * cat.items.length)];
       result.text = item.name;
-      result.icao = '';
     }
     else if (cat.type === 'rand-icao') {
       const pool = activeContFilter.length > 0 ? DB_SCHED.filter(r => activeContFilter.includes(r[5])) : DB_SCHED;
@@ -533,11 +599,11 @@ function rollAll() {
       const reg = cat.region;
       const lat = parseFloat((reg.latMin + Math.random()*(reg.latMax-reg.latMin)).toFixed(4));
       const lon = parseFloat((reg.lonMin + Math.random()*(reg.lonMax-reg.lonMin)).toFixed(4));
-      const ap = nearestScheduled(lat, lon, activeContFilter.length > 0 ? activeContFilter : null);
-      result.coord = true;
-      result.coordLat = lat; result.coordLon = lon;
+      // When region filter active, search only within those continents
+      const filterCont = activeContFilter.length > 0 ? activeContFilter : null;
+      const ap = nearestScheduled(lat, lon, filterCont);
+      result.coord = true; result.coordLat = lat; result.coordLon = lon;
       if (ap) {
-        result.nearest = ap;
         result.icao = ap[0]; result.name = ap[2]; result.city = ap[7]||ap[2]; result.country = countryName(ap[6]);
         result.lat = ap[3]; result.lon = ap[4];
       }
@@ -565,7 +631,7 @@ function renderResults() {
     const col = COLORS[cat.colorIdx % COLORS.length];
     let inner = '';
     if (result.text) {
-      inner = `<div class="res-icao" style="font-size:12px;font-family:var(--ff);">${result.text}</div>`;
+      inner = `<div class="res-icao" style="font-size:12px;font-family:var(--ff);line-height:1.4;">${result.text}</div>`;
     } else {
       inner = `<div class="res-icao">${result.icao || '–'}</div>
       <div class="res-city">${result.city || result.name}</div>
@@ -580,148 +646,255 @@ function renderResults() {
   }
 
   rowThemes.innerHTML = themes.length ? themes.map(renderCard).join('') : '<div class="empty-state">Click "Next Flight" to roll.</div>';
-  rowRandoms.innerHTML = randoms.length ? randoms.map(renderCard).join('') : '';
-  rowNetworks.innerHTML = networks.length ? networks.map(renderCard).join('') : '';
+  rowRandoms.innerHTML = randoms.map(renderCard).join('');
+  rowNetworks.innerHTML = networks.map(renderCard).join('');
 }
 
 // ═══════════════════════════════════════════════════════════
-// MAP — Volanta style
+// MAP — Volanta style with proper D3 zoom
 // ═══════════════════════════════════════════════════════════
-const MAP_OCEAN = '#06101e';
-const MAP_LAND  = '#0f2318';
-const MAP_LAND_HOVER = '#142e1e';
-const MAP_BORDER = '#1a3a20';
-const MAP_COAST  = '#1e4025';
+const MAP_OCEAN  = '#06101e';
+const MAP_LAND   = '#0f2318';
+const MAP_BORDER = '#1e4a28';
+const MAP_COAST  = '#2a6035';
+const CITY_COLOR = '#4a9a60';
+const LABEL_COLOR = '#3a7050';
+
+// City data for zoom-dependent labels
+const CITIES = [
+  {name:'London',lat:51.5074,lon:-0.1278,pop:9},
+  {name:'Paris',lat:48.8566,lon:2.3522,pop:9},
+  {name:'New York',lat:40.7128,lon:-74.006,pop:9},
+  {name:'Tokyo',lat:35.6762,lon:139.6503,pop:9},
+  {name:'Beijing',lat:39.9042,lon:116.4074,pop:9},
+  {name:'Los Angeles',lat:34.0522,lon:-118.2437,pop:8},
+  {name:'Chicago',lat:41.8781,lon:-87.6298,pop:8},
+  {name:'Moscow',lat:55.7558,lon:37.6173,pop:8},
+  {name:'Shanghai',lat:31.2304,lon:121.4737,pop:9},
+  {name:'Mumbai',lat:19.076,lon:72.8777,pop:8},
+  {name:'São Paulo',lat:-23.5505,lon:-46.6333,pop:8},
+  {name:'Jakarta',lat:-6.2088,lon:106.8456,pop:8},
+  {name:'Dubai',lat:25.2048,lon:55.2708,pop:7},
+  {name:'Sydney',lat:-33.8688,lon:151.2093,pop:8},
+  {name:'Toronto',lat:43.6532,lon:-79.3832,pop:7},
+  {name:'Berlin',lat:52.52,lon:13.405,pop:7},
+  {name:'Madrid',lat:40.4168,lon:-3.7038,pop:7},
+  {name:'Rome',lat:41.9028,lon:12.4964,pop:7},
+  {name:'Amsterdam',lat:52.3676,lon:4.9041,pop:7},
+  {name:'Singapore',lat:1.3521,lon:103.8198,pop:7},
+  {name:'Bangkok',lat:13.7563,lon:100.5018,pop:7},
+  {name:'Seoul',lat:37.5665,lon:126.978,pop:8},
+  {name:'Buenos Aires',lat:-34.6037,lon:-58.3816,pop:7},
+  {name:'Cairo',lat:30.0444,lon:31.2357,pop:7},
+  {name:'Lagos',lat:6.5244,lon:3.3792,pop:7},
+  {name:'Nairobi',lat:-1.2921,lon:36.8219,pop:6},
+  {name:'Johannesburg',lat:-26.2041,lon:28.0473,pop:6},
+  {name:'Mexico City',lat:19.4326,lon:-99.1332,pop:8},
+  {name:'Lima',lat:-12.0464,lon:-77.0428,pop:7},
+  {name:'Bogotá',lat:4.711,lon:-74.0721,pop:6},
+  {name:'Tehran',lat:35.6892,lon:51.389,pop:7},
+  {name:'Istanbul',lat:41.0082,lon:28.9784,pop:8},
+  {name:'Karachi',lat:24.8607,lon:67.0011,pop:7},
+  {name:'Dhaka',lat:23.8103,lon:90.4125,pop:7},
+  {name:'Vienna',lat:48.2082,lon:16.3738,pop:6},
+  {name:'Zurich',lat:47.3769,lon:8.5417,pop:5},
+  {name:'Oslo',lat:59.9139,lon:10.7522,pop:5},
+  {name:'Stockholm',lat:59.3293,lon:18.0686,pop:5},
+  {name:'Copenhagen',lat:55.6761,lon:12.5683,pop:5},
+  {name:'Helsinki',lat:60.1699,lon:24.9384,pop:5},
+  {name:'Auckland',lat:-36.8485,lon:174.7633,pop:5},
+  {name:'Vancouver',lat:49.2827,lon:-123.1207,pop:5},
+  {name:'Melbourne',lat:-37.8136,lon:144.9631,pop:6},
+  {name:'Cape Town',lat:-33.9249,lon:18.4241,pop:5},
+  {name:'Casablanca',lat:33.5731,lon:-7.5898,pop:5},
+  {name:'Addis Ababa',lat:9.025,lon:38.7469,pop:5},
+  {name:'Kuala Lumpur',lat:3.139,lon:101.6869,pop:6},
+  {name:'Manila',lat:14.5995,lon:120.9842,pop:7},
+  {name:'Ho Chi Minh City',lat:10.8231,lon:106.6297,pop:6},
+  {name:'Taipei',lat:25.0329,lon:121.5654,pop:6},
+  {name:'Kathmandu',lat:27.7172,lon:85.314,pop:4},
+  {name:'Reykjavík',lat:64.1265,lon:-21.8174,pop:4},
+  {name:'Anchorage',lat:61.2181,lon:-149.9003,pop:4},
+  {name:'Honolulu',lat:21.3069,lon:-157.8583,pop:4},
+];
 
 function initMap() {
   const svg = document.getElementById('map-svg');
   svgW = svg.clientWidth || 600;
   svgH = svg.clientHeight || 700;
 
-  proj = d3.geoNaturalEarth1()
+  proj0 = d3.geoNaturalEarth1()
     .scale(svgW / 6.5)
     .translate([svgW / 2, svgH / 2]);
 
-  // Load world topology
   fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
     .then(r => r.json())
     .then(world => {
-      const pathGen = d3.geoPath().projection(proj);
-      const countries = topojson.feature(world, world.objects.countries);
-      const borders = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
-      const land = topojson.merge(world, world.objects.countries.geometries);
-
-      const gCountries = document.getElementById('geo-countries');
-      gCountries.innerHTML = '';
-      countries.features.forEach(f => {
-        const d = pathGen(f); if (!d) return;
-        const p = document.createElementNS('http://www.w3.org/2000/svg','path');
-        p.setAttribute('d', d);
-        p.setAttribute('fill', MAP_LAND);
-        p.setAttribute('stroke', 'none');
-        gCountries.appendChild(p);
-      });
-
-      const gBorders = document.getElementById('geo-borders');
-      gBorders.innerHTML = '';
-      const bPath = document.createElementNS('http://www.w3.org/2000/svg','path');
-      bPath.setAttribute('d', pathGen(borders) || '');
-      bPath.setAttribute('fill', 'none');
-      bPath.setAttribute('stroke', MAP_BORDER);
-      bPath.setAttribute('stroke-width', '0.5');
-      gBorders.appendChild(bPath);
-      const cPath = document.createElementNS('http://www.w3.org/2000/svg','path');
-      cPath.setAttribute('d', pathGen(land) || '');
-      cPath.setAttribute('fill', 'none');
-      cPath.setAttribute('stroke', MAP_COAST);
-      cPath.setAttribute('stroke-width', '0.8');
-      gBorders.appendChild(cPath);
-
-      renderCountryLabels(countries, pathGen);
+      worldData = world;
+      drawMap(world);
+      setupZoomPan();
     })
     .catch(() => {});
-
-  setupMapInteraction();
 }
 
-function renderCountryLabels(countries, pathGen) {
-  // Country centroids from d3
-  const gLabels = document.getElementById('geo-labels');
-  gLabels.innerHTML = '';
-  // Only label larger countries based on area
-  const centroid = d3.geoCentroid;
+function drawMap(world) {
+  const pathGen = d3.geoPath().projection(proj0);
+  const countries = topojson.feature(world, world.objects.countries);
+  const borders   = topojson.mesh(world, world.objects.countries, (a,b) => a !== b);
+  const land      = topojson.merge(world, world.objects.countries.geometries);
+
+  const gC = document.getElementById('geo-countries');
+  gC.innerHTML = '';
   countries.features.forEach(f => {
-    try {
-      const [cx, cy] = proj(centroid(f));
-      if (!isNaN(cx) && !isNaN(cy) && cx > 0 && cx < svgW && cy > 0 && cy < svgH) {
-        const area = d3.geoArea(f);
-        if (area > 0.03) { // Only large countries
-          const text = document.createElementNS('http://www.w3.org/2000/svg','text');
-          text.setAttribute('x', cx.toFixed(1));
-          text.setAttribute('y', cy.toFixed(1));
-          text.setAttribute('text-anchor', 'middle');
-          text.setAttribute('dominant-baseline', 'middle');
-          text.setAttribute('font-size', area > 0.3 ? '9' : area > 0.08 ? '7' : '6');
-          text.setAttribute('fill', '#2a5535');
-          text.setAttribute('font-family', 'var(--ff)');
-          text.setAttribute('font-weight', '500');
-          text.setAttribute('pointer-events', 'none');
-          text.setAttribute('class', 'country-label');
-          text.textContent = f.properties ? (f.properties.name || '') : '';
-          gLabels.appendChild(text);
-        }
-      }
-    } catch(e) {}
+    const d = pathGen(f); if (!d) return;
+    const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', d); p.setAttribute('fill', MAP_LAND); p.setAttribute('stroke','none');
+    gC.appendChild(p);
+  });
+
+  const gB = document.getElementById('geo-borders');
+  gB.innerHTML = '';
+  const bp = document.createElementNS('http://www.w3.org/2000/svg','path');
+  bp.setAttribute('d', pathGen(borders)||''); bp.setAttribute('fill','none');
+  bp.setAttribute('stroke', MAP_BORDER); bp.setAttribute('stroke-width','0.5');
+  gB.appendChild(bp);
+  const cp = document.createElementNS('http://www.w3.org/2000/svg','path');
+  cp.setAttribute('d', pathGen(land)||''); cp.setAttribute('fill','none');
+  cp.setAttribute('stroke', MAP_COAST); cp.setAttribute('stroke-width','0.8');
+  gB.appendChild(cp);
+
+  drawCityLabels(1);
+}
+
+function drawCityLabels(k) {
+  const gL = document.getElementById('geo-labels');
+  gL.innerHTML = '';
+  // Show cities based on zoom level
+  const minPop = k < 1.5 ? 9 : k < 3 ? 8 : k < 5 ? 7 : k < 8 ? 6 : k < 12 ? 5 : 4;
+  CITIES.filter(c => c.pop >= minPop).forEach(c => {
+    const [cx, cy] = proj0([c.lon, c.lat]);
+    if (isNaN(cx)||isNaN(cy)) return;
+    // dot
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', cx.toFixed(1)); dot.setAttribute('cy', cy.toFixed(1));
+    dot.setAttribute('r', (1.5/k).toFixed(2));
+    dot.setAttribute('fill', CITY_COLOR); dot.setAttribute('pointer-events','none');
+    gL.appendChild(dot);
+    // label
+    const txt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    txt.setAttribute('x', (cx+2/k).toFixed(1)); txt.setAttribute('y', (cy+1/k).toFixed(1));
+    txt.setAttribute('font-size', (7/k).toFixed(2));
+    txt.setAttribute('fill', LABEL_COLOR);
+    txt.setAttribute('font-family', '-apple-system,BlinkMacSystemFont,sans-serif');
+    txt.setAttribute('font-weight','500');
+    txt.setAttribute('pointer-events','none');
+    txt.textContent = c.name;
+    gL.appendChild(txt);
   });
 }
 
-function updateLabelsForZoom(k) {
-  const labels = document.querySelectorAll('.country-label');
-  labels.forEach(l => {
-    const origSize = parseFloat(l.getAttribute('font-size')) || 7;
-    l.setAttribute('font-size', (origSize / Math.sqrt(k)).toFixed(1));
-    l.setAttribute('fill', k > 3 ? '#3a7a4a' : '#2a5535');
-  });
-}
-
-function setupMapInteraction() {
+function setupZoomPan() {
   const svg = document.getElementById('map-svg');
-  const allGroups = ['geo-countries','geo-borders','geo-labels','pin-layer'];
 
   const zoom = d3.zoom()
-    .scaleExtent([0.5, 20])
+    .scaleExtent([0.8, 20])
     .on('zoom', (event) => {
       const t = event.transform;
-      mapTransform = {x: t.x, y: t.y, k: t.k};
-      allGroups.forEach(id => {
-        document.getElementById(id).setAttribute('transform', `translate(${t.x},${t.y}) scale(${t.k})`);
+      const k = t.k;
+
+      // Transform geographic layers (countries, borders)
+      ['geo-countries','geo-borders'].forEach(id => {
+        document.getElementById(id).setAttribute('transform',
+          `translate(${t.x},${t.y}) scale(${k})`);
       });
-      updateLabelsForZoom(t.k);
+
+      // Redraw city labels at new zoom — they scale inversely so text stays same size
+      drawCityLabels(k);
+      document.getElementById('geo-labels').setAttribute('transform',
+        `translate(${t.x},${t.y}) scale(${k})`);
+
+      // Redraw pins with fixed screen size
+      redrawPinsWithTransform(t);
     });
 
   d3.select(svg).call(zoom);
 }
 
-function renderPins() {
-  const pins = document.getElementById('pin-layer');
-  pins.innerHTML = '';
-  const legendItems = [];
+// ═══════════════════════════════════════════════════════════
+// PINS — fixed screen size, tooltip on hover
+// ═══════════════════════════════════════════════════════════
+let currentTransform = {x:0, y:0, k:1};
+let pinData = []; // [{lat, lon, col, icao, name, country}]
 
+function renderPins() {
+  pinData = [];
   lastResults.forEach(({ cat, result }) => {
     const col = COLORS[cat.colorIdx % COLORS.length];
-    let lat = result.lat, lon = result.lon;
-    if (lat === null || lon === null || !proj) return;
-    const [px, py] = proj([lon, lat]);
-    if (isNaN(px) || isNaN(py) || px <= 0 || py <= 0) return;
-
-    // Adjust for zoom transform
-    pins.innerHTML += `
-      <circle cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" r="4" fill="${col}" stroke="#06101e" stroke-width="1" opacity="0.95"/>
-      <circle cx="${px.toFixed(2)}" cy="${py.toFixed(2)}" r="1.5" fill="#fff" opacity="0.9"/>`;
-
-    legendItems.push(`<div class="leg-pill"><span class="leg-dot" style="background:${col}"></span>${result.icao||result.city}</div>`);
+    if (result.lat !== null && result.lon !== null) {
+      pinData.push({ lat: result.lat, lon: result.lon, col, icao: result.icao, name: result.name, city: result.city, country: result.country, catName: cat.name });
+    }
   });
-  document.getElementById('map-legend').innerHTML = legendItems.join('');
+  redrawPinsWithTransform(currentTransform);
+}
+
+function redrawPinsWithTransform(t) {
+  currentTransform = t;
+  const pins = document.getElementById('pin-layer');
+  pins.innerHTML = '';
+  pins.setAttribute('transform', ''); // pins are NOT transformed — they live in screen space
+
+  const tooltip = document.getElementById('map-tooltip');
+
+  pinData.forEach((pd, idx) => {
+    const [px0, py0] = proj0([pd.lon, pd.lat]);
+    // Apply zoom/pan transform manually
+    const px = px0 * t.k + t.x;
+    const py = py0 * t.k + t.y;
+
+    if (px < -10 || px > svgW+10 || py < -10 || py > svgH+10) return;
+
+    // Outer glow ring
+    const ring = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    ring.setAttribute('cx', px.toFixed(1)); ring.setAttribute('cy', py.toFixed(1));
+    ring.setAttribute('r', '8'); ring.setAttribute('fill', pd.col); ring.setAttribute('opacity','0.2');
+    ring.setAttribute('pointer-events','none');
+    pins.appendChild(ring);
+
+    // Main pin
+    const c = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    c.setAttribute('cx', px.toFixed(1)); c.setAttribute('cy', py.toFixed(1));
+    c.setAttribute('r', '5'); c.setAttribute('fill', pd.col);
+    c.setAttribute('stroke', '#06101e'); c.setAttribute('stroke-width','1.5');
+    c.setAttribute('cursor','pointer');
+    c.setAttribute('data-idx', idx);
+
+    c.addEventListener('mouseenter', (e) => {
+      const rect = document.getElementById('map-svg').getBoundingClientRect();
+      const mx = e.clientX - rect.left;
+      const my = e.clientY - rect.top;
+      tooltip.style.display = 'block';
+      tooltip.innerHTML = `<div style="font-weight:700;font-size:13px;color:#58a6ff;">${pd.icao}</div>
+        <div style="font-size:11px;color:#e6edf3;">${pd.name}</div>
+        <div style="font-size:10px;color:#8b949e;">${pd.country}</div>
+        <div style="font-size:10px;color:#484f58;margin-top:2px;">${pd.catName}</div>`;
+      // Position tooltip
+      let tx = mx + 12, ty = my - 10;
+      if (tx + 200 > svgW) tx = mx - 210;
+      if (ty < 0) ty = 5;
+      tooltip.style.left = tx + 'px';
+      tooltip.style.top = ty + 'px';
+    });
+    c.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+    // White center dot
+    const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    dot.setAttribute('cx', px.toFixed(1)); dot.setAttribute('cy', py.toFixed(1));
+    dot.setAttribute('r','1.8'); dot.setAttribute('fill','#fff'); dot.setAttribute('opacity','0.9');
+    dot.setAttribute('pointer-events','none');
+
+    pins.appendChild(c);
+    pins.appendChild(dot);
+  });
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -733,8 +906,6 @@ function renderCatView() {
     `<button class="cat-tab${c.id===activeCatId?' active':''}" onclick="selectCat('${c.id}')">${c.name}</button>`
   ).join('');
   renderCatTable();
-
-  // Populate import select
   document.getElementById('csv-target').innerHTML = listCats.map(c =>
     `<option value="${c.id}">${c.name}</option>`).join('');
 }
@@ -756,12 +927,14 @@ function renderCatTable() {
     document.getElementById('in-city').placeholder='Entry text';
     document.getElementById('in-city').style.width='300px';
   } else if (cat.type === 'list-simple') {
-    area.innerHTML = `<table class="data-tbl"><thead><tr><th>ICAO</th><th>Name / City</th><th></th></tr></thead><tbody>
+    area.innerHTML = `<table class="data-tbl"><thead><tr><th>ICAO</th><th>Airport</th><th>City</th><th>Country</th><th></th></tr></thead><tbody>
       ${cat.items.map((item,i)=>{
         const db = item.icao ? schedByCode[item.icao] : null;
         return `<tr>
           <td class="mono">${item.icao||'–'}</td>
-          <td>${db ? db[2]+' · '+countryName(db[6]) : item.name||''}</td>
+          <td class="muted">${db ? db[2] : item.name||''}</td>
+          <td>${db ? db[7]||'' : ''}</td>
+          <td class="muted">${db ? countryName(db[6]) : ''}</td>
           <td><button class="btn-del" onclick="deleteCatItem('${cat.id}',${i})">✕</button></td>
         </tr>`;
       }).join('')}
@@ -773,7 +946,7 @@ function renderCatTable() {
     document.getElementById('in-city').placeholder='Name (optional)';
     document.getElementById('in-city').style.width='200px';
   } else if (cat.type === 'list') {
-    area.innerHTML = `<table class="data-tbl"><thead><tr><th>ICAO</th><th>IATA</th><th>Name</th><th>City</th><th>Country</th><th>Diff.</th><th></th></tr></thead><tbody>
+    area.innerHTML = `<table class="data-tbl"><thead><tr><th>ICAO</th><th>IATA</th><th>Airport</th><th>City</th><th>Country</th><th>Diff.</th><th></th></tr></thead><tbody>
       ${cat.items.map((item,i)=>{
         const db = item.icao ? schedByCode[item.icao] : null;
         return `<tr>
@@ -788,8 +961,8 @@ function renderCatTable() {
       }).join('')}
     </tbody></table>`;
     addRow.style.display='flex';
-    ['in-icao','in-diff','in-region2'].forEach(id=>document.getElementById(id).style.display='');
-    ['in-iata','in-airport'].forEach(id=>document.getElementById(id).style.display='none');
+    ['in-icao','in-diff'].forEach(id=>document.getElementById(id).style.display='');
+    ['in-iata','in-airport','in-region2'].forEach(id=>document.getElementById(id).style.display='none');
     document.getElementById('in-city').placeholder='City (optional)';
     document.getElementById('in-city').style.width='130px';
   }
@@ -802,18 +975,14 @@ function deleteCatItem(catId, idx) {
 }
 
 function addCatItem() {
-  const cat = CATEGORIES.find(c => c.id === activeCatId);
-  if (!cat) return;
+  const cat = CATEGORIES.find(c => c.id === activeCatId); if (!cat) return;
   const icao = (document.getElementById('in-icao').value||'').trim().toUpperCase();
-  const city = (document.getElementById('in-city').value||'').trim();
-  const diff = (document.getElementById('in-diff').value||'').trim();
-  const region2 = (document.getElementById('in-region2').value||'').trim().toUpperCase();
+  const city  = (document.getElementById('in-city').value||'').trim();
+  const diff  = (document.getElementById('in-diff').value||'').trim();
   if (!icao && !city) return;
-
   if (cat.type==='text') cat.items.push({name:city});
-  else if (cat.type==='list-simple') cat.items.push({icao,name:city});
-  else cat.items.push({icao,diff,region:region2});
-
+  else if (cat.type==='list-simple') cat.items.push({icao, name:city});
+  else cat.items.push({icao, diff, region: ''});
   ['in-icao','in-iata','in-city','in-airport','in-diff','in-region2'].forEach(id=>{document.getElementById(id).value='';});
   renderCatTable();
 }
@@ -833,7 +1002,7 @@ function importCSV() {
       if(cols[0]){
         if(cat.type==='text') cat.items.push({name:cols[0]});
         else if(cat.type==='list-simple') cat.items.push({icao:cols[0],name:cols[2]||''});
-        else cat.items.push({icao:cols[0],diff:cols[4]||'',region:cols[5]||''});
+        else cat.items.push({icao:cols[0], diff:cols[4]||'', region:cols[5]||''});
         added++;
       }
     });
@@ -844,7 +1013,7 @@ function importCSV() {
 
 function exportJSON() {
   const blob = new Blob([JSON.stringify(CATEGORIES,null,2)],{type:'application/json'});
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download='msfs-categories.json'; a.click();
+  const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='msfs-categories.json'; a.click();
 }
 
 function importJSON() {
@@ -860,30 +1029,27 @@ function importJSON() {
 // ═══════════════════════════════════════════════════════════
 function switchView(view) {
   currentView = view;
-  ['dashboard','categories','data'].forEach(v=>{
-    const el = document.getElementById('view-'+v);
-    if(el) el.style.display = v===view ? (v==='dashboard'?'flex':'flex') : 'none';
+  document.getElementById('view-dashboard').style.display   = view==='dashboard'   ? 'flex' : 'none';
+  document.getElementById('view-categories').style.display  = view==='categories'  ? 'flex' : 'none';
+  document.getElementById('view-data').style.display        = view==='data'        ? 'flex' : 'none';
+  ['dashboard','categories','data'].forEach(v => {
     document.getElementById('t-'+v).className = 'topnav-tab'+(v===view?' active':'');
   });
-  if(view==='categories') { document.getElementById('view-categories').style.display='flex'; renderCatView(); }
-  if(view==='data') { document.getElementById('view-data').style.display='flex'; }
+  if (view==='categories') renderCatView();
 }
 
-// Ensure dashboard is flex
-document.getElementById('view-dashboard').style.display='flex';
-
-// Init empty results
+// ═══════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════
+document.getElementById('view-dashboard').style.display = 'flex';
 renderResults();
 window.addEventListener('load', initMap);
 window.addEventListener('resize', () => {
   const svg = document.getElementById('map-svg');
   svgW = svg.clientWidth; svgH = svg.clientHeight;
-  if(svgW>0&&svgH>0&&proj){
-    proj.scale(svgW/6.5).translate([svgW/2,svgH/2]);
-    // Reinit map
-    initMap();
-  }
+  if (svgW > 0 && svgH > 0) initMap();
 });
+
 </script>
 </body>
 </html>
