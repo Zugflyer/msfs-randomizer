@@ -9,293 +9,362 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#f7f7f5;--surface:#fff;--border:rgba(0,0,0,0.11);--border-em:rgba(0,0,0,0.22);
-  --text:#1a1a1a;--text2:#555;--text3:#888;--blue:#378ADD;--green:#1D9E75;--r:10px;
+  --bg:#0d1117;--surface:#161b22;--surface2:#21262d;--surface3:#30363d;
+  --border:#30363d;--border-em:#484f58;
+  --text:#e6edf3;--text2:#8b949e;--text3:#484f58;
+  --accent:#7d5ee8;--accent2:#a78bfa;
+  --green:#3fb950;--blue:#58a6ff;--orange:#d29922;--red:#f85149;
+  --r:6px;--font:-apple-system,BlinkMacSystemFont,'Segoe UI','Inter',sans-serif;
 }
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.5;}
-.app{max-width:1200px;margin:0 auto;padding:24px 20px;}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;}
+.app{display:flex;flex-direction:column;height:100vh;min-height:600px;}
 
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;}
-.header h1{font-size:22px;font-weight:600;}
-.header p{font-size:13px;color:var(--text3);margin-top:2px;}
-.roll-btn{font-size:14px;font-weight:500;padding:10px 28px;border-radius:var(--r);border:none;background:#1a1a1a;color:#fff;cursor:pointer;transition:opacity .15s;}
-.roll-btn:hover{opacity:.82;}
+/* TOP BAR */
+.topbar{display:flex;align-items:center;gap:16px;padding:0 20px;height:52px;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface);}
+.logo{display:flex;align-items:center;gap:8px;font-weight:600;font-size:15px;color:var(--text);}
+.logo-icon{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.nav-tabs{display:flex;gap:2px;margin-left:16px;}
+.nav-tab{font-size:13px;padding:6px 14px;border-radius:var(--r);border:none;background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);transition:all .15s;}
+.nav-tab:hover{background:var(--surface2);color:var(--text);}
+.nav-tab.active{background:var(--surface2);color:var(--text);font-weight:500;}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+.roll-btn{font-size:13px;font-weight:600;padding:7px 18px;border-radius:var(--r);border:none;background:var(--accent);color:#fff;cursor:pointer;transition:opacity .15s;letter-spacing:.01em;}
+.roll-btn:hover{opacity:.85;}
+.roll-btn:active{transform:scale(0.97);}
 
-.main-nav{display:flex;gap:0;margin-bottom:24px;border-bottom:1px solid var(--border);}
-.main-nav button{font-size:13px;padding:9px 20px;border:none;background:none;color:var(--text2);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;transition:color .1s;}
-.main-nav button.active{color:var(--text);border-bottom-color:var(--text);font-weight:500;}
+/* MAIN SPLIT LAYOUT */
+.main{display:flex;flex:1;overflow:hidden;}
 
-#world-map{width:100%;border-radius:var(--r);border:1px solid var(--border);display:block;background:#B5D4F4;margin-bottom:8px;}
-.map-legend{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:20px;min-height:18px;}
-.legend-item{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2);}
-.leg-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+/* LEFT: MAP */
+.map-col{flex:0 0 55%;display:flex;flex-direction:column;border-right:1px solid var(--border);position:relative;}
+#world-map{flex:1;display:block;width:100%;height:100%;background:#0a1628;}
+.map-overlay{position:absolute;bottom:12px;left:12px;right:12px;pointer-events:none;}
+.map-legend-wrap{display:flex;flex-wrap:wrap;gap:6px;}
+.leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);background:rgba(13,17,23,0.75);padding:3px 8px;border-radius:20px;border:1px solid var(--border);}
+.leg-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
 
-.results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:10px;margin-bottom:24px;}
-.res-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;}
-.res-cat{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;display:flex;align-items:center;gap:5px;margin-bottom:5px;}
-.res-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;}
-.res-val{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px;}
-.res-val.mono{font-family:'Courier New',monospace;font-size:12px;font-weight:500;}
-.res-sub{font-size:11px;color:var(--text3);}
+/* RIGHT: RESULTS + DATA */
+.right-col{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 
-.sec-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
+/* DASHBOARD RESULTS */
+.results-panel{flex:1;overflow-y:auto;padding:16px;}
+.results-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));gap:8px;}
+.res-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;cursor:default;transition:border-color .15s;}
+.res-card:hover{border-color:var(--border-em);}
+.res-cat{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:5px;margin-bottom:6px;}
+.res-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.res-val{font-size:13px;font-weight:600;color:var(--text);margin-bottom:2px;line-height:1.3;}
+.res-val.mono{font-family:'SF Mono','Fira Code',monospace;font-size:11px;font-weight:500;color:var(--blue);}
+.res-sub{font-size:11px;color:var(--text2);line-height:1.3;}
+.res-badge{display:inline-block;font-size:10px;padding:1px 6px;border-radius:3px;font-weight:600;margin-top:3px;}
+.badge-star{background:#2d2006;color:var(--orange);}
+.empty-hint{color:var(--text2);font-size:13px;padding:20px 0;grid-column:1/-1;}
 
-.cat-tabs{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;}
-.cat-tab{font-size:12px;padding:5px 13px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--text2);cursor:pointer;font-family:inherit;transition:all .1s;}
-.cat-tab.active{background:var(--text);color:#fff;border-color:var(--text);}
-.cat-tab:hover:not(.active){border-color:var(--border-em);color:var(--text);}
-
-.table-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;}
-.table-wrap table{width:100%;border-collapse:collapse;}
-.table-wrap thead th{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:9px 14px;border-bottom:1px solid var(--border);text-align:left;background:var(--bg);}
-.table-wrap tbody td{padding:8px 14px;border-bottom:1px solid var(--border);color:var(--text);}
-.table-wrap tbody tr:last-child td{border-bottom:none;}
-.table-wrap tbody tr:hover td{background:#f4f4f2;}
-td.mono{font-family:'Courier New',monospace;font-size:12px;font-weight:600;color:var(--blue);}
+/* DATA MANAGEMENT */
+.data-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;}
+.cat-tabs-bar{display:flex;flex-wrap:wrap;gap:4px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0;}
+.cat-tab{font-size:11px;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--text2);cursor:pointer;font-family:var(--font);transition:all .1s;white-space:nowrap;}
+.cat-tab:hover{border-color:var(--border-em);color:var(--text);}
+.cat-tab.active{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:500;}
+.table-wrap{flex:1;overflow-y:auto;padding:14px;}
+.data-table{width:100%;border-collapse:collapse;}
+.data-table thead th{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:7px 10px;border-bottom:1px solid var(--border);text-align:left;position:sticky;top:0;background:var(--bg);}
+.data-table tbody td{padding:7px 10px;border-bottom:1px solid var(--border);color:var(--text);font-size:13px;}
+.data-table tbody tr:last-child td{border-bottom:none;}
+.data-table tbody tr:hover td{background:var(--surface);}
+td.mono{font-family:'SF Mono','Fira Code',monospace;font-size:11px;font-weight:600;color:var(--blue);}
 td.muted{color:var(--text2);}
+td.diff{color:var(--orange);font-size:11px;font-weight:600;}
+.add-row-wrap{padding:10px 14px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0;display:flex;flex-wrap:wrap;gap:6px;align-items:center;}
+.add-row-wrap input{font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);}
+.add-row-wrap input:focus{outline:none;border-color:var(--accent);}
+.btn-add{font-size:12px;padding:5px 13px;border-radius:var(--r);border:none;background:var(--accent);color:#fff;cursor:pointer;font-family:var(--font);font-weight:500;}
+.btn-del{font-size:11px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:none;color:var(--text3);cursor:pointer;}
+.btn-del:hover{color:var(--red);border-color:var(--red);}
+.coord-info{padding:20px;color:var(--text2);font-size:13px;line-height:1.7;}
 
-.add-row{padding:10px 14px;border-top:1px solid var(--border);background:#fafaf8;display:flex;flex-wrap:wrap;gap:7px;align-items:center;}
-.add-row input{font-size:12px;padding:5px 9px;border-radius:6px;border:1px solid var(--border-em);background:#fff;color:var(--text);font-family:inherit;}
-.add-row input:focus{outline:none;border-color:var(--blue);}
-.w-icao{width:68px;}.w-iata{width:58px;}.w-city{width:130px;}.w-airport{width:195px;}
-.btn-add{font-size:12px;padding:6px 14px;border-radius:6px;border:1px solid var(--border-em);background:#fff;color:var(--text);cursor:pointer;font-family:inherit;}
-.btn-add:hover{background:var(--bg);}
-.btn-del{font-size:11px;padding:3px 8px;border-radius:5px;border:1px solid var(--border);background:none;color:var(--text3);cursor:pointer;}
-.btn-del:hover{color:#c0392b;border-color:#c0392b;}
-
-.imp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:14px;}
-.imp-card h3{font-size:14px;font-weight:600;margin-bottom:7px;}
-.imp-card p{font-size:13px;color:var(--text2);margin-bottom:13px;line-height:1.6;}
-.imp-btn{font-size:12px;padding:7px 16px;border-radius:7px;border:1px solid var(--border-em);background:var(--surface);color:var(--text);cursor:pointer;font-family:inherit;}
-.imp-btn:hover{background:var(--bg);}
+/* IMPORT PANEL */
+.import-panel{flex:1;overflow-y:auto;padding:16px;}
+.imp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:12px;}
+.imp-card h3{font-size:13px;font-weight:600;color:var(--text);margin-bottom:6px;}
+.imp-card p{font-size:12px;color:var(--text2);margin-bottom:12px;line-height:1.7;}
+.imp-btn{font-size:12px;padding:6px 14px;border-radius:var(--r);border:1px solid var(--border-em);background:var(--surface2);color:var(--text);cursor:pointer;font-family:var(--font);transition:background .1s;}
+.imp-btn:hover{background:var(--surface3);}
 .msg-ok{font-size:12px;color:var(--green);margin-top:8px;}
-textarea.json-area{width:100%;padding:9px;font-family:'Courier New',monospace;font-size:12px;border-radius:7px;border:1px solid var(--border-em);background:#fafaf8;color:var(--text);resize:vertical;margin-top:10px;}
-.coord-info{padding:16px;color:var(--text2);font-size:13px;line-height:1.6;}
+textarea.json-area{width:100%;padding:8px;font-family:'SF Mono','Fira Code',monospace;font-size:11px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;margin-top:8px;}
+
+/* SECTION LABEL */
+.sec-label{font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:10px;}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:5px;height:5px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--surface3);border-radius:3px;}
+
+@media(max-width:900px){
+  .main{flex-direction:column;}
+  .map-col{flex:0 0 300px;border-right:none;border-bottom:1px solid var(--border);}
+}
 </style>
 </head>
 <body>
 <div class="app">
-
-  <div class="header">
-    <div>
-      <h1>MSFS Flight Randomizer</h1>
-      <p>Christian's personal flight dispatcher</p>
-    </div>
-    <button class="roll-btn" onclick="rollAll()">&#x21BA;&nbsp; Neuer Zufallslauf</button>
-  </div>
-
-  <nav class="main-nav">
-    <button id="mt-dashboard" class="active" onclick="switchMain('dashboard')">Dashboard</button>
-    <button id="mt-data" onclick="switchMain('data')">Datenverwaltung</button>
-    <button id="mt-import" onclick="switchMain('import')">Import / Export</button>
-  </nav>
-
-  <!-- DASHBOARD -->
-  <div id="view-dashboard">
-    <div class="sec-label">Weltkarte</div>
-    <svg id="world-map" viewBox="0 0 900 450" xmlns="http://www.w3.org/2000/svg">
-      <rect width="900" height="450" fill="#B5D4F4"/>
-      <g id="geo-layer"></g>
-      <g id="pin-layer"></g>
-    </svg>
-    <div class="map-legend" id="map-legend"></div>
-    <div class="sec-label">Zufallsergebnisse</div>
-    <div class="results-grid" id="results-grid">
-      <div style="font-size:13px;color:var(--text3);grid-column:1/-1;padding:8px 0;">Klicke auf "Neuer Zufallslauf" um zu starten.</div>
+  <div class="topbar">
+    <div class="logo"><div class="logo-icon">✈</div>MSFS Randomizer</div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" id="mt-dashboard" onclick="switchMain('dashboard')">Dashboard</button>
+      <button class="nav-tab" id="mt-data" onclick="switchMain('data')">Kategorien</button>
+      <button class="nav-tab" id="mt-import" onclick="switchMain('import')">Import / Export</button>
+    </nav>
+    <div class="topbar-right">
+      <button class="roll-btn" onclick="rollAll()">↻ Neuer Zufallslauf</button>
     </div>
   </div>
 
-  <!-- DATA -->
-  <div id="view-data" style="display:none;">
-    <div class="sec-label">Kategorie</div>
-    <div class="cat-tabs" id="cat-tabs"></div>
-    <div id="cat-content"></div>
-  </div>
+  <div class="main">
+    <!-- MAP always visible -->
+    <div class="map-col">
+      <svg id="world-map" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#0a1628"/>
+        <g id="geo-layer"></g>
+        <g id="pin-layer"></g>
+      </svg>
+      <div class="map-overlay"><div class="map-legend-wrap" id="map-legend"></div></div>
+    </div>
 
-  <!-- IMPORT -->
-  <div id="view-import" style="display:none;">
-    <div class="imp-card">
-      <h3>CSV aus Excel importieren</h3>
-      <p>Exportiere eine Tabelle aus Excel als CSV (Datei → Speichern unter → CSV UTF-8).<br>
-      Format: <strong>Spalte A</strong> = ICAO &nbsp;|&nbsp; <strong>B</strong> = IATA &nbsp;|&nbsp; <strong>C</strong> = Stadt &nbsp;|&nbsp; <strong>D</strong> = Flughafen.<br>
-      Wähle die Zielkategorie, dann die Datei.</p>
-      <div style="margin-bottom:10px;">
-        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">Zielkategorie:</label>
-        <select id="csv-target-cat" style="font-size:13px;padding:6px 10px;border-radius:6px;border:1px solid var(--border-em);background:#fff;color:var(--text);font-family:inherit;"></select>
+    <!-- RIGHT COLUMN -->
+    <div class="right-col">
+
+      <!-- DASHBOARD -->
+      <div id="view-dashboard" class="results-panel">
+        <div class="sec-label">Zufallsergebnisse</div>
+        <div class="results-grid" id="results-grid">
+          <div class="empty-hint">Klicke auf "Neuer Zufallslauf" um zu starten.</div>
+        </div>
       </div>
-      <input type="file" id="csv-input" accept=".csv,.txt" style="font-size:13px;color:var(--text2);">
-      <br>
-      <button class="imp-btn" style="margin-top:10px;" onclick="importCSV()">Importieren</button>
-      <div id="csv-msg" class="msg-ok"></div>
-    </div>
-    <div class="imp-card">
-      <h3>JSON exportieren / importieren</h3>
-      <p>Sichere alle Kategorien und Einträge als JSON-Datei zum späteren Wiederladen.</p>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">
-        <button class="imp-btn" onclick="exportJSON()">Exportieren (JSON)</button>
-        <button class="imp-btn" onclick="document.getElementById('json-wrap').style.display='block'">JSON importieren</button>
-      </div>
-      <div id="json-wrap" style="display:none;">
-        <textarea class="json-area" id="json-input" rows="8" placeholder='[{"id":"difficult","name":"Difficult approaches","type":"list","colorIdx":0,"items":[...]}]'></textarea>
-        <button class="imp-btn" onclick="importJSON()">Importieren</button>
-        <div id="json-msg" class="msg-ok"></div>
-      </div>
-    </div>
-  </div>
 
-</div>
+      <!-- DATA MANAGEMENT -->
+      <div id="view-data" class="data-panel" style="display:none;">
+        <div class="cat-tabs-bar" id="cat-tabs"></div>
+        <div class="table-wrap" id="table-wrap">
+          <div class="coord-info">Wähle eine Kategorie.</div>
+        </div>
+        <div class="add-row-wrap" id="add-row-wrap" style="display:none;">
+          <input id="in-icao" placeholder="ICAO" style="width:68px;" maxlength="4">
+          <input id="in-iata" placeholder="IATA" style="width:58px;" maxlength="4">
+          <input id="in-city" placeholder="Stadt / Ort" style="width:130px;">
+          <input id="in-airport" placeholder="Flughafen" style="width:190px;">
+          <input id="in-diff" placeholder="***" style="width:55px;">
+          <input id="in-region" placeholder="Region" style="width:110px;">
+          <button class="btn-add" id="btn-add-entry" onclick="addItem()">+ Hinzufügen</button>
+        </div>
+      </div>
+
+      <!-- IMPORT -->
+      <div id="view-import" class="import-panel" style="display:none;">
+        <div class="imp-card">
+          <h3>CSV aus Excel importieren</h3>
+          <p>Exportiere eine Tabelle als CSV (UTF-8). Format: Spalte A = ICAO | B = IATA | C = Stadt | D = Flughafen | E = Region.<br>Wähle die Zielkategorie, dann die Datei.</p>
+          <div style="margin-bottom:10px;">
+            <label style="font-size:11px;color:var(--text2);display:block;margin-bottom:4px;">Zielkategorie:</label>
+            <select id="csv-target-cat" style="font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--border);background:var(--bg);color:var(--text);font-family:var(--font);"></select>
+          </div>
+          <input type="file" id="csv-input" accept=".csv,.txt" style="font-size:12px;color:var(--text2);">
+          <br>
+          <button class="imp-btn" style="margin-top:10px;" onclick="importCSV()">Importieren</button>
+          <div id="csv-msg" class="msg-ok"></div>
+        </div>
+        <div class="imp-card">
+          <h3>JSON exportieren / importieren</h3>
+          <p>Alle Kategorien und Einträge als JSON sichern und wiederladen.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <button class="imp-btn" onclick="exportJSON()">Exportieren (JSON)</button>
+            <button class="imp-btn" onclick="document.getElementById('json-wrap').style.display='block'">JSON importieren</button>
+          </div>
+          <div id="json-wrap" style="display:none;">
+            <textarea class="json-area" id="json-input" rows="8" placeholder='[{"id":"difficult","name":"Difficult approaches",...}]'></textarea>
+            <button class="imp-btn" style="margin-top:6px;" onclick="importJSON()">Importieren</button>
+            <div id="json-msg" class="msg-ok"></div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- right-col -->
+  </div><!-- main -->
+</div><!-- app -->
 
 <script>
-const COLORS=['#378ADD','#1D9E75','#D85A30','#7F77DD','#BA7517','#D4537E','#639922','#185FA5','#0F6E56','#993C1D','#534AB7','#888780'];
+const COLORS=['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
 
-let CATEGORIES=[
-  {id:'difficult',name:'Difficult approaches',type:'list',colorIdx:0,items:[
-    {icao:'LOWI',iata:'INN',city:'Innsbruck',airport:'Innsbruck Airport'},
-    {icao:'VNLK',iata:'LUA',city:'Lukla',airport:'Tenzing-Hillary Airport'},
-    {icao:'NZQN',iata:'ZQN',city:'Queenstown',airport:'Queenstown Airport'},
-    {icao:'LGSM',iata:'SMI',city:'Samos',airport:'Samos International'},
-    {icao:'TNCM',iata:'SXM',city:'St. Maarten',airport:'Princess Juliana Intl'},
-    {icao:'CYZT',iata:'YZT',city:'Port Hardy',airport:'Port Hardy Airport'},
-    {icao:'LFMN',iata:'NCE',city:'Nice',airport:"Côte d'Azur Airport"},
-    {icao:'EKVG',iata:'FAE',city:'Vágar',airport:'Vágar Airport'},
-  ]},
-  {id:'routings',name:'Routings',type:'list',colorIdx:1,items:[
-    {icao:'',iata:'',city:'TBD',airport:'To be defined'},
-  ]},
-  {id:'interesting',name:'Interesting airports',type:'list',colorIdx:2,items:[
-    {icao:'UHMM',iata:'GDX',city:'Magadan',airport:'Sokol Airport'},
-    {icao:'BGBW',iata:'UAK',city:'Narsarsuaq',airport:'Narsarsuaq Airport'},
-    {icao:'AYPY',iata:'POM',city:'Port Moresby',airport:'Jacksons Intl'},
-    {icao:'FZAA',iata:'FIH',city:'Kinshasa',airport:"N'djili Airport"},
-    {icao:'WBGR',iata:'MYY',city:'Miri',airport:'Miri Airport'},
-  ]},
-  {id:'formula1',name:'Formula 1',type:'list',colorIdx:3,items:[
-    {icao:'LFMN',iata:'NCE',city:'Monaco',airport:"Nice Côte d'Azur"},
-    {icao:'LIML',iata:'LIN',city:'Monza',airport:'Milano Linate'},
-    {icao:'EGBB',iata:'BHX',city:'Silverstone',airport:'Birmingham Airport'},
-    {icao:'EBCI',iata:'CRL',city:'Spa-Francorchamps',airport:'Brussels South Charleroi'},
-    {icao:'EDDK',iata:'CGN',city:'Köln / Nürburgring',airport:'Köln Bonn Airport'},
-    {icao:'OMAD',iata:'AUH',city:'Abu Dhabi',airport:'Zayed International'},
-    {icao:'YPAD',iata:'ADL',city:'Melbourne (AU)',airport:'Adelaide Airport'},
-    {icao:'YBBN',iata:'BNE',city:'Brisbane',airport:'Brisbane Airport'},
-  ]},
-  {id:'visited',name:'Visited airports',type:'list',colorIdx:4,items:[
-    {icao:'KLGA',iata:'LGA',city:'New York',airport:'LaGuardia Airport'},
-    {icao:'LFPG',iata:'CDG',city:'Paris',airport:'Charles de Gaulle'},
-    {icao:'EDDF',iata:'FRA',city:'Frankfurt',airport:'Frankfurt Airport'},
-    {icao:'LEMD',iata:'MAD',city:'Madrid',airport:'Adolfo Suárez Barajas'},
-    {icao:'LIRF',iata:'FCO',city:'Roma',airport:'Fiumicino'},
-    {icao:'EHAM',iata:'AMS',city:'Amsterdam',airport:'Schiphol'},
-  ]},
-  {id:'mountain',name:'Mountain climbing',type:'list',colorIdx:5,items:[
-    {icao:'VNKT',iata:'KTM',city:'Kathmandu',airport:'Tribhuvan Intl'},
-    {icao:'SLLP',iata:'LPB',city:'La Paz',airport:'El Alto Intl'},
-    {icao:'HADR',iata:'DIR',city:'Dire Dawa',airport:'Aba Tenna Yilma Intl'},
-    {icao:'LSZS',iata:'SMV',city:'Samedan / Alps',airport:'Engadin Airport'},
-    {icao:'NZQN',iata:'ZQN',city:'Queenstown',airport:'Queenstown Airport'},
-  ]},
-  {id:'icao',name:'Random ICAO',type:'random-icao',colorIdx:6,items:[]},
-  {id:'world',name:'Random world',type:'coord',colorIdx:7,region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
-  {id:'europe',name:'Random Europe',type:'coord',colorIdx:8,region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
-  {id:'northamerica',name:'Random North America',type:'coord',colorIdx:9,region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
-  {id:'southamerica',name:'Random South America',type:'coord',colorIdx:10,region:{latMin:-56,latMax:13,lonMin:-82,lonMax:-34},items:[]},
-  {id:'australia',name:'Random Australia / NZ',type:'coord',colorIdx:11,region:{latMin:-47,latMax:-10,lonMin:113,lonMax:178},items:[]},
-  {id:'uk',name:'United Kingdom',type:'list',colorIdx:0,items:[
-    {icao:'EGLL',iata:'LHR',city:'London',airport:'Heathrow'},
-    {icao:'EGCC',iata:'MAN',city:'Manchester',airport:'Manchester Airport'},
-    {icao:'EGPF',iata:'GLA',city:'Glasgow',airport:'Glasgow Airport'},
-    {icao:'EGPH',iata:'EDI',city:'Edinburgh',airport:'Edinburgh Airport'},
-    {icao:'EGGD',iata:'BRS',city:'Bristol',airport:'Bristol Airport'},
-    {icao:'EGNX',iata:'EMA',city:'Nottingham',airport:'East Midlands Airport'},
-  ]},
-  {id:'france',name:'France',type:'list',colorIdx:1,items:[
-    {icao:'LFPG',iata:'CDG',city:'Paris',airport:'Charles de Gaulle'},
-    {icao:'LFPO',iata:'ORY',city:'Paris',airport:'Orly'},
-    {icao:'LFMN',iata:'NCE',city:'Nice',airport:"Côte d'Azur"},
-    {icao:'LFLL',iata:'LYS',city:'Lyon',airport:"Saint-Exupéry"},
-    {icao:'LFBO',iata:'TLS',city:'Toulouse',airport:'Toulouse-Blagnac'},
-    {icao:'LFBD',iata:'BOD',city:'Bordeaux',airport:'Mérignac'},
-    {icao:'LFRN',iata:'RNS',city:'Rennes',airport:'Saint-Jacques'},
-    {icao:'LFRS',iata:'NTE',city:'Nantes',airport:'Nantes Atlantique'},
-    {icao:'LFML',iata:'MRS',city:'Marseille',airport:'Provence'},
-    {icao:'LFST',iata:'SXB',city:'Strasbourg',airport:'Entzheim'},
-  ]},
-  {id:'italia',name:'Italia',type:'list',colorIdx:2,items:[
-    {icao:'LIRF',iata:'FCO',city:'Roma',airport:'Fiumicino'},
-    {icao:'LIMC',iata:'MXP',city:'Milano',airport:'Malpensa'},
-    {icao:'LIML',iata:'LIN',city:'Milano',airport:'Linate'},
-    {icao:'LIPZ',iata:'VCE',city:'Venezia',airport:'Marco Polo'},
-    {icao:'LIRN',iata:'NAP',city:'Napoli',airport:'Capodichino'},
-    {icao:'LICJ',iata:'PMO',city:'Palermo',airport:'Falcone-Borsellino'},
-    {icao:'LIBD',iata:'BRI',city:'Bari',airport:'Karol Wojtyla'},
-    {icao:'LIME',iata:'BGY',city:'Bergamo',airport:'Il Caravaggio'},
-  ]},
-  {id:'deutschland',name:'Deutschland',type:'list',colorIdx:3,items:[
-    {icao:'EDDF',iata:'FRA',city:'Frankfurt',airport:'Frankfurt Airport'},
-    {icao:'EDDM',iata:'MUC',city:'München',airport:'Franz Josef Strauss'},
-    {icao:'EDDB',iata:'BER',city:'Berlin',airport:'Brandenburg'},
-    {icao:'EDDH',iata:'HAM',city:'Hamburg',airport:'Hamburg Airport'},
-    {icao:'EDDK',iata:'CGN',city:'Köln',airport:'Köln/Bonn Airport'},
-    {icao:'EDDS',iata:'STR',city:'Stuttgart',airport:'Stuttgart Airport'},
-    {icao:'EDDL',iata:'DUS',city:'Düsseldorf',airport:'Düsseldorf Airport'},
-    {icao:'EDDN',iata:'NUE',city:'Nürnberg',airport:'Albrecht Dürer Airport'},
-  ]},
+// ─── DATA ──────────────────────────────────────────────────────────────────
+let CATEGORIES = [
+{id:'difficult',name:'Difficult approaches',type:'list',colorIdx:0,hasDiff:true,items:[
+  {icao:'OPGT',iata:'GIL',city:'Gilgit',airport:'Gilgit Airport',region:'Asia',diff:'***'},
+  {icao:'RJCH',iata:'HKD',city:'Hakodate',airport:'Hakodate Airport',region:'Asia',diff:'**'},
+  {icao:'RPUB',iata:'BAG',city:'Baguio / Loakan',airport:'Loakan Airport',region:'Asia',diff:'***'},
+  {icao:'RPVE',iata:'MPH',city:'Caticlan',airport:'Godofredo P. Ramos Airport',region:'Asia',diff:'**'},
+  {icao:'VHHX',iata:'KAI',city:'Hong Kong',airport:'Kai Tak (historical)',region:'Asia',diff:'***'},
+  {icao:'VILH',iata:'IXL',city:'Leh',airport:'Kushok Bakula Rimpochee Airport',region:'Asia',diff:'TBD'},
+  {icao:'VNKT',iata:'KTM',city:'Kathmandu',airport:'Tribhuvan International',region:'Asia',diff:'**'},
+  {icao:'VNLK',iata:'LUA',city:'Lukla',airport:'Tenzing-Hillary Airport',region:'Asia',diff:'***'},
+  {icao:'VQBT',iata:'BUT',city:'Bathpalathang',airport:'Bathpalathang Airport',region:'Asia',diff:'***'},
+  {icao:'VQGP',iata:'GLU',city:'Gelephu',airport:'Gelephu Airport',region:'Asia',diff:'***'},
+  {icao:'VQPR',iata:'PBH',city:'Paro',airport:'Paro International Airport',region:'Asia',diff:'***'},
+  {icao:'VQTY',iata:'YON',city:'Yongphulla',airport:'Yonphula Airport',region:'Asia',diff:'***'},
+  {icao:'WAAA',iata:'UPG',city:'Ujung Padang',airport:'Sultan Hasanuddin International',region:'Asia',diff:'***'},
+  {icao:'WAMM',iata:'MDC',city:'Manado',airport:'Sam Ratulangi International',region:'Asia',diff:'***'},
+  {icao:'WMBT',iata:'TOD',city:'Tioman',airport:'Tioman Airport',region:'Asia',diff:'***'},
+  {icao:'ZUNZ',iata:'LZY',city:'Lin Zhi',airport:'Mainling Airport',region:'Asia',diff:'***'},
+  {icao:'MHTG',iata:'TGU',city:'Tegucigalpa',airport:'Toncontín International',region:'Caribbean & C. America',diff:'***'},
+  {icao:'MMMX',iata:'MEX',city:'Mexico City',airport:'Benito Juárez International',region:'Caribbean & C. America',diff:'*'},
+  {icao:'MRGF',iata:'GLF',city:'Golfito',airport:'Golfito Airport',region:'Caribbean & C. America',diff:'**'},
+  {icao:'MRPJ',iata:'PJM',city:'Puerto Jimenez',airport:'Puerto Jiménez Airport',region:'Caribbean & C. America',diff:'**'},
+  {icao:'MRSI',iata:'IPZ',city:'San Isidro de El General',airport:'San Isidro Airport',region:'Caribbean & C. America',diff:'**'},
+  {icao:'TFFJ',iata:'SBH',city:'St. Barth',airport:'Gustaf III Airport',region:'Caribbean & C. America',diff:'***'},
+  {icao:'TNCM',iata:'SXM',city:'Sint Maarten',airport:'Princess Juliana International',region:'Caribbean & C. America',diff:'**'},
+  {icao:'TNCS',iata:'SAB',city:'Saba',airport:'Juancho E. Yrausquin Airport',region:'Caribbean & C. America',diff:'***'},
+  {icao:'BIIS',iata:'IFJ',city:'Isafjordur',airport:'Ísafjörður Airport',region:'Europe',diff:'***'},
+  {icao:'EDFM',iata:'MHG',city:'Mannheim',airport:'Mannheim City Airport',region:'Europe',diff:'**'},
+  {icao:'EDXH',iata:'HGL',city:'Helgoland',airport:'Helgoland-Düne Airport',region:'Europe',diff:'TBD'},
+  {icao:'EGEP',iata:'PPW',city:'Papa Westray',airport:'Papa Westray Airport',region:'Europe',diff:'Scenic'},
+  {icao:'EGEW',iata:'WRY',city:'Westray',airport:'Westray Airport',region:'Europe',diff:'Scenic'},
+  {icao:'EGLC',iata:'LCY',city:'London',airport:'London City Airport',region:'Europe',diff:'**'},
+  {icao:'EGPR',iata:'BRR',city:'Barra',airport:'Barra Airport',region:'Europe',diff:'Scenic'},
+  {icao:'EKVG',iata:'FAE',city:'Vágar',airport:'Vágar Airport',region:'Europe',diff:'*'},
+  {icao:'ENBV',iata:'BVG',city:'Berlevåg',airport:'Berlevåg Airport',region:'Europe',diff:'***'},
+  {icao:'ENSB',iata:'LYR',city:'Longyearbyen',airport:'Svalbard Airport',region:'Europe',diff:'**'},
+  {icao:'LFHM',iata:'MVV',city:'Megève',airport:'Megève Airport',region:'Europe',diff:'***'},
+  {icao:'LFKB',iata:'BIA',city:'Bastia',airport:'Bastia – Poretta Airport',region:'Europe',diff:'***'},
+  {icao:'LFKC',iata:'CLY',city:'Calvi',airport:'Calvi – Sainte-Catherine Airport',region:'Europe',diff:'***'},
+  {icao:'LFKJ',iata:'AJA',city:'Ajaccio',airport:'Napoleon Bonaparte Airport',region:'Europe',diff:'***'},
+  {icao:'LFLJ',iata:'CVF',city:'Courchevel',airport:'Courchevel Airport',region:'Europe',diff:'***'},
+  {icao:'LFTZ',iata:'LTT',city:'St. Tropez',airport:'La Môle – Saint-Tropez Airport',region:'Europe',diff:'***'},
+  {icao:'LGKJ',iata:'KZS',city:'Kastelorizo',airport:'Kastelorizo Island Airport',region:'Europe',diff:'TBD'},
+  {icao:'LGSK',iata:'JSI',city:'Skiathos',airport:'Skiathos Island Airport',region:'Europe',diff:'**'},
+  {icao:'LGSM',iata:'SMI',city:'Samos',airport:'Samos International Airport',region:'Europe',diff:'***'},
+  {icao:'LIBZ',iata:'BZO',city:'Bolzano',airport:'Bolzano Airport',region:'Europe',diff:'***'},
+  {icao:'LIRJ',iata:'EBA',city:'Elba',airport:'Marina di Campo Airport',region:'Europe',diff:'TBD'},
+  {icao:'LIRQ',iata:'FLR',city:'Firenze',airport:'Florence Airport',region:'Europe',diff:'*'},
+  {icao:'LOWI',iata:'INN',city:'Innsbruck',airport:'Innsbruck Airport',region:'Europe',diff:'***'},
+  {icao:'LPMA',iata:'FNC',city:'Madeira',airport:'Madeira International Airport',region:'Europe',diff:'***'},
+  {icao:'LSGS',iata:'SIR',city:'Sion',airport:'Sion Airport',region:'Europe',diff:'**'},
+  {icao:'LSGK',iata:'GVA',city:'Saanen',airport:'Saanen Airport',region:'Europe',diff:'***'},
+  {icao:'LSMM',iata:'',city:'Meiringen',airport:'Meiringen Airport',region:'Europe',diff:'***'},
+  {icao:'LSZA',iata:'LUG',city:'Lugano',airport:'Lugano Airport',region:'Europe',diff:'**'},
+  {icao:'LSZS',iata:'SMV',city:'Samedan',airport:'Engadin Airport',region:'Europe',diff:'**'},
+  {icao:'LXGB',iata:'GIB',city:'Gibraltar',airport:'Gibraltar International Airport',region:'Europe',diff:'*'},
+  {icao:'LYTV',iata:'TIV',city:'Tivat',airport:'Tivat Airport',region:'Europe',diff:'**'},
+  {icao:'KASE',iata:'ASE',city:'Aspen',airport:'Aspen–Pitkin County Airport',region:'North America',diff:'**'},
+  {icao:'KDCA',iata:'DCA',city:'Washington',airport:'Ronald Reagan Washington National',region:'North America',diff:'**'},
+  {icao:'KEYW',iata:'EYW',city:'Key West',airport:'Key West International Airport',region:'North America',diff:'*'},
+  {icao:'KJFK',iata:'JFK',city:'New York',airport:'John F. Kennedy International',region:'North America',diff:'***'},
+  {icao:'KLGA',iata:'LGA',city:'New York',airport:'LaGuardia Airport',region:'North America',diff:'*'},
+  {icao:'PADU',iata:'DUT',city:'Dutch Harbor',airport:'Unalaska Airport',region:'North America',diff:'***'},
+  {icao:'PAJN',iata:'JNU',city:'Juneau',airport:'Juneau International Airport',region:'North America',diff:'**'},
+  {icao:'PHNL',iata:'HNL',city:'Honolulu',airport:'Daniel K. Inouye International',region:'North America',diff:'***'},
+  {icao:'NZQN',iata:'ZQN',city:'Queenstown',airport:'Queenstown Airport',region:'Oceania',diff:'***'},
+  {icao:'SBRJ',iata:'SDU',city:'Rio de Janeiro',airport:'Santos Dumont Airport',region:'South America',diff:'***'},
+  {icao:'SEQU',iata:'UIO',city:'Quito',airport:'Mariscal Sucre International',region:'South America',diff:'*'},
+  {icao:'SKBG',iata:'BGA',city:'Bucaramanga',airport:'Palonegro International Airport',region:'South America',diff:'*'},
+  {icao:'SKBO',iata:'BOG',city:'Bogotá',airport:'El Dorado International Airport',region:'South America',diff:'*'},
+  {icao:'SKMD',iata:'EOH',city:'Medellín',airport:'Olaya Herrera Airport',region:'South America',diff:'***'},
+  {icao:'SKMZ',iata:'MZL',city:'Manizales',airport:'La Nubia Airport',region:'South America',diff:'**'},
+  {icao:'SKPS',iata:'PSO',city:'Pasto',airport:'Antonio Nariño Airport',region:'South America',diff:'***'},
+  {icao:'SECU',iata:'CUE',city:'Cuenca',airport:'Mariscal Lamar International',region:'South America',diff:'***'},
+  {icao:'SLLP',iata:'LPB',city:'La Paz',airport:'El Alto International Airport',region:'South America',diff:'*'},
+  {icao:'SPGL',iata:'CHH',city:'Chagual',airport:'Chagual Airport',region:'South America',diff:'***'},
+  {icao:'SPZO',iata:'CUZ',city:'Cuzco',airport:'Alejandro Velasco Astete Intl',region:'South America',diff:'***'},
+  {icao:'SVMD',iata:'MRD',city:'Mérida',airport:'Alberto Carnevalli Airport',region:'South America',diff:'***'},
+  {icao:'SKPE',iata:'PEI',city:'Pereira',airport:'Matecaña International Airport',region:'South America',diff:''},
+]},
+{id:'routings',name:'Routings',type:'list-simple',colorIdx:1,items:[
+  {name:'Lufthansa B747 to La Paz'},{name:'UTA B747 to Nouméa'},{name:'Pan Am 1 round-the-world'},
+  {name:'TBD'},{name:'TBD'},{name:'TBD'},{name:'TBD'},{name:'TBD'},
+]},
+{id:'interesting',name:'Interesting airports',type:'list-simple',colorIdx:2,items:[
+  {name:'Split'},{name:'Small airfields Latin America'},{name:'Sandspit'},
+  {name:'Petropavlovsk-Kamchatsky'},{name:'Norilsk'},{name:'Magadan'},{name:'Gilgit'},
+  {name:'Easter Island'},{name:'East Africa'},{name:'Leipzig DHL Hub'},{name:'Toronto YTZ'},
+  {name:'TBD'},{name:'TBD'},{name:'TBD'},{name:'TBD'},{name:'TBD'},
+]},
+{id:'visited',name:'Visited airports',type:'list-simple',colorIdx:3,items:[
+  {name:'New York LGA'},{name:'New York EWR'},{name:'Wien'},{name:'Geneva'},
+  {name:'Meribel'},{name:'Anchorage'},{name:'Vancouver'},{name:'Juneau'},
+  {name:'Ketchikan'},{name:'Sitka'},{name:'Talkeetna'},{name:'Seattle'},
+  {name:'Milano LIN'},{name:'Paris ORY'},{name:'Paris CDG'},{name:'Zurich'},
+  {name:'London LCY'},{name:'Manchester'},{name:'Isle of Man'},{name:'Bodrum'},
+  {name:'Dublin'},{name:'Nice'},
+]},
+{id:'formula1',name:'Formula 1',type:'list-simple',colorIdx:4,items:[
+  {name:'Zürich – Alfa Romeo // Bologna – Ferrari'},{name:'Bologna – Alpha Tauri // Ibaraki – Honda // Luton – Honda'},
+  {name:'Heathrow – Renault // Orly – Renault'},{name:'Luton/Birmingham – Aston Martin // Birmingham – Mercedes'},
+  {name:'Bologna – Ferrari'},{name:'Charlotte/Birmingham – Haas // Bologna – Ferrari'},
+  {name:'Heathrow – McLaren // Birmingham – Mercedes'},{name:'Luton – Red Bull // Salzburg – Red Bull'},
+  {name:'Heathrow – Williams // Birmingham – Mercedes'},{name:'Birmingham/Stuttgart – Mercedes'},
+  {name:'Bahrain race'},{name:'Bologna // Imola race'},{name:'Faro // Portimao race'},
+  {name:'Barcelona race'},{name:'Nice // Monaco race'},{name:'Baku race'},{name:'Istanbul race'},
+  {name:'Marseille // Le Castellet race'},{name:'Graz // Spielberg race'},{name:'Birmingham // Silverstone race'},
+  {name:'Budapest // Hungaroring'},{name:'Luxembourg // Spa Francorchamps'},{name:'Amsterdam // Zandvoort race'},
+  {name:'Milano // Monza race'},{name:'Sochi race'},{name:'Singapore race'},{name:'Nagoya // Suzuka race'},
+  {name:'Austin race'},{name:'Mexico City race'},{name:'São Paulo race'},{name:'Melbourne race'},
+  {name:'Jeddah race'},{name:'Abu Dhabi race'},{name:'Shanghai race'},{name:'Montreal race'},
+  {name:'Rio de Janeiro race'},{name:'Miami race'},{name:'Firenze // Scarperia race'},{name:'Köln-Bonn // Nürburgring'},
+]},
+{id:'mountain',name:'Mountain climbing',type:'list-simple',colorIdx:5,items:[
+  {name:'Dehradun'},{name:'Puerto Natales'},{name:'Cajatambo'},{name:'Anta'},{name:'Juneau'},
+  {name:'Charikot'},{name:'El Calafate'},{name:'Kapowsin'},{name:'Copiapó'},{name:'Lima'},
+  {name:'Yakutat'},{name:'Nanyuki'},{name:'Genève'},{name:'Zermatt'},{name:'Iqaluit'},
+  {name:'Kilimanjaro'},{name:'Bern'},{name:'Glentanner'},{name:'Tumlingtar'},{name:'Mendoza'},
+  {name:'Biratnagar'},{name:'Gilgit'},{name:'Pangnirtung'},{name:'Cotopaxi'},{name:'Kathmandu'},
+  {name:'Pokhara'},{name:'Talkeetna'},{name:'Lukla'},{name:'Bagdogra'},{name:'Erik Nielsen / Whitehorse'},
+  {name:'Quito'},{name:'Mineralnye Vody'},{name:'Gorkha'},{name:'Gauchar'},{name:'Seattle'},
+  {name:'Silver City'},{name:'Mégève'},{name:'Jomsom'},{name:'Nairobi'},{name:'Punta Arenas'},
+  {name:'Skardu'},{name:'Christchurch'},{name:'Suketar'},{name:'Jayapura'},{name:'Sion'},
+  {name:'Lima (2nd)'},{name:'Wamena'},{name:'Union Glacier'},
+]},
+{id:'icao',name:'Random ICAO',type:'random-icao',colorIdx:6,items:[]},
+{id:'world',name:'Random world',type:'coord',colorIdx:7,region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
+{id:'europe_rand',name:'Random Europe',type:'coord',colorIdx:8,region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
+{id:'northamerica',name:'Random N. America',type:'coord',colorIdx:9,region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
+{id:'southamerica',name:'Random S. America',type:'coord',colorIdx:10,region:{latMin:-56,latMax:13,lonMin:-82,lonMax:-34},items:[]},
+{id:'australia',name:'Random Australia/NZ',type:'coord',colorIdx:11,region:{latMin:-47,latMax:-10,lonMin:113,lonMax:178},items:[]},
+{id:'eastern_med',name:'Eastern Med.',type:'list-simple',colorIdx:0,items:['Alexandroupolis','Alghero','Ancona','Astypalaia','Athinai','Bari','Bergamo','Bologna','Bolzano','Brac','Brindisi','Catania','Chania','Chios','Comiso','Crotone','Cuneo','Dubrovnik','Elba','Firenze','Foggia','Genova','Heraklion','Ioannina','Kalamata','Kalymnos','Karpathos','Kasos','Kastoria','Kavala','Kefalonia','Kerkyra','Kos','Kozani','Kythira','Lamezia Terme','Lampedusa','Leros','Lesbos','Limnos','Ljubljana','Malta','Megisti/Kastelorizo','Milano LIN','Milano MXP','Milos','Mykonos','Napoli','Naxos','Olbia','Osijek','Palermo','Pantelleria','Parma','Paros','Perugia','Pescara','Pisa','Preveza','Pula','Reggio di Calabria','Rhodos','Rijeka','Rimini','Roma CIA','Roma FCO','Salerno','Samos','Santorini','Sitia','Skiathos','Skyros','Split','Syros','Thessaloniki','Torino','Trapani','Treviso','Trieste','Venezia VCE','Verona','Volos','Zadar','Zagreb','Zakynthos'].map(n=>({name:n}))},
+{id:'central_eu',name:'Central Europe',type:'list-simple',colorIdx:1,items:['Althenrhein','Amsterdam','Augsburg','Basel','Berlin','Bern','Bratislava','Bremen','Budapest','Dortmund','Dresden','Düsseldorf','Eindhoven','Erfurt','Frankfurt','Friedrichshafen','Gdansk','Graz','Groningen','Hamburg','Hannover','Helgoland','Heringsdorf','Innsbruck','Karlsruhe-Baden Baden','Kassel','Katowice','Klagenfurt','Köln-Bonn','Kosice','Krakow','Leipzig','Linz','Lübeck','Lublin','Luxemburg','Maastricht','Magdeburg','Mannheim','Memmingen','Mönchengladbach','München','Münster-Osnabrück','Nürnberg','Ostrava','Paderborn-Lippstadt','Poprad-Tatry','Poznan','Praha','Rostock','Rotterdam','Rzeszow','Saarbrücken','Salzburg','Szceczin','Stuttgart','Warszawa WAW','Warszawa WMI','Weeze','Westerland','Wien','Wroclaw','Zürich','Aruba','Bonaire','Curaçao','St. Maarten','Saba','St. Eustatius'].map(n=>({name:n}))},
+{id:'france_belux',name:'France / Belux',type:'list-simple',colorIdx:2,items:['Ajaccio','Annecy','Antwerp','Aurillac','Bâle','Basel-Mulhouse','Bastia','Bergerac','Béziers','Biarritz','Bora Bora','Bordeaux','Brest','Brive-la-Gaillarde','Bruxelles','Caen','Calvi','Carcassonne','Castres','Cayenne','Chambéry','Charleroi','Clermont-Ferrand','Dinard','Dôle','Figari','Fort-de-France','Futuna','Genève','Grenoble','Guyane','Huahine','La Rochelle','Le Havre','Le Puy en Velay','Les Saintes','Liège','Lille','Limoges','Lorient','Lourdes','Luxembourg','Lyon','Marie Galante','Marseille','Metz-Nancy-Lorraine','Miquelon','Montpellier','Moorea','Nantes','Nice','Nîmes','Nouméa','Nouvelle Calédonie','Ostende','Papeete','Paris CDG','Paris ORY','Pau','Perpignan','Pointe-à-Pitre','Poitiers','Polynésie','Quimper','Raiatea','Rennes','Rodez','Rouen','Saint Martin','Saint Nazaire','Sion','St. Barthélémy','St. Etienne','St. Pierre','St. Tropez','Strasbourg','Toulon-Hyères','Toulouse','Tours','Vatry','Wallis'].map(n=>({name:n}))},
+{id:'iberia',name:'Iberia',type:'list-simple',colorIdx:3,items:['Albacete','Alicante','Almería','Andorra – La Seu d\'Urgell','Asturias','Badajoz','Barcelona','Bilbao','Cascais','Castellón','Ceuta','Cordoba','Corvo','El Hierro','Faro','Fuerteventura','Funchal','Girona','Graciosa','Gran Canaria','Granada','Horta','Huesca','Ibiza','Jerez de la Frontera','La Coruña','La Gomera','La Palma','Lanzarote','León','Lisbon','Lleida','Madrid','Málaga','Melilla','Menorca','Murcia','Palma de Mallorca','Pamplona','Pico','Ponta Delgada','Porto','Porto Santo','Portimao','Praia da Vitória','Reus','Salamanca','San Sebastián','Santa Cruz das Flores','Santander','Santiago de Compostela','São Jorge','Sevilla','Tenerife North','Tenerife South','Valencia','Valladolid','Vigo','Vila Real','Viseu','Vitoria','Zaragoza'].map(n=>({name:n}))},
+{id:'british_isles',name:'British Isles',type:'list-simple',colorIdx:4,items:['Aberdeen','Alderney','Anguilla','Ascension Island','Barra','Belfast BFS','Belfast BHD','Benbecula','Bermuda','Birmingham','Bournemouth','Bristol','Campbeltown','Cardiff','Cayman Brac','Coll','Colonsay','Cork','Derry','Donegal','Dublin','Dundee','East Midlands','Edinburgh','Exeter','Fair Isle','Falkland','Foula','Gibraltar','Glasgow','Grand Cayman','Guernsey','Humberside','Inverness','Inis Meáin','Inis Mór','Inis Oírr','Islay','Isle of Man','Jersey','Kerry','Kirkwall','Land\'s End','Leeds','Lerwick LSI','Lerwick LWK','Liverpool','London LCY','London LGW','London LHR','London LTN','London SEN','London STN','Manchester','Montserrat','Newcastle upon Tyne','Newquay','North Ronaldsay','Norwich','Nottingham','Oban','Papa Westray','Port Stanley','Prestwick','Providenciales','Sanday','Scilly Isles','Shannon','Southampton','St. Helena','Stornoway','Stronsay','Teesside','Tingwall','Tiree','Tortola','Westray','Wick'].map(n=>({name:n}))},
+{id:'nordics',name:'Nordics',type:'list-simple',colorIdx:5,items:['Aalborg','Aarhus','Akureyri','Ålesund','Alta','Andøya','Ängelholm-Helsingborg','Åre Östersund','Arvidsjaur','Bardufoss','Batsfjord','Bergen','Berlevåg','Bíldudalur','Billund','Bodø','Brønnøysund','Copenhagen CPH','Egilsstaðir','Esbjerg','Faroe','Florø','Førde','Gällivare','Gjögur','Göteborg','Greenland airports','Grimsey','Hagfors','Halmstad','Hammerfest','Harstad/Narvik','Hasvik','Haugesund','Helsinki','Hemavan','Höfn','Honningsvåg','Ilulissat','Ísafjörður','Ivalo','Jönköping','Kalmar','Kangerlussuaq','Karlstad','Karup','Kaunas','Kirkenes','Kiruna','Kittilä','Kristiansund','Kuopio','Lakselv','Leknes','Linköping','Longyearbyen','Luleå','Lycksele','Malmö','Mehamn','Mo i Rana','Molde','Mora-Siljan','Mosjøen','Namsos','Norrköping','Nuuk','Odense','Örebro','Ørland','Örnsköldsvik','Ørsta/Volda','Oslo OSL','Östersund','Oulu','Pajala','Palanga','Qaanaq','Reykjavík KEF','Reykjavík RKV','Riga','Rønne','Ronneby','Røros','Rørvik','Røst','Rovaniemi','Sandane','Sandefjord','Sandnessjøen','Sisimiut','Skellefteå','Sogndal','Sønderborg','Sørkjosen','Stavanger','Stockholm ARN','Stockholm BMA','Stockholm NYO','Stockholm VST','Stokmarknes','Sundsvall-Timrå','Sveg','Svolvær','Tallinn','Tampere','Þórshöfn','Torsby','Trollhättan','Tromsø','Trondheim','Trysil','Turku','Umeå','Vaasa','Vadsø','Værøy','Vardø','Växjö','Vilhelmina','Vilnius','Visby','Vopnafjörður'].map(n=>({name:n}))},
 ];
 
-const ICAO_POOL=['EGLL','LFPG','EDDF','EHAM','LEMD','LIRF','LSZH','LOWW','EKCH','ESSA','ENGM','EFHK','EPWA','LKPR','LHBP','OMDB','YSSY','NZAA','VHHH','RJTT','RKSI','ZBAA','VIDP','WSSS','FAOR','HECA','UUEE','KORD','KLAX','KJFK','KATL','CYYZ','SBGR','MMMX','SAEZ','YBBN','YMML','YPPH','RCTP','RPLL','VTBS','WMKK','VABB','RJBB','OMAA','OERK','OTHH','LTFM','EDDM','LSZH'];
+const ICAO_POOL=['EGLL','LFPG','EDDF','EHAM','LEMD','LIRF','LSZH','LOWW','EKCH','ESSA','ENGM','EFHK','EPWA','LKPR','LHBP','OMDB','YSSY','NZAA','VHHH','RJTT','RKSI','ZBAA','VIDP','WSSS','FAOR','HECA','UUEE','KORD','KLAX','KJFK','KATL','CYYZ','SBGR','MMMX','SAEZ','YBBN','YMML','YPPH','RCTP','RPLL','VTBS','WMKK','VABB','RJBB','OMAA','OERK','OTHH','LTFM','EDDM','LSZH','LIMC','LEBL','EDDL','EDDB','LIPZ','LGAV','ULLI'];
 
 const NEARBY=[
-  {icao:'EGLL',name:'London Heathrow',lat:51.477,lon:-0.461},
-  {icao:'LFPG',name:'Paris CDG',lat:49.009,lon:2.548},
-  {icao:'EDDF',name:'Frankfurt',lat:50.033,lon:8.571},
-  {icao:'EHAM',name:'Amsterdam Schiphol',lat:52.308,lon:4.764},
-  {icao:'LEMD',name:'Madrid Barajas',lat:40.472,lon:-3.561},
-  {icao:'ESSA',name:'Stockholm Arlanda',lat:59.651,lon:17.918},
-  {icao:'ENGM',name:'Oslo Gardermoen',lat:60.197,lon:11.1},
-  {icao:'EFHK',name:'Helsinki-Vantaa',lat:60.317,lon:24.963},
-  {icao:'EKCH',name:'Copenhagen',lat:55.618,lon:12.656},
-  {icao:'LOWW',name:'Vienna',lat:48.110,lon:16.570},
-  {icao:'LSZH',name:'Zurich',lat:47.458,lon:8.548},
-  {icao:'LIRF',name:'Rome Fiumicino',lat:41.800,lon:12.238},
-  {icao:'LGAV',name:'Athens Venizelos',lat:37.936,lon:23.944},
-  {icao:'LTFM',name:'Istanbul Airport',lat:41.262,lon:28.742},
-  {icao:'UUEE',name:'Moscow Sheremetyevo',lat:55.972,lon:37.415},
-  {icao:'OMDB',name:'Dubai Intl',lat:25.253,lon:55.365},
-  {icao:'YSSY',name:'Sydney',lat:-33.946,lon:151.177},
-  {icao:'YMML',name:'Melbourne',lat:-37.673,lon:144.843},
-  {icao:'YPPH',name:'Perth',lat:-31.940,lon:115.967},
-  {icao:'YBBN',name:'Brisbane',lat:-27.384,lon:153.118},
-  {icao:'NZAA',name:'Auckland',lat:-37.008,lon:174.791},
-  {icao:'VHHH',name:'Hong Kong',lat:22.308,lon:113.915},
-  {icao:'RJTT',name:'Tokyo Haneda',lat:35.553,lon:139.781},
-  {icao:'RJBB',name:'Osaka Kansai',lat:34.434,lon:135.244},
-  {icao:'RKSI',name:'Seoul Incheon',lat:37.469,lon:126.451},
-  {icao:'RCTP',name:'Taipei Taoyuan',lat:25.077,lon:121.232},
-  {icao:'ZBAA',name:'Beijing Capital',lat:40.080,lon:116.584},
-  {icao:'VIDP',name:'New Delhi',lat:28.556,lon:77.100},
-  {icao:'VABB',name:'Mumbai',lat:19.088,lon:72.868},
-  {icao:'WSSS',name:'Singapore Changi',lat:1.359,lon:103.989},
-  {icao:'VTBS',name:'Bangkok Suvarnabhumi',lat:13.689,lon:100.750},
-  {icao:'WMKK',name:'Kuala Lumpur',lat:2.745,lon:101.709},
-  {icao:'RPLL',name:'Manila',lat:14.509,lon:121.020},
-  {icao:'FAOR',name:'Johannesburg O.R. Tambo',lat:-26.139,lon:28.246},
-  {icao:'HECA',name:'Cairo Intl',lat:30.122,lon:31.405},
-  {icao:'DNMM',name:'Lagos Murtala Muhammed',lat:6.577,lon:3.321},
-  {icao:'HAAB',name:'Addis Ababa',lat:8.978,lon:38.799},
-  {icao:'KORD',name:"Chicago O'Hare",lat:41.978,lon:-87.904},
-  {icao:'KLAX',name:'Los Angeles',lat:33.942,lon:-118.408},
-  {icao:'KJFK',name:'New York JFK',lat:40.640,lon:-73.779},
-  {icao:'KATL',name:'Atlanta',lat:33.637,lon:-84.428},
-  {icao:'KLAS',name:'Las Vegas',lat:36.080,lon:-115.152},
-  {icao:'KSFO',name:'San Francisco',lat:37.619,lon:-122.375},
-  {icao:'CYYZ',name:'Toronto Pearson',lat:43.677,lon:-79.630},
-  {icao:'CYVR',name:'Vancouver',lat:49.194,lon:-123.184},
-  {icao:'MMMX',name:'Mexico City',lat:19.436,lon:-99.072},
-  {icao:'SBGR',name:'São Paulo Guarulhos',lat:-23.432,lon:-46.469},
-  {icao:'SAEZ',name:'Buenos Aires Ezeiza',lat:-34.822,lon:-58.535},
-  {icao:'SKBO',name:'Bogotá',lat:4.702,lon:-74.147},
-  {icao:'SPJC',name:'Lima',lat:-12.022,lon:-77.114},
-  {icao:'SCEL',name:'Santiago',lat:-33.393,lon:-70.786},
+  {icao:'EGLL',name:'London Heathrow',lat:51.477,lon:-0.461},{icao:'LFPG',name:'Paris CDG',lat:49.009,lon:2.548},
+  {icao:'EDDF',name:'Frankfurt',lat:50.033,lon:8.571},{icao:'EHAM',name:'Amsterdam Schiphol',lat:52.308,lon:4.764},
+  {icao:'LEMD',name:'Madrid Barajas',lat:40.472,lon:-3.561},{icao:'ESSA',name:'Stockholm Arlanda',lat:59.651,lon:17.918},
+  {icao:'ENGM',name:'Oslo Gardermoen',lat:60.197,lon:11.1},{icao:'EFHK',name:'Helsinki-Vantaa',lat:60.317,lon:24.963},
+  {icao:'EKCH',name:'Copenhagen',lat:55.618,lon:12.656},{icao:'LOWW',name:'Vienna',lat:48.110,lon:16.570},
+  {icao:'LSZH',name:'Zurich',lat:47.458,lon:8.548},{icao:'LIRF',name:'Rome Fiumicino',lat:41.800,lon:12.238},
+  {icao:'LGAV',name:'Athens Venizelos',lat:37.936,lon:23.944},{icao:'LTFM',name:'Istanbul Airport',lat:41.262,lon:28.742},
+  {icao:'UUEE',name:'Moscow Sheremetyevo',lat:55.972,lon:37.415},{icao:'OMDB',name:'Dubai Intl',lat:25.253,lon:55.365},
+  {icao:'YSSY',name:'Sydney',lat:-33.946,lon:151.177},{icao:'YMML',name:'Melbourne',lat:-37.673,lon:144.843},
+  {icao:'YPPH',name:'Perth',lat:-31.940,lon:115.967},{icao:'YBBN',name:'Brisbane',lat:-27.384,lon:153.118},
+  {icao:'NZAA',name:'Auckland',lat:-37.008,lon:174.791},{icao:'VHHH',name:'Hong Kong',lat:22.308,lon:113.915},
+  {icao:'RJTT',name:'Tokyo Haneda',lat:35.553,lon:139.781},{icao:'RJBB',name:'Osaka Kansai',lat:34.434,lon:135.244},
+  {icao:'RKSI',name:'Seoul Incheon',lat:37.469,lon:126.451},{icao:'RCTP',name:'Taipei Taoyuan',lat:25.077,lon:121.232},
+  {icao:'ZBAA',name:'Beijing Capital',lat:40.080,lon:116.584},{icao:'VIDP',name:'New Delhi',lat:28.556,lon:77.100},
+  {icao:'VABB',name:'Mumbai',lat:19.088,lon:72.868},{icao:'WSSS',name:'Singapore Changi',lat:1.359,lon:103.989},
+  {icao:'VTBS',name:'Bangkok Suvarnabhumi',lat:13.689,lon:100.750},{icao:'WMKK',name:'Kuala Lumpur',lat:2.745,lon:101.709},
+  {icao:'RPLL',name:'Manila',lat:14.509,lon:121.020},{icao:'FAOR',name:'Johannesburg O.R. Tambo',lat:-26.139,lon:28.246},
+  {icao:'HECA',name:'Cairo Intl',lat:30.122,lon:31.405},{icao:'HAAB',name:'Addis Ababa',lat:8.978,lon:38.799},
+  {icao:'DNMM',name:'Lagos',lat:6.577,lon:3.321},{icao:'KORD',name:"Chicago O'Hare",lat:41.978,lon:-87.904},
+  {icao:'KLAX',name:'Los Angeles',lat:33.942,lon:-118.408},{icao:'KJFK',name:'New York JFK',lat:40.640,lon:-73.779},
+  {icao:'KATL',name:'Atlanta',lat:33.637,lon:-84.428},{icao:'KLAS',name:'Las Vegas',lat:36.080,lon:-115.152},
+  {icao:'KSFO',name:'San Francisco',lat:37.619,lon:-122.375},{icao:'CYYZ',name:'Toronto Pearson',lat:43.677,lon:-79.630},
+  {icao:'CYVR',name:'Vancouver',lat:49.194,lon:-123.184},{icao:'MMMX',name:'Mexico City',lat:19.436,lon:-99.072},
+  {icao:'SBGR',name:'São Paulo Guarulhos',lat:-23.432,lon:-46.469},{icao:'SAEZ',name:'Buenos Aires Ezeiza',lat:-34.822,lon:-58.535},
+  {icao:'SKBO',name:'Bogotá',lat:4.702,lon:-74.147},{icao:'SPJC',name:'Lima',lat:-12.022,lon:-77.114},
+  {icao:'SCEL',name:'Santiago',lat:-33.393,lon:-70.786},{icao:'SEQM',name:'Quito',lat:-0.129,lon:-78.358},
 ];
 
 function nearestAirport(lat,lon){
@@ -304,18 +373,21 @@ function nearestAirport(lat,lon){
   return best;
 }
 
+// ─── STATE ────────────────────────────────────────────────────────────────
 let lastResults=[];
 let activeCat='difficult';
-let projection=null;
+let proj=null;
 
+// ─── ROLL ─────────────────────────────────────────────────────────────────
 function rollAll(){
   lastResults=CATEGORIES.map(cat=>{
-    let r={val:'–',sub:'',lat:null,lon:null,entry:null,isCoord:false,nearest:null};
-    if(cat.type==='list'&&cat.items.length>0){
+    let r={val:'–',sub:'',lat:null,lon:null,entry:null,isCoord:false,nearest:null,diff:''};
+    if((cat.type==='list'||cat.type==='list-simple')&&cat.items.length>0){
       const e=cat.items[Math.floor(Math.random()*cat.items.length)];
-      r={val:e.icao?`${e.icao} – ${e.city}`:e.city,sub:e.airport,lat:null,lon:null,entry:e,isCoord:false,nearest:null};
+      const name=e.icao?`${e.icao} – ${e.city}`:e.city||e.name;
+      r={val:name,sub:e.airport||'',lat:null,lon:null,entry:e,isCoord:false,nearest:null,diff:e.diff||''};
     }else if(cat.type==='random-icao'){
-      r={val:ICAO_POOL[Math.floor(Math.random()*ICAO_POOL.length)],sub:'Random ICAO',lat:null,lon:null,entry:null,isCoord:false,nearest:null};
+      r={val:ICAO_POOL[Math.floor(Math.random()*ICAO_POOL.length)],sub:'Random ICAO',lat:null,lon:null,entry:null,isCoord:false,nearest:null,diff:''};
     }else if(cat.type==='coord'){
       const reg=cat.region;
       const lat=parseFloat((reg.latMin+Math.random()*(reg.latMax-reg.latMin)).toFixed(4));
@@ -323,7 +395,7 @@ function rollAll(){
       const nearest=nearestAirport(lat,lon);
       const latS=lat>=0?lat.toFixed(4)+'°N':Math.abs(lat).toFixed(4)+'°S';
       const lonS=lon>=0?lon.toFixed(4)+'°E':Math.abs(lon).toFixed(4)+'°W';
-      r={val:`${latS}  ${lonS}`,sub:nearest?`Nächster: ${nearest.icao} ${nearest.name}`:'',lat,lon,entry:null,isCoord:true,nearest};
+      r={val:`${latS}  ${lonS}`,sub:nearest?`Nearest: ${nearest.icao} ${nearest.name}`:'',lat,lon,entry:null,isCoord:true,nearest,diff:''};
     }
     return{cat,result:r};
   });
@@ -333,15 +405,55 @@ function rollAll(){
 
 function renderResults(){
   const grid=document.getElementById('results-grid');
-  if(!lastResults.length){grid.innerHTML='<div style="font-size:13px;color:var(--text3);grid-column:1/-1;padding:8px 0;">Noch kein Lauf gestartet.</div>';return;}
+  if(!lastResults.length){grid.innerHTML='<div class="empty-hint">Noch kein Lauf gestartet.</div>';return;}
   grid.innerHTML=lastResults.map(({cat,result})=>{
     const col=COLORS[cat.colorIdx%COLORS.length];
+    let badge='';
+    if(result.diff&&result.diff!==''){
+      const cls=result.diff.includes('*')?'badge-star':'';
+      badge=`<div class="res-badge ${cls}">${result.diff}</div>`;
+    }
     return`<div class="res-card">
       <div class="res-cat"><span class="res-dot" style="background:${col};"></span>${cat.name}</div>
       <div class="res-val${result.isCoord?' mono':''}">${result.val}</div>
       ${result.sub?`<div class="res-sub">${result.sub}</div>`:''}
+      ${badge}
     </div>`;
   }).join('');
+}
+
+// ─── MAP ──────────────────────────────────────────────────────────────────
+function initMap(){
+  const svgEl=document.getElementById('world-map');
+  const W=svgEl.clientWidth||800,H=svgEl.clientHeight||450;
+  svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`);
+  proj=d3.geoNaturalEarth1().scale(W/6.28).translate([W/2,H/2]);
+  const path=d3.geoPath().projection(proj);
+
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(r=>r.json())
+    .then(world=>{
+      const countries=topojson.feature(world,world.objects.countries);
+      const borders=topojson.mesh(world,world.objects.countries,(a,b)=>a!==b);
+      const land=topojson.merge(world,world.objects.countries.geometries);
+      const g=document.getElementById('geo-layer');
+      g.innerHTML='';
+      countries.features.forEach(f=>{
+        const d=path(f);if(!d)return;
+        const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+        p.setAttribute('d',d);p.setAttribute('fill','#1c2d1c');p.setAttribute('stroke','none');
+        g.appendChild(p);
+      });
+      const land_outline=document.createElementNS('http://www.w3.org/2000/svg','path');
+      land_outline.setAttribute('d',path(land)||'');land_outline.setAttribute('fill','none');
+      land_outline.setAttribute('stroke','#2d4a2d');land_outline.setAttribute('stroke-width','0.8');
+      g.appendChild(land_outline);
+      const bp=document.createElementNS('http://www.w3.org/2000/svg','path');
+      bp.setAttribute('d',path(borders)||'');bp.setAttribute('fill','none');
+      bp.setAttribute('stroke','#1a3020');bp.setAttribute('stroke-width','0.4');
+      g.appendChild(bp);
+    })
+    .catch(()=>{});
 }
 
 function renderPins(){
@@ -355,59 +467,28 @@ function renderPins(){
       const found=NEARBY.find(a=>a.icao===result.entry.icao);
       if(found){lat=found.lat;lon=found.lon;}
     }
-    if(lat!==null&&lon!==null&&projection){
-      const[px,py]=projection([lon,lat]);
-      if(!isNaN(px)&&!isNaN(py)){
-        pins.innerHTML+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="7" fill="${col}" stroke="#fff" stroke-width="1.5" opacity="0.93"/>
-        <circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2.5" fill="#fff"/>`;
+    if(lat!==null&&lon!==null&&proj){
+      const[px,py]=proj([lon,lat]);
+      if(!isNaN(px)&&!isNaN(py)&&px>0&&py>0){
+        pins.innerHTML+=`<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="6" fill="${col}" stroke="#0d1117" stroke-width="1.5" opacity="0.95"/>
+        <circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="2" fill="#fff" opacity="0.9"/>`;
         if(result.nearest){
-          const[ax,ay]=projection([result.nearest.lon,result.nearest.lat]);
+          const[ax,ay]=proj([result.nearest.lon,result.nearest.lat]);
           if(!isNaN(ax)&&!isNaN(ay)){
-            pins.innerHTML+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${ay.toFixed(1)}" stroke="${col}" stroke-width="0.9" stroke-dasharray="3,2" opacity="0.5"/>
-            <rect x="${(ax-4).toFixed(1)}" y="${(ay-4).toFixed(1)}" width="8" height="8" fill="${col}" stroke="#fff" stroke-width="1.2" opacity="0.85" rx="1.5"/>`;
+            pins.innerHTML+=`<line x1="${px.toFixed(1)}" y1="${py.toFixed(1)}" x2="${ax.toFixed(1)}" y2="${ay.toFixed(1)}" stroke="${col}" stroke-width="0.8" stroke-dasharray="3,2" opacity="0.45"/>
+            <rect x="${(ax-4).toFixed(1)}" y="${(ay-4).toFixed(1)}" width="8" height="8" fill="${col}" stroke="#0d1117" stroke-width="1" opacity="0.85" rx="1.5"/>`;
           }
         }
-        legendItems.push(`<div class="legend-item"><span class="leg-dot" style="background:${col};"></span>${cat.name}: <strong>${result.val.split('–')[0].trim()}</strong></div>`);
+        legendItems.push(`<div class="leg-item"><span class="leg-dot" style="background:${col};"></span>${cat.name}: <strong style="color:#e6edf3;">${result.val.split('–')[0].trim()}</strong></div>`);
       }
     }
   });
   document.getElementById('map-legend').innerHTML=legendItems.join('');
 }
 
-function initMap(){
-  const W=900,H=450;
-  projection=d3.geoNaturalEarth1().scale(143).translate([W/2,H/2]);
-  const path=d3.geoPath().projection(projection);
-  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
-    .then(r=>r.json())
-    .then(world=>{
-      const countries=topojson.feature(world,world.objects.countries);
-      const borders=topojson.mesh(world,world.objects.countries,(a,b)=>a!==b);
-      const land=topojson.merge(world,world.objects.countries.geometries);
-      const g=document.getElementById('geo-layer');
-      g.innerHTML='';
-      countries.features.forEach(f=>{
-        const d=path(f);if(!d)return;
-        const p=document.createElementNS('http://www.w3.org/2000/svg','path');
-        p.setAttribute('d',d);p.setAttribute('fill','#C0DD97');p.setAttribute('stroke','none');
-        g.appendChild(p);
-      });
-      const bp=document.createElementNS('http://www.w3.org/2000/svg','path');
-      bp.setAttribute('d',path(borders)||'');bp.setAttribute('fill','none');
-      bp.setAttribute('stroke','#fff');bp.setAttribute('stroke-width','0.5');
-      g.appendChild(bp);
-      const cp=document.createElementNS('http://www.w3.org/2000/svg','path');
-      cp.setAttribute('d',path(land)||'');cp.setAttribute('fill','none');
-      cp.setAttribute('stroke','#87B07A');cp.setAttribute('stroke-width','0.7');
-      g.appendChild(cp);
-    })
-    .catch(()=>{
-      document.getElementById('geo-layer').innerHTML='<rect x="50" y="80" width="155" height="125" rx="3" fill="#C0DD97" stroke="#87B07A" stroke-width="0.7"/><rect x="290" y="68" width="175" height="105" rx="3" fill="#C0DD97" stroke="#87B07A" stroke-width="0.7"/><rect x="342" y="128" width="260" height="135" rx="3" fill="#C0DD97" stroke="#87B07A" stroke-width="0.7"/><rect x="560" y="78" width="185" height="140" rx="3" fill="#C0DD97" stroke="#87B07A" stroke-width="0.7"/><rect x="572" y="258" width="125" height="85" rx="3" fill="#C0DD97" stroke="#87B07A" stroke-width="0.7"/>';
-    });
-}
-
+// ─── DATA VIEW ────────────────────────────────────────────────────────────
 function renderDataView(){
-  const listCats=CATEGORIES.filter(c=>c.type==='list');
+  const listCats=CATEGORIES.filter(c=>c.type==='list'||c.type==='list-simple');
   document.getElementById('cat-tabs').innerHTML=listCats.map(c=>`<button class="cat-tab${c.id===activeCat?' active':''}" onclick="selectCat('${c.id}')">${c.name}</button>`).join('');
   renderCatTable();
 }
@@ -416,44 +497,84 @@ function selectCat(id){activeCat=id;renderDataView();}
 
 function renderCatTable(){
   const cat=CATEGORIES.find(c=>c.id===activeCat);
-  const el=document.getElementById('cat-content');
-  if(!cat){el.innerHTML='';return;}
-  if(cat.type!=='list'){el.innerHTML=`<div class="table-wrap"><div class="coord-info">Diese Kategorie generiert automatisch zufällige Koordinaten – keine manuelle Datenpflege nötig.</div></div>`;return;}
-  el.innerHTML=`<div class="table-wrap"><table>
-    <thead><tr><th>ICAO</th><th>IATA</th><th>Stadt / Ort</th><th>Flughafen</th><th></th></tr></thead>
-    <tbody>${cat.items.map((item,i)=>`<tr>
-      <td class="mono">${item.icao||'–'}</td>
-      <td class="mono">${item.iata||'–'}</td>
-      <td>${item.city}</td>
-      <td class="muted">${item.airport}</td>
-      <td><button class="btn-del" onclick="deleteItem('${cat.id}',${i})">✕</button></td>
-    </tr>`).join('')}</tbody>
-  </table>
-  <div class="add-row">
-    <input class="w-icao" type="text" id="in-icao" placeholder="ICAO" maxlength="4">
-    <input class="w-iata" type="text" id="in-iata" placeholder="IATA" maxlength="3">
-    <input class="w-city" type="text" id="in-city" placeholder="Stadt / Ort">
-    <input class="w-airport" type="text" id="in-name" placeholder="Flughafenname">
-    <button class="btn-add" onclick="addItem('${cat.id}')">+ Hinzufügen</button>
-  </div></div>`;
+  const wrap=document.getElementById('table-wrap');
+  const addRow=document.getElementById('add-row-wrap');
+  if(!cat){wrap.innerHTML='';addRow.style.display='none';return;}
+  if(cat.type==='coord'){
+    wrap.innerHTML=`<div class="coord-info">Koordinaten-Kategorie: "${cat.name}"<br>Generiert automatisch zufällige Koordinaten – keine Datenpflege nötig.</div>`;
+    addRow.style.display='none';return;
+  }
+  if(cat.type==='random-icao'){
+    wrap.innerHTML=`<div class="coord-info">Random ICAO: zufälliger 4-Buchstaben ICAO-Code aus einem Pool von ${ICAO_POOL.length} Codes.</div>`;
+    addRow.style.display='none';return;
+  }
+
+  const hasDiff=cat.hasDiff;
+  const isSimple=cat.type==='list-simple'&&!cat.hasDiff;
+
+  if(isSimple){
+    wrap.innerHTML=`<table class="data-table"><thead><tr><th>Eintrag</th><th></th></tr></thead><tbody>
+      ${cat.items.map((item,i)=>`<tr><td>${item.name||item}</td><td><button class="btn-del" onclick="deleteItem('${cat.id}',${i})">✕</button></td></tr>`).join('')}
+    </tbody></table>`;
+    addRow.style.display='flex';
+    document.getElementById('in-icao').style.display='none';
+    document.getElementById('in-iata').style.display='none';
+    document.getElementById('in-airport').style.display='none';
+    document.getElementById('in-diff').style.display='none';
+    document.getElementById('in-region').style.display='none';
+    document.getElementById('in-city').placeholder='Eintrag';
+    document.getElementById('in-city').style.width='260px';
+  } else {
+    wrap.innerHTML=`<table class="data-table"><thead><tr><th>ICAO</th><th>IATA</th><th>Stadt</th><th>Flughafen</th><th>Region</th>${hasDiff?'<th>Diff.</th>':''}><th></th></tr></thead><tbody>
+      ${cat.items.map((item,i)=>`<tr>
+        <td class="mono">${item.icao||'–'}</td>
+        <td class="mono">${item.iata||'–'}</td>
+        <td>${item.city||''}</td>
+        <td class="muted">${item.airport||''}</td>
+        <td class="muted" style="font-size:11px;">${item.region||''}</td>
+        ${hasDiff?`<td class="diff">${item.diff||''}</td>`:''}
+        <td><button class="btn-del" onclick="deleteItem('${cat.id}',${i})">✕</button></td>
+      </tr>`).join('')}
+    </tbody></table>`;
+    addRow.style.display='flex';
+    ['in-icao','in-iata','in-airport','in-region'].forEach(id=>{document.getElementById(id).style.display='';});
+    if(hasDiff)document.getElementById('in-diff').style.display='';
+    else document.getElementById('in-diff').style.display='none';
+    document.getElementById('in-city').placeholder='Stadt / Ort';
+    document.getElementById('in-city').style.width='130px';
+  }
 }
 
-function deleteItem(catId,idx){const cat=CATEGORIES.find(c=>c.id===catId);if(cat)cat.items.splice(idx,1);renderCatTable();}
-
-function addItem(catId){
-  const cat=CATEGORIES.find(c=>c.id===catId);if(!cat)return;
-  const icao=(document.getElementById('in-icao').value||'').trim().toUpperCase();
-  const iata=(document.getElementById('in-iata').value||'').trim().toUpperCase();
-  const city=(document.getElementById('in-city').value||'').trim();
-  const airport=(document.getElementById('in-name').value||'').trim();
-  if(!city)return;
-  cat.items.push({icao,iata,city,airport});
+function deleteItem(catId,idx){
+  const cat=CATEGORIES.find(c=>c.id===catId);
+  if(cat)cat.items.splice(idx,1);
   renderCatTable();
 }
 
+function addItem(){
+  const cat=CATEGORIES.find(c=>c.id===activeCat);
+  if(!cat)return;
+  const city=(document.getElementById('in-city').value||'').trim();
+  if(!city)return;
+  if(cat.type==='list-simple'&&!cat.hasDiff){
+    cat.items.push({name:city});
+  } else {
+    const icao=(document.getElementById('in-icao').value||'').trim().toUpperCase();
+    const iata=(document.getElementById('in-iata').value||'').trim().toUpperCase();
+    const airport=(document.getElementById('in-airport').value||'').trim();
+    const diff=(document.getElementById('in-diff').value||'').trim();
+    const region=(document.getElementById('in-region').value||'').trim();
+    cat.items.push({icao,iata,city,airport,diff,region});
+  }
+  ['in-icao','in-iata','in-city','in-airport','in-diff','in-region'].forEach(id=>{document.getElementById(id).value='';});
+  renderCatTable();
+}
+
+// ─── IMPORT / EXPORT ──────────────────────────────────────────────────────
 function populateCsvSelect(){
-  const sel=document.getElementById('csv-target-cat');if(!sel)return;
-  sel.innerHTML=CATEGORIES.filter(c=>c.type==='list').map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  const sel=document.getElementById('csv-target-cat');
+  if(!sel)return;
+  sel.innerHTML=CATEGORIES.filter(c=>c.type==='list'||c.type==='list-simple').map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
 }
 
 function importCSV(){
@@ -465,10 +586,13 @@ function importCSV(){
     const lines=e.target.result.split('\n');let added=0;
     lines.forEach(line=>{
       const cols=line.split(/[,;]/).map(s=>s.trim().replace(/^"|"$/g,''));
-      if(cols[2]){cat.items.push({icao:cols[0]||'',iata:cols[1]||'',city:cols[2],airport:cols[3]||''});added++;}
+      if(cols[0]||cols[2]){
+        if(cat.type==='list-simple'&&!cat.hasDiff){cat.items.push({name:cols[2]||cols[0]});}
+        else{cat.items.push({icao:cols[0]||'',iata:cols[1]||'',city:cols[2]||'',airport:cols[3]||'',region:cols[4]||''});}
+        added++;
+      }
     });
     document.getElementById('csv-msg').textContent=`${added} Einträge zu "${cat.name}" hinzugefügt.`;
-    renderCatTable();
   };
   reader.readAsText(file,'UTF-8');
 }
@@ -486,16 +610,35 @@ function importJSON(){
   }catch(e){alert('Ungültiges JSON: '+e.message);}
 }
 
+// ─── NAVIGATION ───────────────────────────────────────────────────────────
 function switchMain(view){
+  document.getElementById('view-dashboard').style.display=view==='dashboard'?'flex':'none';
+  document.getElementById('view-data').style.display=view==='data'?'flex':'none';
+  document.getElementById('view-import').style.display=view==='import'?'block':'none';
   ['dashboard','data','import'].forEach(v=>{
-    document.getElementById('view-'+v).style.display=v===view?'block':'none';
-    document.getElementById('mt-'+v).className=v===view?'active':'';
+    document.getElementById('mt-'+v).className='nav-tab'+(v===view?' active':'');
   });
   if(view==='data')renderDataView();
   if(view==='import')populateCsvSelect();
 }
 
-initMap();
+// style fix for dashboard
+document.getElementById('view-dashboard').style.display='flex';
+document.getElementById('view-dashboard').style.flexDirection='column';
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
+window.addEventListener('load',()=>{
+  initMap();
+});
+window.addEventListener('resize',()=>{
+  const svgEl=document.getElementById('world-map');
+  const W=svgEl.clientWidth,H=svgEl.clientHeight;
+  if(W>0&&H>0){
+    svgEl.setAttribute('viewBox',`0 0 ${W} ${H}`);
+    proj=d3.geoNaturalEarth1().scale(W/6.28).translate([W/2,H/2]);
+    renderPins();
+  }
+});
 </script>
 </body>
 </html>
