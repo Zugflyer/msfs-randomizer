@@ -626,7 +626,9 @@ DB_SCHED.forEach(r => {
   if(r[1]) schedByIata[r[1]] = r;
 });
 // DB_IATA = airports with IATA codes (used for "Random IATA" category)
+// Falls back to DB_SCHED filtered if new airports.js not yet uploaded
 // [0]=ICAO [1]=IATA [2]=name [3]=lat [4]=lon [5]=continent [6]=country [7]=city [8]=utc_offset [9]=dst_offset
+const DB_IATA_POOL = (typeof DB_IATA !== 'undefined') ? DB_IATA : DB_SCHED.filter(r => r[1]);
 
 function lookupAirport(code) {
   const c = code.toUpperCase().trim();
@@ -1132,8 +1134,8 @@ function rollAll() {
     else if (cat.type === 'rand-iata') {
       // DB_IATA = all airports with IATA codes
       const pool = activeContFilter.length > 0
-        ? DB_IATA.filter(r => activeContFilter.includes(r[5]))
-        : DB_IATA;
+        ? DB_IATA_POOL.filter(r => activeContFilter.includes(r[5]))
+        : DB_IATA_POOL;
       if (!pool.length) return {cat, result};
       const ap = pool[Math.floor(Math.random() * pool.length)];
       result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2];
