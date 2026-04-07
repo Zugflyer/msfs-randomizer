@@ -305,6 +305,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .lb-tbl tbody tr:hover td{background:var(--surf);}
 .lb-mono{font-family:'SF Mono','Courier New',monospace;font-size:11px;color:#58a6ff;font-weight:600;}
 .lb-muted{color:var(--txt2);}
+/* ── Calc ── */
+.calc-ap{display:flex;flex-direction:column;gap:1px;}
+.calc-ap-code{font-family:'SF Mono','Courier New',monospace;font-size:12px;font-weight:700;color:var(--acc2);}
+.calc-ap-iata{color:var(--blue);font-size:10px;font-weight:400;}
+.calc-ap-city{font-size:10px;color:var(--txt2);}
+.calc-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:'SF Mono','Courier New',monospace;width:72px;text-align:center;}
+.calc-input:focus{border-color:var(--acc);outline:none;}
+.calc-arr{font-size:12px;font-family:'SF Mono','Courier New',monospace;font-weight:700;color:#3fb950;padding:4px 7px;background:rgba(63,185,80,.1);border-radius:var(--r);border:1px solid rgba(63,185,80,.3);min-width:72px;text-align:center;}
+.calc-arr.next-day{color:#d29922;background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.3);}
+.calc-block{font-size:11px;font-family:'SF Mono','Courier New',monospace;color:var(--orange);padding:2px 6px;}
+.calc-ta-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:'SF Mono','Courier New',monospace;width:58px;text-align:center;}
+.calc-gate-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:58px;text-align:center;}
 </style>
 </head>
 <body>
@@ -318,6 +330,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-logbook" onclick="switchView('logbook')">Logbook</button>
     <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">Categories</button>
+    <button class="topnav-tab topnav-secondary" id="t-calc" onclick="switchView('calc')">DEP / ARR</button>
   </div>
   <div id="cloud-status" style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:5px;padding:0 8px;"></div>
 </div>
@@ -536,6 +549,34 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
     </div>
 
+    <!-- ═══ DEP/ARR CALCULATOR ═══ -->
+    <div id="view-calc" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div style="padding:10px 14px 6px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">DEP / ARR Time Calculator</div>
+        <button onclick="loadCalcFromRoster()" class="btn-toolbar" style="font-size:11px;">↺ Load from Roster</button>
+      </div>
+      <div style="overflow:auto;flex:1;padding:10px 14px;">
+        <table id="calc-table" style="border-collapse:collapse;font-size:12px;white-space:nowrap;">
+          <thead>
+            <tr style="color:var(--txt3);font-size:10px;text-transform:uppercase;letter-spacing:.05em;">
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Logo</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Airline</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Aircraft</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Departure</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Arrival</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Block</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Dep Time (local)</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Arr Time (local) ±TZ</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Turnaround</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Gate</th>
+              <th style="padding:4px 8px;font-weight:600;border-bottom:1px solid var(--bdr);text-align:left;">Charts</th>
+            </tr>
+          </thead>
+          <tbody id="calc-body"></tbody>
+        </table>
+      </div>
+    </div>
+
   </div><!-- right-panel -->
 </div><!-- main -->
 <!-- BOTTOM NAV -->
@@ -576,13 +617,15 @@ function initAfterAirports() {
     if (pendingInit) { pendingInit = false; rollAll(); }
   }
 }
-// Build lookup maps
+// Build lookup maps from new unified DB_SCHED (all airports with timezone)
 const schedByCode = {};
 const schedByIata = {};
 DB_SCHED.forEach(r => {
   if(r[0]) schedByCode[r[0]] = r;
   if(r[1]) schedByIata[r[1]] = r;
 });
+// DB_IATA = airports with IATA codes (used for "Random IATA" category)
+// [0]=ICAO [1]=IATA [2]=name [3]=lat [4]=lon [5]=continent [6]=country [7]=city [8]=utc_offset [9]=dst_offset
 
 function lookupAirport(code) {
   const c = code.toUpperCase().trim();
@@ -666,7 +709,7 @@ let CATEGORIES = [
 ]},
 {id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[{"icao":"EGBB","iata":"BHX","name":"Alpine-Mercedes","city":"Birmingham","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","name":"Aston Martin Aramco-Honda","city":"Luton","country":"United Kingdom"},{"icao":"EGLL","iata":"LHR","name":"Atlassian Williams-Mercedes","city":"London","country":"United Kingdom"},{"icao":"LSZH","iata":"ZRH","name":"Audi","city":"Zurich","country":"Switzerland"},{"icao":"KIND","iata":"IND","name":"Cadillac-Ferrari","city":"Indianapolis","country":"United States"},{"icao":"EGLL","iata":"LHR","name":"McLaren-Mercedes","city":"London","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","name":"Mercedes","city":"Luton","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","name":"Red Bull Racing-Red Bull Ford","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","name":"Ferrari","city":"Bologna","country":"Italy"},{"icao":"EGGW","iata":"LTN","name":"Haas-Ferrari","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","name":"Racing Bulls-Red Bull Ford","city":"Bologna","country":"Italy"},{"icao":"YMML","iata":"MEL","name":"Australian Grand Prix","city":"Melbourne","country":"Australia"},{"icao":"ZSPD","iata":"PVG","name":"Chinese Grand Prix","city":"Shanghai","country":"China"},{"icao":"RJGG","iata":"NGO","name":"Japanese Grand Prix","city":"Nagoya","country":"Japan"},{"icao":"KMIA","iata":"MIA","name":"Miami Grand Prix","city":"Miami","country":"United States"},{"icao":"CYUL","iata":"YUL","name":"Canadian Grand Prix","city":"Montreal","country":"Canada"},{"icao":"LFMN","iata":"NCE","name":"Monaco Grand Prix","city":"Nice","country":"France"},{"icao":"LEBL","iata":"BCN","name":"Barcelona-Catalunya Grand Prix","city":"Barcelona","country":"Spain"},{"icao":"LOWG","iata":"GRZ","name":"Austrian Grand Prix","city":"Graz","country":"Austria"},{"icao":"EGGW","iata":"LTN","name":"British Grand Prix","city":"Luton","country":"United Kingdom"},{"icao":"EBLG","iata":"LGG","name":"Belgian Grand Prix","city":"Liège","country":"Belgium"},{"icao":"LHBP","iata":"BUD","name":"Hungarian Grand Prix","city":"Budapest","country":"Hungary"},{"icao":"EHAM","iata":"AMS","name":"Dutch Grand Prix","city":"Amsterdam","country":"Netherlands"},{"icao":"LIML","iata":"LIN","name":"Italian Grand Prix","city":"Milan","country":"Italy"},{"icao":"LEMD","iata":"MAD","name":"Spanish Grand Prix","city":"Madrid","country":"Spain"},{"icao":"UBBB","iata":"GYD","name":"Azerbaijan Grand Prix","city":"Baku","country":"Azerbaijan"},{"icao":"WSSS","iata":"SIN","name":"Singapore Grand Prix","city":"Singapore","country":"Singapore"},{"icao":"KAUS","iata":"AUS","name":"United States Grand Prix","city":"Austin","country":"United States"},{"icao":"MMMX","iata":"MEX","name":"Mexico City Grand Prix","city":"Mexico City","country":"Mexico"},{"icao":"SBGR","iata":"GRU","name":"São Paulo Grand Prix","city":"São Paulo","country":"Brazil"},{"icao":"KLAS","iata":"LAS","name":"Las Vegas Grand Prix","city":"Las Vegas","country":"United States"},{"icao":"OTHH","iata":"DOH","name":"Qatar Grand Prix","city":"Doha","country":"Qatar"},{"icao":"OMAA","iata":"AUH","name":"Abu Dhabi Grand Prix","city":"Abu Dhabi","country":"UAE"}]},
 {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
-{id:'rand_nonsched',name:'Random Non-Scheduled',group:'randoms',colorIdx:6,type:'rand-nonsched',items:[]},
+{id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
 {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
 {id:'rand_europe',name:'Random Europe',group:'randoms',colorIdx:8,type:'rand-coord',region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
 {id:'rand_namerica',name:'Random North America',group:'randoms',colorIdx:9,type:'rand-coord',region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
@@ -903,8 +946,12 @@ function departKeydown(e) {
   const suggestEl = document.getElementById('depart-suggestions');
   if (e.key === 'Escape') { suggestEl.style.display='none'; return; }
   if (e.key === 'Tab' && suggestEl.style.display !== 'none') {
-    const first = suggestEl.querySelector('.suggest-item');
-    if (first) { e.preventDefault(); first.click(); }
+    const first = suggestEl.querySelector('[onmousedown]');
+    if (first) {
+      e.preventDefault();
+      const m = (first.getAttribute('onmousedown')||'').match(/'([A-Z0-9]{3,5})'/);
+      if (m) { selectDepart(m[1]); setTimeout(()=>document.getElementById('dest-input')?.focus(),50); }
+    }
   }
 }
 
@@ -938,8 +985,12 @@ function destKeydown(e) {
   const suggestEl = document.getElementById('dest-suggestions');
   if (e.key === 'Escape') { suggestEl.style.display='none'; return; }
   if (e.key === 'Tab' && suggestEl.style.display !== 'none') {
-    const first = suggestEl.querySelector('.suggest-item');
-    if (first) { e.preventDefault(); first.click(); }
+    const first = suggestEl.querySelector('[onmousedown]');
+    if (first) {
+      e.preventDefault();
+      const m = (first.getAttribute('onmousedown')||'').match(/'([A-Z0-9]{3,5})'/);
+      if (m) selectDest(m[1]);
+    }
   }
 }
 
@@ -1077,10 +1128,11 @@ function rollAll() {
       result.name = ap[2]; result.country = countryName(ap[6]);
       result.lat = ap[3]; result.lon = ap[4];
     }
-    else if (cat.type === 'rand-nonsched') {
+    else if (cat.type === 'rand-iata') {
+      // DB_IATA = all airports with IATA codes
       const pool = activeContFilter.length > 0
-        ? DB_NONSCHED.filter(r => activeContFilter.includes(r[5]))
-        : DB_NONSCHED;
+        ? DB_IATA.filter(r => activeContFilter.includes(r[5]))
+        : DB_IATA;
       if (!pool.length) return {cat, result};
       const ap = pool[Math.floor(Math.random() * pool.length)];
       result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2];
@@ -1122,7 +1174,7 @@ function renderResults() {
   const ROW_IDS = [
     ['difficult','interesting','routings'],
     ['mountain','formula1'],
-    ['rand_world','rand_icao','rand_nonsched'],
+    ['rand_world','rand_icao','rand_iata'],
     ['rand_europe','rand_namerica','rand_samerica','rand_australia'],
     ['british','nordics','central_eu'],
     ['france_belux','iberia','eastern_med'],
@@ -1657,7 +1709,7 @@ function switchToMain(target) {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','data'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2547,6 +2599,222 @@ window.addEventListener('resize', () => {
   if (leafletMap) leafletMap.invalidateSize();
   if (rosterMap) rosterMap.invalidateSize();
 });
+
+// ═══════════════════════════════════════════════════════════
+// DEP / ARR TIME CALCULATOR
+// ═══════════════════════════════════════════════════════════
+let calcRows = []; // [{dep, arr, airline, aircraft, blockTime, depTime, taMin, gate}, ...]
+
+function loadCalcFromRoster() {
+  calcRows = legs
+    .filter(l => l.dep && l.arr)
+    .map((l, i) => ({
+      dep: l.dep, arr: l.arr,
+      airline: l.airline || '', aircraft: l.aircraft || '',
+      blockTime: l.blockTime || '',
+      depTime: '', depDay: 0, arrTime: '', arrDay: 0,
+      taMin: '', gate: '',
+    }));
+  renderCalc();
+  switchView('calc');
+}
+
+// Parse "1145" → {h:11,m:45}, "23:30" → {h:23,m:30}
+function parseTime(raw) {
+  const s = String(raw || '').replace(/[^0-9]/g, '');
+  if (s.length === 3) return { h: parseInt(s[0]), m: parseInt(s.slice(1)) };
+  if (s.length === 4) return { h: parseInt(s.slice(0,2)), m: parseInt(s.slice(2)) };
+  if (s.length === 1 || s.length === 2) return { h: parseInt(s), m: 0 };
+  return null;
+}
+
+function fmtTime(h, m) {
+  return String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+}
+
+// Add block minutes to a time, return {h, m, dayOffset}
+function addMinutes(h, m, blockStr) {
+  const parts = blockStr.split(':');
+  if (parts.length !== 2) return null;
+  const bh = parseInt(parts[0]), bm = parseInt(parts[1]);
+  if (isNaN(bh) || isNaN(bm)) return null;
+  const totalMins = h * 60 + m + bh * 60 + bm;
+  return {
+    h: Math.floor(totalMins / 60) % 24,
+    m: totalMins % 60,
+    dayOffset: Math.floor(totalMins / (24 * 60)),
+  };
+}
+
+// Get UTC offset for an airport (from new DB: [8]=utc, [9]=dst)
+function getUtcOffset(ap) {
+  if (!ap) return 0;
+  // Use DST if available (simplified: apply DST when it exists)
+  // For proper DST detection we'd need current date - use standard offset for now
+  // User can see both in the tooltip
+  return ap[8] !== undefined ? ap[8] : 0;
+}
+
+function calcUpdateRow(idx) {
+  const row = calcRows[idx];
+  if (!row) return;
+
+  // Parse depTime input
+  const rawDep = document.getElementById(`calc-dep-${idx}`)?.value || '';
+  const parsed = parseTime(rawDep);
+  if (parsed && parsed.h >= 0 && parsed.h < 24 && parsed.m >= 0 && parsed.m < 60) {
+    row.depTime = fmtTime(parsed.h, parsed.m);
+    const depEl = document.getElementById(`calc-dep-${idx}`);
+    if (depEl && depEl.value !== row.depTime) depEl.value = row.depTime;
+  } else if (rawDep === '') {
+    row.depTime = '';
+  }
+
+  // Calculate arrival using real timezone offset
+  if (row.depTime && row.blockTime) {
+    const [dh, dm] = row.depTime.split(':').map(Number);
+    
+    // Convert dep local → UTC
+    const depUtc = getUtcOffset(row.dep);
+    const depUtcMins = dh * 60 + dm - Math.round(depUtc * 60);
+    
+    // Add block time
+    const blockParts = row.blockTime.split(':');
+    const blockMins = parseInt(blockParts[0]) * 60 + parseInt(blockParts[1]);
+    const arrUtcMins = depUtcMins + blockMins;
+    
+    // Convert UTC → arr local
+    const arrUtc = getUtcOffset(row.arr);
+    const arrLocalMins = arrUtcMins + Math.round(arrUtc * 60);
+    
+    const dayOffset = Math.floor(arrLocalMins / (24 * 60));
+    const arrMins = ((arrLocalMins % (24 * 60)) + 24 * 60) % (24 * 60);
+    
+    row.arrTime = fmtTime(Math.floor(arrMins / 60), arrMins % 60);
+    row.arrDay = (row.depDay || 0) + dayOffset;
+  }
+
+  // Update arrival display
+  const arrEl = document.getElementById(`calc-arr-${idx}`);
+  if (arrEl) {
+    if (row.arrTime) {
+      const depUtc = getUtcOffset(row.dep);
+      const arrUtc = getUtcOffset(row.arr);
+      const tzInfo = depUtc !== arrUtc ? ` (UTC${arrUtc >= 0 ? '+' : ''}${arrUtc})` : '';
+      arrEl.textContent = row.arrTime + (row.arrDay > 0 ? ` +${row.arrDay}d` : '') + tzInfo;
+      arrEl.className = 'calc-arr' + (row.arrDay > 0 ? ' next-day' : '');
+    } else {
+      arrEl.textContent = '–';
+      arrEl.className = 'calc-arr';
+    }
+  }
+
+  // Pre-fill next row dep from arrival + turnaround
+  const nextRow = calcRows[idx + 1];
+  if (nextRow && row.arrTime) {
+    const ta = parseInt(row.taMin) || 0;
+    if (ta > 0 && !nextRow._depOverride) {
+      const [ah, am] = row.arrTime.split(':').map(Number);
+      const nextDep = addMinutes(ah, am, `0:${ta}`);
+      if (nextDep) {
+        nextRow.depTime = fmtTime(nextDep.h, nextDep.m);
+        nextRow.depDay = (row.arrDay || 0) + nextDep.dayOffset;
+        const nextDepEl = document.getElementById(`calc-dep-${idx+1}`);
+        if (nextDepEl) nextDepEl.value = nextRow.depTime;
+        calcUpdateRow(idx + 1);
+      }
+    }
+  }
+}
+
+function calcTaChange(idx) {
+  const el = document.getElementById(`calc-ta-${idx}`);
+  calcRows[idx].taMin = el ? el.value : '';
+  calcUpdateRow(idx);
+}
+
+function calcDepChange(idx) {
+  if (calcRows[idx]) calcRows[idx]._depOverride = true;
+  calcUpdateRow(idx);
+}
+
+function openNavigraph() {
+  // Try to open Navigraph Charts — try Mac first, then Windows protocol
+  const url = 'navigraph://charts';
+  const appLink = document.createElement('a');
+  appLink.href = url;
+  appLink.style.display = 'none';
+  document.body.appendChild(appLink);
+  appLink.click();
+  document.body.removeChild(appLink);
+}
+
+function renderCalc() {
+  const tbody = document.getElementById('calc-body');
+  if (!tbody) return;
+  if (!calcRows.length) {
+    tbody.innerHTML = `<tr><td colspan="11" style="padding:20px;color:var(--txt3);text-align:center;">
+      Click "↺ Load from Roster" to import legs, or plan a route in Roster first.
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = calcRows.map((row, i) => {
+    const logoUrl = row.airline ? AIRLINE_LOGOS[row.airline.toUpperCase()] : null;
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" style="max-width:52px;max-height:28px;object-fit:contain;background:#fff;border-radius:3px;padding:2px;border:1px solid var(--bdr);" alt="${row.airline}" onerror="this.style.display='none'">`
+      : `<span style="font-size:10px;color:var(--txt2);">${row.airline||''}</span>`;
+
+    const apCell = ap => ap ? `<div class="calc-ap">
+      <div class="calc-ap-code">${ap[0]||''}${ap[1]?`<span class="calc-ap-iata"> / ${ap[1]}</span>`:''}</div>
+      <div class="calc-ap-city">${ap[7]||ap[2]||''}</div>
+    </div>` : '–';
+
+    const blockStyle = row.blockTime && !row.blockTimeReal ? 'font-style:italic;' : '';
+
+    return `<tr style="border-bottom:1px solid var(--bdr);">
+      <td style="padding:5px 8px;">${logoHtml}</td>
+      <td style="padding:5px 8px;font-size:11px;color:var(--txt2);">${row.airline||''}</td>
+      <td style="padding:5px 8px;font-size:11px;color:var(--txt2);">${row.aircraft||''}</td>
+      <td style="padding:5px 8px;">${apCell(row.dep)}</td>
+      <td style="padding:5px 8px;">${apCell(row.arr)}</td>
+      <td style="padding:5px 10px;"><span class="calc-block" style="${blockStyle}">${row.blockTime||'–'}</span></td>
+      <td style="padding:5px 8px;">
+        <input id="calc-dep-${i}" class="calc-input" placeholder="1145"
+          value="${row.depTime||''}"
+          oninput="calcDepChange(${i})"
+          onblur="calcUpdateRow(${i})">
+        ${row.dep && row.dep[8] !== undefined ? `<div style="font-size:9px;color:var(--txt3);margin-top:1px;text-align:center;">UTC${row.dep[8]>=0?'+':''}${row.dep[8]}${row.dep[9]?'/'+row.dep[9]:''}</div>` : ''}
+      </td>
+      <td style="padding:5px 8px;">
+        <div id="calc-arr-${i}" class="calc-arr">${row.arrTime||(row.depTime?'…':'–')}</div>
+      </td>
+      <td style="padding:5px 8px;">
+        <input id="calc-ta-${i}" class="calc-ta-input" placeholder="min"
+          value="${row.taMin||''}"
+          oninput="calcTaChange(${i})">
+      </td>
+      <td style="padding:5px 8px;">
+        <input class="calc-gate-input" placeholder="e.g. B22"
+          value="${row.gate||''}"
+          oninput="calcRows[${i}].gate=this.value">
+      </td>
+      <td style="padding:5px 8px;">
+        <button onclick="openNavigraph()" title="Open Navigraph Charts"
+          style="font-size:11px;padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;white-space:nowrap;">
+          ✈ Charts
+        </button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // After render, recalculate all rows in order to propagate times
+  calcRows.forEach((_, i) => {
+    if (calcRows[i].depTime) calcUpdateRow(i);
+  });
+}
+
+
 
 </script>
 </body>
