@@ -299,7 +299,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .logbook-page{display:flex;flex-direction:column;flex:1;overflow:hidden;}
 .logbook-toolbar{flex:0 0 auto;padding:10px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .logbook-body{flex:1;overflow-y:auto;padding:0 14px 14px;}
-.lb-tbl{width:100%;border-collapse:collapse;font-size:12px;table-layout:fixed;}
+.lb-tbl{border-collapse:collapse;font-size:12px;}
 .lb-tbl thead th{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;padding:7px 10px;border-bottom:1px solid var(--bdr);text-align:left;position:sticky;top:0;background:var(--bg);white-space:nowrap;}
 .lb-tbl tbody td{padding:6px 10px;border-bottom:1px solid var(--bdr);color:var(--txt);}
 .lb-tbl tbody tr:hover td{background:var(--surf);}
@@ -501,7 +501,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
         <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
       </div>
-      <div class="logbook-body" style="overflow-x:auto;">
+      <div class="logbook-body" style="overflow-x:auto;padding:8px 14px;">
         <table class="lb-tbl">
           <thead><tr>
             <th style="width:28px;">#</th>
@@ -997,7 +997,7 @@ function rollAll() {
         : DB_SCHED;
       if (!pool.length) return {cat, result};
       const ap = pool[Math.floor(Math.random() * pool.length)];
-      result.icao = ap[0]; result.city = ap[7] || ap[2]; // FIX 4
+      result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2]; // FIX 4
       result.name = ap[2]; result.country = countryName(ap[6]);
       result.lat = ap[3]; result.lon = ap[4];
     }
@@ -1007,7 +1007,7 @@ function rollAll() {
         : DB_NONSCHED;
       if (!pool.length) return {cat, result};
       const ap = pool[Math.floor(Math.random() * pool.length)];
-      result.icao = ap[0]; result.city = ap[7] || ap[2];
+      result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2];
       result.name = ap[2]; result.country = countryName(ap[6]);
       result.lat = ap[3]; result.lon = ap[4];
     }
@@ -1021,7 +1021,7 @@ function rollAll() {
       const ap = nearestScheduled(lat, lon, activeContFilter.length > 0 ? activeContFilter : null);
       result.coord = true; result.coordLat = lat; result.coordLon = lon;
       if (ap) {
-        result.icao = ap[0]; result.name = ap[2];
+        result.icao = ap[0]; result.iata = ap[1]||''; result.name = ap[2];
         result.city = ap[7] || ap[2]; // FIX 4: municipality
         result.country = countryName(ap[6]);
         result.lat = ap[3]; result.lon = ap[4];
@@ -1728,16 +1728,17 @@ function airlineLogoHtml(icao) {
   if (!code) return '';
   const name = AIRLINE_NAMES[code] || code;
   const url = AIRLINE_LOGOS[code];
+  const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:30px;background:#fff;border-radius:3px;border:1px solid #ccc;padding:2px 4px;overflow:hidden;';
   if (url) {
-    return `<div class="airline-logo-wrap">
-      <img src="${url}" alt="${name}" title="${name}" class="airline-logo-img"
-        onerror="this.parentNode.innerHTML='<div class=airline-logo-txt>${code}</div>'">
-    </div>`;
+    if (url.startsWith('data:')) {
+      // Airhex base64 logo
+      return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${code}</span>'"></div>`;
+    }
+    // Wikipedia URL
+    return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
   }
-  // For unknown airlines, show name and try to fetch from Wikipedia
-  return `<div class="airline-logo-wrap" id="logo-wiki-${code}">
-    <div class="airline-logo-txt" style="font-size:10px;color:var(--txt2);">${name}</div>
-  </div>`;
+  // Unknown airline: show text on white background
+  return `<div style="${wrapStyle};min-width:52px;"><span style="font-size:9px;color:#333;text-align:center;line-height:1.2;word-break:break-all;">${name}</span></div>`;
 }
 
 // Try to fetch airline logo from Wikipedia for unknown airlines
@@ -2036,47 +2037,44 @@ async function fetchBlockTime(idx) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 100,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        max_tokens: 20,
         messages: [{
           role: 'user',
-          content: `Flight duration nonstop ${depIata} to ${arrIata} (${depCity} to ${arrCity}). Reply ONLY with H:MM format like 2:45, or NONE if no nonstop exists.`
+          content: `What is the typical nonstop block time for a flight from ${depIata} (${depCity}) to ${arrIata} (${arrCity})? Reply with ONLY the duration in H:MM format such as 2:35 or 10:20. If no nonstop service exists between these airports, reply with only the word NONE.`
         }]
       })
     });
     if (resp.ok) {
       const data = await resp.json();
-      const allText = (data.content || []).map(b => b.text || '').join('').trim();
-      const match = allText.match(/\b(\d{1,2}):(\d{2})\b/);
-      if (match && !allText.toUpperCase().includes('NONE')) {
-        leg.blockTime = match[0];
-        leg.blockTimeReal = true;
-        btEl.textContent = match[0];
-        btEl.style.fontStyle = 'normal';
-        btEl.title = `Nonstop block time ${depIata}→${arrIata}`;
+      const txt = (data.content || []).map(b => b.type === 'text' ? b.text : '').join('').trim();
+      const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
+      if (m) {
+        leg.blockTime = m[0]; leg.blockTimeReal = true;
+        btEl.textContent = m[0]; btEl.style.fontStyle = 'normal';
+        btEl.title = `Block time ${depIata}→${arrIata}`;
         return;
       }
     }
-  } catch(e) { /* fall through */ }
+  } catch(e) { /* estimate below */ }
 
-  // Fallback: great circle estimate shown in italic
+  // Fallback: great circle estimate in italic
   const R = 6371;
-  const lat1 = leg.dep[3] * Math.PI / 180, lat2 = leg.arr[3] * Math.PI / 180;
-  const dLat = (leg.arr[3] - leg.dep[3]) * Math.PI / 180;
-  const dLon = (leg.arr[4] - leg.dep[4]) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  const φ1 = leg.dep[3]*Math.PI/180, φ2 = leg.arr[3]*Math.PI/180;
+  const Δφ = (leg.arr[3]-leg.dep[3])*Math.PI/180, Δλ = (leg.arr[4]-leg.dep[4])*Math.PI/180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
   const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  const speed = dist < 200 ? 450 : dist < 500 ? 600 : 850;
-  const mins = Math.round((dist / speed) * 60) + 20;
-  leg.blockTime = Math.floor(mins/60) + ':' + String(mins%60).padStart(2,'0');
+  const spd = dist<200?400:dist<500?580:dist<2000?780:870;
+  const buf = dist<500?15:25;
+  const mins = Math.round(dist/spd*60)+buf;
+  leg.blockTime = Math.floor(mins/60)+':'+String(mins%60).padStart(2,'0');
   leg.blockTimeReal = false;
-  btEl.textContent = leg.blockTime;
-  btEl.style.fontStyle = 'italic';
-  btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data)`;
+  btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
+  btEl.title = `Estimated ${depIata}→${arrIata}`;
 }
 
 function updateFlightConnectionsBtn() {
@@ -2242,12 +2240,12 @@ function renderLogbook() {
   }
 
   const apCell = (icao, iata, city) => {
-    if (!icao && !city) return '<td style="padding:3px 6px;color:var(--txt3);width:140px;">–</td>';
-    return `<td style="padding:4px 8px;width:150px;">
-      <div style="font-family:'SF Mono','Courier New',monospace;font-size:13px;font-weight:700;color:var(--acc2);line-height:1.2;">
-        ${icao||''}${iata?`<span style="color:var(--blue);font-size:11px;font-weight:500;"> / ${iata}</span>`:''}
+    if (!icao && !city) return '<td style="padding:2px 8px;color:var(--txt3);white-space:nowrap;">–</td>';
+    return `<td style="padding:3px 8px;white-space:nowrap;">
+      <div style="font-family:'SF Mono','Courier New',monospace;font-size:12px;font-weight:700;color:var(--acc2);line-height:1.2;">
+        ${icao||''}${iata?`<span style="color:var(--blue);font-size:10px;font-weight:400;"> / ${iata}</span>`:''}
       </div>
-      <div style="font-size:11px;color:var(--txt2);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px;">${city||''}</div>
+      <div style="font-size:10px;color:var(--txt2);">${city||''}</div>
     </td>`;
   };
 
@@ -2258,23 +2256,23 @@ function renderLogbook() {
       ? `<img src="${logoUrl}" style="max-width:60px;max-height:34px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;border:1px solid var(--bdr);" alt="${f.airline}" onerror="this.style.display='none'">`
       : `<span style="font-size:10px;color:var(--txt3);">${f.airline||''}</span>`;
     return `<tr style="border-bottom:1px solid var(--bdr);">
-      <td style="padding:5px 6px;font-size:10px;color:var(--txt3);text-align:right;">${i+1}</td>
+      <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;">${i+1}</td>
       ${apCell(f.dep_icao, f.dep_iata, f.dep)}
-      <td style="width:16px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
+      <td style="width:12px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
       ${apCell(f.arr_icao, f.arr_iata, f.arr)}
-      <td style="width:16px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
-      <td style="padding:3px 6px;">
+      <td style="width:12px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
+      <td style="padding:2px 5px;white-space:nowrap;">
         <input value="${f.airline||''}" maxlength="5"
-          style="width:54px;font-size:11px;padding:2px 5px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
+          style="width:48px;font-size:11px;padding:2px 4px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
           oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].airline=this.value;saveLogbook();">
       </td>
-      <td style="padding:3px 6px;">
+      <td style="padding:2px 5px;white-space:nowrap;">
         <input value="${f.aircraft||''}" maxlength="8"
-          style="width:64px;font-size:11px;padding:2px 5px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
+          style="width:58px;font-size:11px;padding:2px 4px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
           oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].aircraft=this.value;saveLogbook();">
       </td>
-      <td style="padding:3px 6px;text-align:center;min-width:50px;">${f.airline ? logoHtml : ''}</td>
-      <td style="padding:3px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
+      <td style="padding:2px 6px;text-align:left;white-space:nowrap;">${f.airline ? logoHtml : ''}</td>
+      <td style="padding:2px 3px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
     </tr>`;
   }).join('');
 
