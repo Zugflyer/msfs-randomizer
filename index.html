@@ -478,9 +478,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <span id="lb-count" style="font-size:11px;color:var(--txt2);font-weight:600;"></span>
       </div>
       <!-- Inline add-leg row -->
-      <div id="lb-add-row" style="display:none;padding:6px 14px;background:var(--surf);border-bottom:1px solid var(--bdr);display:none;gap:8px;align-items:center;flex-wrap:wrap;">
-        <input id="lb-in-dep" placeholder="Dep ICAO" maxlength="4" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
-        <input id="lb-in-arr" placeholder="Arr ICAO" maxlength="4" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+      <div id="lb-add-row" style="display:none;padding:6px 14px;background:var(--surf);border-bottom:1px solid var(--bdr);gap:8px;align-items:center;flex-wrap:wrap;">
+        <div style="position:relative;">
+          <input id="lb-in-dep" placeholder="Dep ICAO/city" oninput="this.value=this.value.toUpperCase();lbSuggest(this,'dep')" style="width:130px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+          <div id="lb-dep-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:260px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:180px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+        </div>
+        <div style="position:relative;">
+          <input id="lb-in-arr" placeholder="Arr ICAO/city" oninput="this.value=this.value.toUpperCase();lbSuggest(this,'arr')" style="width:130px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+          <div id="lb-arr-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:260px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:180px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+        </div>
         <input id="lb-in-airline" placeholder="Airline" maxlength="5" oninput="this.value=this.value.toUpperCase()" style="width:70px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
         <input id="lb-in-aircraft" placeholder="Aircraft" maxlength="8" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
@@ -754,9 +760,16 @@ async function loadAllFromCloud() {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
       CATEGORIES.forEach(cat => { 
-        // Only replace if cloud has non-empty items array
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
-          cat.items = byId[cat.id]; 
+          const cloudItems = byId[cat.id];
+          // Validate: for list-simple cats, cloud items must have icao field
+          if (cat.type === 'list-simple') {
+            const valid = cloudItems.every(i => i.icao && i.icao.length >= 3);
+            if (valid) cat.items = cloudItems;
+            // else keep hardcoded defaults (Supabase has stale data)
+          } else {
+            cat.items = cloudItems;
+          }
         }
       });
       setCloudStatus('✓ Synced', 'ok');
@@ -1250,17 +1263,18 @@ function renderCatTable() {
     area.innerHTML = `<table class="data-tbl"><thead><tr>
       ${sortHeader('icao','ICAO')}${sortHeader('iata','IATA')}${sortHeader('name','Name')}${sortHeader('country','Country')}<th></th>
     </tr></thead><tbody>
-      ${items.map(item => {
+      ${items.map((item, idx) => {
         const db = item.icao ? schedByCode[item.icao] : null;
         const dispName = item.name || (db ? db[7]||db[2] : '');
         const dispIata = item.iata || (db ? db[1]||'–' : '–');
         const dispCountry = item.country || (db ? countryName(db[6]) : '');
+        const safeRef = (item.icao||item.name||'').replace(/'/g,"\\'");
         return `<tr>
           <td class="mono">${item.icao||'–'}</td>
           <td class="mono">${dispIata}</td>
           <td>${dispName}</td>
           <td class="muted">${dispCountry}</td>
-          <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}',${JSON.stringify(item.icao||item.name)})">✕</button></td>
+          <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}','${safeRef}')">✕</button></td>
         </tr>`;
       }).join('')}
     </tbody></table>`;
@@ -1283,7 +1297,7 @@ function renderCatTable() {
           <td class="muted">${db?db[7]||db[2]:''}</td>
           <td class="muted">${db?countryName(db[6]):''}</td>
           <td class="diff">${item.diff||''}</td>
-          <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}',${JSON.stringify(item.icao)})">✕</button></td>
+          <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}','${(item.icao||'').replace(/'/g,"\\'")}')">✕</button></td>
         </tr>`;
       }).join('')}
     </tbody></table>`;
@@ -1375,26 +1389,67 @@ function showAddLogbookRow() {
   if (isHidden) setTimeout(() => document.getElementById('lb-in-dep')?.focus(), 50);
 }
 
+let lbSelectedAps = {};
+
+function lbSuggest(inputEl, side) {
+  const q = inputEl.value.trim().toUpperCase();
+  const boxId = side === 'dep' ? 'lb-dep-suggest' : 'lb-arr-suggest';
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  lbSelectedAps[side] = null;
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
+    r[7].toUpperCase().includes(q)
+  ).slice(0, 10);
+  if (!hits.length) { box.style.display = 'none'; return; }
+  box.innerHTML = hits.map(ap =>
+    `<div class="leg-sug-item" onmousedown="lbSelectAp(event,'${ap[0]}','${side}')">
+      <span class="leg-sug-icao">${ap[0]}</span>
+      ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+      ${ap[7]||ap[2]}
+      <span style="color:var(--txt3);font-size:10px;margin-left:3px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function lbSelectAp(e, code, side) {
+  e.preventDefault();
+  const ap = schedByCode[code]; if (!ap) return;
+  lbSelectedAps[side] = ap;
+  const inputId = side === 'dep' ? 'lb-in-dep' : 'lb-in-arr';
+  const boxId = side === 'dep' ? 'lb-dep-suggest' : 'lb-arr-suggest';
+  const inp = document.getElementById(inputId);
+  if (inp) inp.value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
+  const box = document.getElementById(boxId);
+  if (box) box.style.display = 'none';
+}
+
 function addLogbookLeg() {
-  const dep = (document.getElementById('lb-in-dep')?.value || '').trim().toUpperCase();
-  const arr = (document.getElementById('lb-in-arr')?.value || '').trim().toUpperCase();
+  const depInput = document.getElementById('lb-in-dep');
+  const arrInput = document.getElementById('lb-in-arr');
+  const dep = lbSelectedAps['dep'] ? lbSelectedAps['dep'][0] : (depInput?.value||'').trim().toUpperCase();
+  const arr = lbSelectedAps['arr'] ? lbSelectedAps['arr'][0] : (arrInput?.value||'').trim().toUpperCase();
   const airline = (document.getElementById('lb-in-airline')?.value || '').trim().toUpperCase();
   const aircraft = (document.getElementById('lb-in-aircraft')?.value || '').trim().toUpperCase();
-  if (!dep || !arr) { alert('Please enter departure and arrival ICAO codes'); return; }
-  const depDb = schedByCode[dep];
-  const arrDb = schedByCode[arr];
+  if (!dep || !arr) { alert('Please enter departure and arrival airports'); return; }
+  const depDb = schedByCode[dep] || (lbSelectedAps['dep']);
+  const arrDb = schedByCode[arr] || (lbSelectedAps['arr']);
   logbookFlights.push({
     dep: depDb ? depDb[7]||depDb[2] : dep,
-    dep_icao: dep, dep_iata: depDb?depDb[1]||'':'',
+    dep_icao: depDb?depDb[0]:dep, dep_iata: depDb?depDb[1]||'':'',
     dep_lat: depDb?depDb[3]:null, dep_lon: depDb?depDb[4]:null,
     arr: arrDb ? arrDb[7]||arrDb[2] : arr,
-    arr_icao: arr, arr_iata: arrDb?arrDb[1]||'':'',
+    arr_icao: arrDb?arrDb[0]:arr, arr_iata: arrDb?arrDb[1]||'':'',
     arr_lat: arrDb?arrDb[3]:null, arr_lon: arrDb?arrDb[4]:null,
     airline, aircraft,
   });
   ['lb-in-dep','lb-in-arr','lb-in-airline','lb-in-aircraft'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  lbSelectedAps = {};
   saveLogbook();
   renderLogbook();
 }
@@ -1855,13 +1910,51 @@ function renderLegs() {
 
 
 
-// ── Block time (estimated from great circle distance) ──
+// ── Block time: search web for real flight duration, fall back to calculation ──
 async function fetchBlockTime(idx) {
   const leg = legs[idx];
   if (!leg || !leg.dep || !leg.arr) return;
   const btEl = document.getElementById('bt-' + idx);
   if (!btEl) return;
   btEl.textContent = '…';
+  btEl.style.fontStyle = 'normal';
+
+  const depIata = leg.dep[1] || leg.dep[0];
+  const arrIata = leg.arr[1] || leg.arr[0];
+  const depCity = leg.dep[7] || leg.dep[2];
+  const arrCity = leg.arr[7] || leg.arr[2];
+
+  try {
+    // Use Claude API to search for real block time
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 200,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+        messages: [{
+          role: 'user',
+          content: `What is the typical nonstop flight duration (block time) from ${depCity} (${depIata}) to ${arrCity} (${arrIata})? Search for "${depIata} to ${arrIata} flight duration nonstop". Reply with ONLY the time in format H:MM, for example 2:45. If no nonstop route exists reply with NONE.`
+        }]
+      })
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      const text = data.content?.map(b => b.text || '').join('').trim();
+      const match = text.match(/(\d{1,2}):(\d{2})/);
+      if (match && text.toUpperCase() !== 'NONE') {
+        leg.blockTime = match[0];
+        leg.blockTimeCalculated = false;
+        btEl.textContent = match[0];
+        btEl.style.fontStyle = 'normal';
+        btEl.title = `Real block time: ${depIata}→${arrIata}`;
+        return;
+      }
+    }
+  } catch(e) { /* fall through to calculation */ }
+
+  // Fallback: calculate from great circle distance
   const R = 6371;
   const lat1 = leg.dep[3] * Math.PI / 180;
   const lat2 = leg.arr[3] * Math.PI / 180;
@@ -1872,12 +1965,14 @@ async function fetchBlockTime(idx) {
   let speed = 850;
   if (dist < 500) speed = 600;
   if (dist < 200) speed = 450;
-  const flightMins = Math.round((dist / speed) * 60);
-  const blockMins = flightMins + 20;
+  const blockMins = Math.round((dist / speed) * 60) + 20;
   const hh = Math.floor(blockMins / 60);
   const mm = String(blockMins % 60).padStart(2, '0');
   leg.blockTime = hh + ':' + mm;
-  if (btEl) btEl.textContent = leg.blockTime;
+  leg.blockTimeCalculated = true;
+  btEl.textContent = leg.blockTime;
+  btEl.style.fontStyle = 'italic'; // italic = estimated
+  btEl.title = `Estimated (no nonstop route found): ${depIata}→${arrIata}`;
 }
 
 function updateFlightConnectionsBtn() {
@@ -1885,33 +1980,32 @@ function updateFlightConnectionsBtn() {
   if (!btn) return;
   const dep = legs[0]?.dep;
   const arr = legs[legs.length-1]?.arr;
-  // FlightConnections uses IATA codes in URL: flightconnections.com/?from=FLR&to=FIH
-  const depIata = dep ? (dep[1] || dep[0]) : '';
-  const arrIata = arr ? (arr[1] || arr[0]) : '';
-  if (depIata && arrIata) {
-    btn.dataset.dep = depIata;
-    btn.dataset.arr = arrIata;
-  } else if (depIata) {
-    btn.dataset.dep = depIata;
-    btn.dataset.arr = '';
-  }
+  btn.dataset.depIata = dep ? (dep[1] || dep[0]) : '';
+  btn.dataset.arrIata = arr ? (arr[1] || arr[0]) : '';
 }
 
 function openFlightConnections(e) {
   e.preventDefault();
   const btn = document.getElementById('fc-btn');
-  const dep = btn?.dataset.dep || '';
-  const arr = btn?.dataset.arr || '';
-  // Open FlightConnections and use postMessage or URL hash to pre-fill
-  // The correct URL format for FlightConnections search
+  const depIata = btn?.dataset.depIata || '';
+  const arrIata = btn?.dataset.arrIata || '';
+  // FlightConnections correct URL format
   let url = 'https://www.flightconnections.com/';
-  if (dep && arr) {
-    // FlightConnections supports ?from=IATA&to=IATA format
-    url = `https://www.flightconnections.com/?origin=${dep}&destination=${arr}`;
-  } else if (dep) {
-    url = `https://www.flightconnections.com/?origin=${dep}`;
+  if (depIata && arrIata) {
+    // Open with both airports - the site uses hash-based routing
+    url = `https://www.flightconnections.com/#${depIata}/${arrIata}`;
+  } else if (depIata) {
+    url = `https://www.flightconnections.com/#${depIata}`;
   }
-  window.open(url, '_blank');
+  const win = window.open(url, '_blank');
+  // After page loads, try to fill the search fields via postMessage
+  if (depIata && win) {
+    setTimeout(() => {
+      try {
+        win.postMessage({ type: 'prefill', from: depIata, to: arrIata }, 'https://www.flightconnections.com');
+      } catch(e) {}
+    }, 2000);
+  }
 }
 
 // ── Roster actions ──
