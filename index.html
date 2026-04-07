@@ -26,14 +26,15 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .app{display:flex;flex-direction:column;height:100vh;}
 
 /* TOP NAV */
-.topnav{display:flex;align-items:center;gap:0;padding:0 16px;height:44px;border-bottom:1px solid var(--bdr);flex-shrink:0;background:var(--surf);}
-.topnav-tabs{display:flex;gap:2px;}
-.topnav-sep{width:1px;height:20px;background:var(--bdr2);margin:0 6px;align-self:center;}
-.topnav-primary{font-size:14px;font-weight:600;padding:6px 16px;}
-.topnav-secondary{font-size:12px;padding:4px 11px;color:var(--txt2);}
-.topnav-tab{font-size:13px;padding:5px 14px;border-radius:var(--r);border:none;background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);}
+.topnav{display:flex;align-items:center;gap:0;padding:0 12px;height:56px;border-bottom:1px solid var(--bdr);flex-shrink:0;background:var(--surf);}
+.topnav-tabs{display:flex;gap:2px;align-items:center;}
+.topnav-sep{width:1px;height:28px;background:var(--bdr2);margin:0 4px;align-self:center;}
+.topnav-primary{} .topnav-secondary{}
+.topnav-tab{font-size:12px;font-weight:500;padding:6px 14px;border-radius:var(--r);border:none;background:transparent;color:var(--txt3);cursor:pointer;font-family:var(--ff);display:flex;flex-direction:column;align-items:center;gap:3px;min-width:72px;transition:all .15s;}
+.topnav-tab svg{width:18px;height:18px;stroke:currentColor;}
 .topnav-tab:hover{background:var(--surf2);color:var(--txt);}
-.topnav-tab.active{background:var(--surf2);color:var(--txt);font-weight:500;}
+.topnav-tab.active{background:var(--surf2);color:var(--acc);font-weight:600;}
+.topnav-tab.active svg{stroke:var(--acc);}
 
 /* MAIN SPLIT */
 .main{display:flex;flex:1;overflow:hidden;}
@@ -207,16 +208,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .sec-label-sm{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.09em;margin-bottom:8px;}
 
 /* ── BOTTOM NAV ── */
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:2000;height:4px;background:transparent;transition:height .25s ease;}
-.bottom-nav:hover,.bottom-nav.open{height:56px;}
-.bottom-nav-inner{display:flex;align-items:center;justify-content:center;gap:4px;height:56px;background:var(--surf);border-top:1px solid var(--bdr);padding:0 20px;opacity:0;transition:opacity .2s .05s;}
-.bottom-nav:hover .bottom-nav-inner,.bottom-nav.open .bottom-nav-inner{opacity:1;}
-.bottom-nav-handle{position:absolute;top:0;left:50%;transform:translateX(-50%);width:40px;height:4px;background:var(--bdr2);border-radius:2px;cursor:pointer;transition:background .15s;}
-.bottom-nav:hover .bottom-nav-handle{background:var(--acc);}
-.bn-btn{font-size:12px;font-weight:600;padding:6px 18px;border-radius:var(--r);border:1px solid transparent;background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);display:flex;align-items:center;gap:6px;transition:all .15s;}
-.bn-btn:hover{background:var(--surf2);color:var(--txt);}
-.bn-btn.active{background:var(--surf2);color:var(--txt);border-color:var(--bdr2);}
-.bn-btn svg{width:14px;height:14px;}
+/* bottom-nav removed */
 .bn-sep{width:1px;height:20px;background:var(--bdr);margin:0 4px;}
 /* Push content up so bottom nav doesn't overlap */
 .app{padding-bottom:4px;}
@@ -325,12 +317,27 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 <!-- TOP NAV -->
 <div class="topnav">
   <div class="topnav-tabs">
-    <button class="topnav-tab topnav-primary active" id="t-dashboard" onclick="switchView('dashboard')">Dashboard</button>
-    <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">Roster</button>
+    <button class="topnav-tab topnav-primary active" id="t-dashboard" onclick="switchView('dashboard')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Dashboard
+    </button>
+    <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+      Roster
+    </button>
+    <button class="topnav-tab topnav-secondary" id="t-calc" onclick="switchView('calc')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Schedule
+    </button>
     <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-logbook" onclick="switchView('logbook')">Logbook</button>
-    <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">Categories</button>
-    <button class="topnav-tab topnav-secondary" id="t-calc" onclick="switchView('calc')">DEP / ARR</button>
+    <button class="topnav-tab topnav-secondary" id="t-logbook" onclick="switchView('logbook')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Logbook
+    </button>
+    <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Data
+    </button>
   </div>
   <div id="cloud-status" style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:5px;padding:0 8px;"></div>
 </div>
@@ -356,18 +363,24 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div class="nf-controls">
           <div class="depart-wrap">
             <div class="depart-label">Depart from</div>
-            <input class="depart-input" id="depart-input" placeholder="ICAO / IATA code"
-              oninput="departInput(this.value)"
-              onkeydown="departKeydown(event)">
-
-            <div id="depart-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+            <div style="position:relative;">
+              <input class="depart-input" id="depart-input" placeholder="ICAO / IATA / city"
+                oninput="departInput(this.value)" onkeydown="departKeydown(event)"
+                autocomplete="off" spellcheck="false">
+              <div id="depart-box" onclick="dashClearField('depart')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);padding:5px 10px;"></div>
+              <div id="depart-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+            </div>
           </div>
-          <div class="depart-wrap" style="margin-left:8px;">
+          <div style="color:var(--txt3);font-size:18px;padding:0 2px;align-self:center;margin-top:10px;">→</div>
+          <div class="depart-wrap">
             <div class="depart-label">Destination</div>
-            <input class="depart-input" id="dest-input" placeholder="ICAO / IATA code"
-              oninput="destInput(this.value)"
-              onkeydown="destKeydown(event)">
-            <div id="dest-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+            <div style="position:relative;">
+              <input class="depart-input" id="dest-input" placeholder="ICAO / IATA / city"
+                oninput="destInput(this.value)" onkeydown="destKeydown(event)"
+                autocomplete="off" spellcheck="false">
+              <div id="dest-box" onclick="dashClearField('dest')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc2);background:var(--bg);padding:5px 10px;"></div>
+              <div id="dest-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+            </div>
           </div>
           <div class="region-wrap">
             <div class="region-label">Region filter</div>
@@ -590,31 +603,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
   </div><!-- right-panel -->
 </div><!-- main -->
 <!-- BOTTOM NAV -->
-<div class="bottom-nav" id="bottom-nav">
-  <div class="bottom-nav-handle" onclick="document.getElementById('bottom-nav').classList.toggle('open')"></div>
-  <div class="bottom-nav-inner">
-    <button class="bn-btn" id="bn-dashboard" onclick="switchToMain('dashboard')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      Next Flight
-    </button>
-    <div class="bn-sep"></div>
-    <button class="bn-btn" id="bn-roster" onclick="switchToMain('roster')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-      Roster
-    </button>
-    <div class="bn-sep"></div>
-    <button class="bn-btn" id="bn-logbook" onclick="switchView('logbook')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      Logbook
-    </button>
-    <div class="bn-sep"></div>
-    <button class="bn-btn" id="bn-categories" onclick="switchView('categories')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      Categories
-    </button>
 
-  </div>
-</div>
 </div><!-- app -->
 
 <script src="airports.js" onload="airportsLoaded=true;initAfterAirports()"></script>
@@ -916,6 +905,39 @@ function updateRegionFilter() {
 let departAirport = null;
 let destAirport = null;   // new: manual destination from dashboard
 
+
+function apBoxHtml(ap) {
+  if (!ap) return '';
+  var iata = ap[1] ? '<span style="color:var(--blue);font-size:12px;font-weight:400;"> / ' + ap[1] + '</span>' : '';
+  return '<div style="font-family:monospace;font-size:13px;font-weight:700;color:var(--acc2);line-height:1.2;">'
+       + ap[0] + iata + '</div>'
+       + '<div style="font-size:11px;color:var(--txt2);margin-top:1px;">' + (ap[7]||ap[2]) + '</div>'
+       + '<div style="font-size:10px;color:var(--txt3);">' + countryName(ap[6]) + '</div>';
+}
+
+function showDashBox(side, ap) {
+  var boxId = side === 'depart' ? 'depart-box' : 'dest-box';
+  var inpId = side === 'depart' ? 'depart-input' : 'dest-input';
+  var box = document.getElementById(boxId);
+  var inp = document.getElementById(inpId);
+  if (!box || !inp) return;
+  box.innerHTML = apBoxHtml(ap);
+  box.style.display = 'block';
+  inp.style.visibility = 'hidden';
+}
+
+function dashClearField(side) {
+  var boxId = side === 'depart' ? 'depart-box' : 'dest-box';
+  var inpId = side === 'depart' ? 'depart-input' : 'dest-input';
+  var box = document.getElementById(boxId);
+  var inp = document.getElementById(inpId);
+  if (box) box.style.display = 'none';
+  if (inp) { inp.style.visibility = ''; inp.value = ''; inp.focus(); }
+  if (side === 'depart') { departAirport = null; }
+  else { destAirport = null; }
+  updateDashFC();
+}
+
 // ── shared search helper ──
 function apSearchSorted(q) {
   if (q.length < 2) return [];
@@ -970,17 +992,8 @@ function departKeydown(e) {
 function selectDepart(code) {
   const ap = schedByCode[code] || schedByIata[code]; if (!ap) return;
   departAirport = ap;
-  const iata = ap[1] ? ` / ${ap[1]}` : '';
-  const city = ap[7] || ap[2];
-  const inp = document.getElementById('depart-input');
-  if (inp) inp.value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
-  const res = document.getElementById('depart-resolved');
-  if (res) {
-    res.innerHTML = `<span style="font-family:'SF Mono',monospace;font-size:13px;font-weight:700;color:var(--acc2);">${ap[0]}${ap[1]?`<span style="color:var(--blue);font-weight:400;"> / ${ap[1]}</span>`:''}</span> <span style="font-size:11px;color:var(--txt2);">${city}, ${countryName(ap[6])}</span>`;
-    res.style.display = 'block';
-    res.style.marginTop = '3px';
-  }
   document.getElementById('depart-suggestions').style.display = 'none';
+  showDashBox('depart', ap);
   updateDashFC();
   if (legs.length > 0 && !legs[0].dep) { legs[0].dep = ap; renderLegs(); }
 }
@@ -1013,14 +1026,11 @@ function destKeydown(e) {
 }
 
 function selectDest(code) {
-  const ap = schedByCode[code]; if (!ap) return;
+  const ap = schedByCode[code] || schedByIata[code]; if (!ap) return;
   destAirport = ap;
-  const iata = ap[1] ? ` / ${ap[1]}` : '';
-  const city = ap[7] || ap[2];
-  document.getElementById('dest-input').value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
   document.getElementById('dest-suggestions').style.display = 'none';
+  showDashBox('dest', ap);
   updateDashFC();
-  // Immediately open Roster with dep + dest pre-filled
   legs = [{ dep: departAirport || null, arr: ap, airline: '', aircraft: '' }];
   renderLegs();
   updateFlightConnectionsBtn();
@@ -1028,13 +1038,8 @@ function selectDest(code) {
 }
 
 function clearDashFields() {
-  departAirport = null;
-  destAirport = null;
-  const di = document.getElementById('depart-input'); if (di) di.value = '';
-  const xi = document.getElementById('dest-input'); if (xi) xi.value = '';
-  const dr = document.getElementById('depart-resolved'); if (dr) { dr.innerHTML = ''; dr.style.display = 'none'; }
-  document.getElementById('depart-suggestions').style.display = 'none';
-  const ds = document.getElementById('dest-suggestions'); if (ds) ds.style.display = 'none';
+  dashClearField('depart');
+  dashClearField('dest');
   updateDashFC();
 }
 
@@ -1430,8 +1435,8 @@ function renderCatTable() {
 
   if (cat.type === 'text') {
     area.innerHTML = `<table class="data-tbl"><thead><tr>${sortHeader('entry','Entry')}<th></th></tr></thead><tbody>
-      ${items.map(item => `<tr><td>${item.name}</td>
-        <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}',${JSON.stringify(item.name)})">✕</button></td></tr>`).join('')}
+      ${items.map((item, idx) => `<tr><td>${item.name}</td>
+        <td><button class="btn-del" onclick="deleteCatItemByIdx('${cat.id}',${cat.items.indexOf(item)})">✕</button></td></tr>`).join('')}
     </tbody></table>`;
     addRow.style.display = 'flex';
     ['in-icao','in-iata','in-airport','in-diff','in-region2'].forEach(id => document.getElementById(id).style.display='none');
@@ -1486,6 +1491,13 @@ function renderCatTable() {
     document.getElementById('in-city').placeholder = 'City (optional)';
     document.getElementById('in-city').style.width = '130px';
   }
+}
+
+function deleteCatItemByIdx(catId, idx) {
+  const cat = CATEGORIES.find(c => c.id===catId); if (!cat) return;
+  if (idx >= 0 && idx < cat.items.length) cat.items.splice(idx, 1);
+  saveCategory(cat);
+  renderCatTable();
 }
 
 function deleteCatItemByRef(catId, ref) {
