@@ -2759,6 +2759,8 @@ function calcDepDayChange(idx) {
 }
 function calcTaChange(idx) { calcUpdateRow(idx); }
 
+function openNavigraphCharts() { window.open("https://charts.navigraph.com/airport","_blank"); }
+
 function renderCalc() {
   const tbody = document.getElementById('calc-body');
   if (!tbody) return;
@@ -2812,7 +2814,7 @@ function renderCalc() {
       + '<td style="padding:3px 6px;"><input id="calc-ta-' + i + '" style="' + iSt + 'width:48px;" placeholder="min" value="' + (row.taMin||'') + '" oninput="calcTaChange(' + i + ')"></td>'
       + '<td style="padding:3px 6px;"><input style="' + iSt + 'width:54px;text-transform:uppercase;" placeholder="Gate" value="' + (row.gate||'') + '" oninput="this.value=this.value.toUpperCase();calcRows[' + i + '].gate=this.value;"></td>'
       + '<td style="padding:3px 6px;">'
-      +   '<button onclick="window.open('https://charts.navigraph.com/airport','_blank')" style="display:flex;align-items:center;justify-content:center;width:38px;height:32px;padding:2px;border-radius:4px;border:1px solid var(--bdr);background:var(--surf2);cursor:pointer;">'
+      +   '<button onclick="openNavigraphCharts()" style="display:flex;align-items:center;justify-content:center;width:38px;height:32px;padding:2px;border-radius:4px;border:1px solid var(--bdr);background:var(--surf2);cursor:pointer;">'
       +   '<img src="' + CHARTS_LOGO + '" style="width:28px;height:28px;object-fit:contain;border-radius:3px;" alt="Charts">'
       +   '</button>'
       + '</td>'
@@ -2824,7 +2826,7 @@ function renderCalc() {
   // SimBrief button
   var sb_row = document.getElementById('calc-simbrief-row');
   if (sb_row) {
-    sb_row.innerHTML = '<button onclick="window.open('https://dispatch.simbrief.com/home','_blank')" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:4px;border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;margin-top:10px;">'
+    sb_row.innerHTML = '<button onclick="window.open(\'https://dispatch.simbrief.com/home\',\'_blank\')" style="display:flex;align-items:center;gap:8px;padding:6px 14px;border-radius:4px;border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;margin-top:10px;">'
       + '<img src="' + SIMBRIEF_LOGO + '" style="height:32px;object-fit:contain;" alt="SimBrief">'
       + '<span style="font-size:12px;color:var(--txt);font-weight:500;">Open SimBrief Dispatch</span>'
       + '</button>';
