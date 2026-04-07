@@ -504,12 +504,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <table class="lb-tbl">
           <thead><tr>
             <th style="width:28px;">#</th>
-            <th>City</th><th style="width:52px;">ICAO</th><th style="width:44px;">IATA</th>
-            <th style="width:16px;background:transparent;"></th>
-            <th>City</th><th style="width:52px;">ICAO</th><th style="width:44px;">IATA</th>
-            <th style="width:16px;background:transparent;"></th>
-            <th style="width:52px;">Airline</th><th style="width:60px;">Aircraft</th>
-            <th style="width:44px;">Logo</th><th style="width:24px;"></th>
+            <th>Departure</th>
+            <th style="width:10px;background:transparent;border:none;"></th>
+            <th>Arrival</th>
+            <th style="width:10px;background:transparent;border:none;"></th>
+            <th style="width:60px;">Airline</th>
+            <th style="width:74px;">Aircraft</th>
+            <th style="width:54px;">Logo</th>
+            <th style="width:24px;"></th>
           </tr></thead>
           <tbody id="lb-body"></tbody>
         </table>
@@ -1597,69 +1599,120 @@ let logbookFlights = [];
 
 // ── Airline data ──
 const AIRLINE_NAMES = {
-  'DLH':'Lufthansa','BAW':'British Airways','AFR':'Air France','KLM':'KLM Dutch Airlines',
-  'UAL':'United Airlines','DAL':'Delta Air Lines','AAL':'American Airlines',
-  'SWR':'Swiss International','AUA':'Austrian Airlines','TAP':'TAP Air Portugal',
-  'IBE':'Iberia','VUE':'Vueling','EZY':'easyJet','RYR':'Ryanair',
-  'SIA':'Singapore Airlines','CPA':'Cathay Pacific','ANA':'All Nippon Airways',
-  'JAL':'Japan Airlines','QFA':'Qantas','UAE':'Emirates','ETD':'Etihad Airways',
-  'QTR':'Qatar Airways','THY':'Turkish Airlines','IRA':'Iran Air',
-  'TAM':'LATAM Brasil','AVA':'Avianca','VIR':'Virgin Atlantic',
-  'EIN':'Aer Lingus','FIN':'Finnair','SAS':'Scandinavian Airlines',
-  'NOR':'Norwegian','WZZ':'Wizz Air','VTA':'Air Tahiti Nui',
-  'ANE':'Air Nostrum','MEA':'Middle East Airlines','ASA':'Alaska Airlines',
-  'LNE':'Linea Aerea','LPE':'LAN Peru','ITY':'ITA Airways',
-  'THT':'Air Tahiti Nui','CSN':'China Southern','CCA':'Air China',
-  'MAS':'Malaysia Airlines','THA':'Thai Airways','GIA':'Garuda Indonesia',
-  'AMX':'Aeromexico','GLO':'Gol','AZU':'Azul Brazilian Airlines',
-  'HVN':'Vietnam Airlines','PAL':'Philippine Airlines',
+  // Europe
+  'DLH':'Lufthansa','BAW':'British Airways','AFR':'Air France','KLM':'KLM',
+  'SWR':'Swiss','AUA':'Austrian Airlines','TAP':'TAP Air Portugal','IBE':'Iberia',
+  'VUE':'Vueling','VLG':'Vueling','EZY':'easyJet','RYR':'Ryanair','EIN':'Aer Lingus',
+  'FIN':'Finnair','SAS':'Scandinavian Airlines','NOR':'Norwegian','WZZ':'Wizz Air',
+  'BEL':'Brussels Airlines','ITY':'ITA Airways','MON':'Montenegro Airlines',
+  'CSA':'Czech Airlines','LOT':'LOT Polish Airlines','THY':'Turkish Airlines',
+  'BMS':'Mahan Air','WIA':'Winair','TRA':'Transavia','EWG':'Eurowings',
+  'AZA':'Alitalia','BZH':'Brit Air','HOP':'HOP! Air France','TVF':'Transavia France',
+  // Middle East & Africa
+  'UAE':'Emirates','ETD':'Etihad Airways','QTR':'Qatar Airways','MEA':'Middle East Airlines',
+  'MSR':'Egyptair','RAM':'Royal Air Maroc','ETH':'Ethiopian Airlines','IRA':'Iran Air',
+  'SVA':'Saudia','GFA':'Gulf Air','OMA':'Oman Air',
+  // North America
+  'DAL':'Delta Air Lines','UAL':'United Airlines','AAL':'American Airlines',
+  'ASA':'Alaska Airlines','WJA':'WestJet','ACA':'Air Canada','SWA':'Southwest Airlines',
+  'JBU':'JetBlue','HAL':'Hawaiian Airlines',
+  // Latin America
+  'TAM':'LATAM','LAN':'LATAM','LAM':'LAM Mozambique','AVA':'Avianca',
+  'AMX':'Aeromexico','GLO':'GOL','AZU':'Azul','LPE':'LATAM Peru',
+  'ARG':'Aerolíneas Argentinas','CBQ':'Cobham',
+  // Asia-Pacific
+  'SIA':'Singapore Airlines','CPA':'Cathay Pacific','ANA':'ANA',
+  'JAL':'Japan Airlines','QFA':'Qantas','THA':'Thai Airways','MAS':'Malaysia Airlines',
+  'GIA':'Garuda Indonesia','PAL':'Philippine Airlines','HVN':'Vietnam Airlines',
+  'CSN':'China Southern','CCA':'Air China','CHH':'Hainan Airlines',
+  'KAL':'Korean Air','AAR':'Asiana Airlines','MXD':'MasAir',
+  'ANZ':'Air New Zealand','VOZ':'Virgin Australia',
+  // Pacific / Island
+  'VTA':'Air Tahiti Nui','THT':'Air Tahiti Nui',
+  // Virgin
+  'VIR':'Virgin Atlantic',
 };
 
 const AIRLINE_LOGOS = {
-  'DLH':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Lufthansa_Logo_2018.svg/120px-Lufthansa_Logo_2018.svg.png',
-  'BAW':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/British_Airways_Logo.svg/120px-British_Airways_Logo.svg.png',
-  'AFR':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Air_France_Logo.svg/120px-Air_France_Logo.svg.png',
-  'KLM':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/KLM_logo.svg/120px-KLM_logo.svg.png',
-  'DAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Delta_logo.svg/120px-Delta_logo.svg.png',
-  'UAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/United_Airlines_logo.svg/120px-United_Airlines_logo.svg.png',
-  'AAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/American_Airlines_logo_2013.svg/120px-American_Airlines_logo_2013.svg.png',
-  'SWR':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Swiss_International_Air_Lines_Logo_2011.svg/120px-Swiss_International_Air_Lines_Logo_2011.svg.png',
-  'AUA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Austrian_Airlines_Logo.svg/120px-Austrian_Airlines_Logo.svg.png',
-  'TAP':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/TAP_Air_Portugal_logo.svg/120px-TAP_Air_Portugal_logo.svg.png',
-  'IBE':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Iberia_Airlines_logo.svg/120px-Iberia_Airlines_logo.svg.png',
-  'QTR':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Qatar_Airways_Logo.svg/120px-Qatar_Airways_Logo.svg.png',
-  'UAE':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Emirates_logo.svg/120px-Emirates_logo.svg.png',
-  'ETD':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Etihad_Airways_Logo.svg/120px-Etihad_Airways_Logo.svg.png',
-  'SIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Singapore_Airlines_Logo_2.svg/120px-Singapore_Airlines_Logo_2.svg.png',
-  'THA':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Thai_Airways_Logo.svg/120px-Thai_Airways_Logo.svg.png',
-  'QFA':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Qantas_logo_2016.svg/120px-Qantas_logo_2016.svg.png',
-  'EZY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/EasyJet_logo.svg/120px-EasyJet_logo.svg.png',
-  'RYR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Ryanair_Logo.svg/120px-Ryanair_Logo.svg.png',
-  'ANA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/ANA_logo_%282013%29.svg/120px-ANA_logo_%282013%29.svg.png',
-  'JAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/JAL_logo.svg/120px-JAL_logo.svg.png',
-  'THY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Turkish_Airlines_logo_2019_compact.svg/120px-Turkish_Airlines_logo_2019_compact.svg.png',
-  'VIR':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Virgin-atlantic-2014-logo.svg/120px-Virgin-atlantic-2014-logo.svg.png',
-  'FIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Finnair_Logo.svg/120px-Finnair_Logo.svg.png',
-  'SAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/SAS_logo.svg/120px-SAS_logo.svg.png',
-  'AMX':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Aeromexico_logo.svg/120px-Aeromexico_logo.svg.png',
-  'TAM':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/LATAM_Airlines_logo.svg/120px-LATAM_Airlines_logo.svg.png',
-  'MEA':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/MEA_logo.svg/120px-MEA_logo.svg.png',
-  'ASA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Alaska_Airlines_logo_2016.svg/120px-Alaska_Airlines_logo_2016.svg.png',
-  'ITY':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/ITA_Airways_logo.svg/120px-ITA_Airways_logo.svg.png',
-  'GLO':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Gol_Linhas_Aereas_logo.svg/120px-Gol_Linhas_Aereas_logo.svg.png',
-  'AZU':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Azul_Brazilian_Airlines_logo.svg/120px-Azul_Brazilian_Airlines_logo.svg.png',
-  'AVA':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Avianca_logo_2013.svg/120px-Avianca_logo_2013.svg.png',
-  'VTA':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/120px-Air_Tahiti_Nui_logo.svg.png',
-  'EIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Aer_Lingus_logo.svg/120px-Aer_Lingus_logo.svg.png',
-  'CPA':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Cathay_Pacific_Logo.svg/120px-Cathay_Pacific_Logo.svg.png',
-  'WZZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Wizz_Air_logo.svg/120px-Wizz_Air_logo.svg.png',
-  'VUE':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Vueling_Airlines_logo.svg/120px-Vueling_Airlines_logo.svg.png',
-  'NOR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Norwegian_Air_Shuttle_logo.svg/120px-Norwegian_Air_Shuttle_logo.svg.png',
-  'CSN':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/China_Southern_Airlines_logo.svg/120px-China_Southern_Airlines_logo.svg.png',
-  'CCA':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Air_China_logo.svg/120px-Air_China_logo.svg.png',
-  'GIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Garuda_Indonesia_Logo.svg/120px-Garuda_Indonesia_Logo.svg.png',
-  'MAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Malaysia_Airlines_Logo.svg/120px-Malaysia_Airlines_Logo.svg.png',
-  'THT':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/120px-Air_Tahiti_Nui_logo.svg.png',
+  // Europe
+  'DLH':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Lufthansa_Logo_2018.svg/200px-Lufthansa_Logo_2018.svg.png',
+  'BAW':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/British_Airways_Logo.svg/200px-British_Airways_Logo.svg.png',
+  'AFR':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/44/Air_France_Logo.svg/200px-Air_France_Logo.svg.png',
+  'KLM':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/KLM_logo.svg/200px-KLM_logo.svg.png',
+  'SWR':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d8/Swiss_International_Air_Lines_Logo_2011.svg/200px-Swiss_International_Air_Lines_Logo_2011.svg.png',
+  'AUA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Austrian_Airlines_Logo.svg/200px-Austrian_Airlines_Logo.svg.png',
+  'TAP':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4a/TAP_Air_Portugal_logo.svg/200px-TAP_Air_Portugal_logo.svg.png',
+  'IBE':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Iberia_Airlines_logo.svg/200px-Iberia_Airlines_logo.svg.png',
+  'VUE':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Vueling_Airlines_logo.svg/200px-Vueling_Airlines_logo.svg.png',
+  'VLG':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Vueling_Airlines_logo.svg/200px-Vueling_Airlines_logo.svg.png',
+  'EZY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/EasyJet_logo.svg/200px-EasyJet_logo.svg.png',
+  'RYR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e7/Ryanair_Logo.svg/200px-Ryanair_Logo.svg.png',
+  'EIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Aer_Lingus_logo.svg/200px-Aer_Lingus_logo.svg.png',
+  'FIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Finnair_Logo.svg/200px-Finnair_Logo.svg.png',
+  'SAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/SAS_logo.svg/200px-SAS_logo.svg.png',
+  'NOR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Norwegian_Air_Shuttle_logo.svg/200px-Norwegian_Air_Shuttle_logo.svg.png',
+  'WZZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Wizz_Air_logo.svg/200px-Wizz_Air_logo.svg.png',
+  'BEL':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b6/Brussels_Airlines_logo_2023.svg/200px-Brussels_Airlines_logo_2023.svg.png',
+  'ITY':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d6/ITA_Airways_logo.svg/200px-ITA_Airways_logo.svg.png',
+  'LOT':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a3/LOT_Polish_Airlines_logo.svg/200px-LOT_Polish_Airlines_logo.svg.png',
+  'CSA':'https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Czech_Airlines_logo.svg/200px-Czech_Airlines_logo.svg.png',
+  'THY':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a5/Turkish_Airlines_logo_2019_compact.svg/200px-Turkish_Airlines_logo_2019_compact.svg.png',
+  'TRA':'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Transavia_Logo_2019.svg/200px-Transavia_Logo_2019.svg.png',
+  'EWG':'https://upload.wikimedia.org/wikipedia/commons/thumb/0/08/Eurowings_Logo_2016.svg/200px-Eurowings_Logo_2016.svg.png',
+  'TVF':'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Transavia_Logo_2019.svg/200px-Transavia_Logo_2019.svg.png',
+  // Middle East & Africa
+  'UAE':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d0/Emirates_logo.svg/200px-Emirates_logo.svg.png',
+  'ETD':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f2/Etihad_Airways_Logo.svg/200px-Etihad_Airways_Logo.svg.png',
+  'QTR':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/3c/Qatar_Airways_Logo.svg/200px-Qatar_Airways_Logo.svg.png',
+  'MEA':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/MEA_logo.svg/200px-MEA_logo.svg.png',
+  'MSR':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Egyptair_logo.svg/200px-Egyptair_logo.svg.png',
+  'RAM':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5c/Royal_Air_Maroc_Logo.svg/200px-Royal_Air_Maroc_Logo.svg.png',
+  'ETH':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/97/Ethiopian_Airlines_Logo.svg/200px-Ethiopian_Airlines_Logo.svg.png',
+  'IRA':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f3/Iran_Air_logo.svg/200px-Iran_Air_logo.svg.png',
+  'SVA':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b4/Saudia_Logo.svg/200px-Saudia_Logo.svg.png',
+  'GFA':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/24/Gulf_Air_Logo.svg/200px-Gulf_Air_Logo.svg.png',
+  'OMA':'https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/Oman_Air_logo.svg/200px-Oman_Air_logo.svg.png',
+  // North America
+  'DAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/d/d1/Delta_logo.svg/200px-Delta_logo.svg.png',
+  'UAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5a/United_Airlines_logo.svg/200px-United_Airlines_logo.svg.png',
+  'AAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/23/American_Airlines_logo_2013.svg/200px-American_Airlines_logo_2013.svg.png',
+  'ASA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/39/Alaska_Airlines_logo_2016.svg/200px-Alaska_Airlines_logo_2016.svg.png',
+  'ACA':'https://upload.wikimedia.org/wikipedia/commons/thumb/0/04/Air_Canada_Logo.svg/200px-Air_Canada_Logo.svg.png',
+  'WJA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/34/WestJet_Logo.svg/200px-WestJet_Logo.svg.png',
+  'SWA':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f9/Southwest_Airlines_logo_2014.svg/200px-Southwest_Airlines_logo_2014.svg.png',
+  'JBU':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/JetBlue_Airways_logo.svg/200px-JetBlue_Airways_logo.svg.png',
+  // Latin America
+  'TAM':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/LATAM_Airlines_logo.svg/200px-LATAM_Airlines_logo.svg.png',
+  'LAN':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/LATAM_Airlines_logo.svg/200px-LATAM_Airlines_logo.svg.png',
+  'LPE':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/79/LATAM_Airlines_logo.svg/200px-LATAM_Airlines_logo.svg.png',
+  'AVA':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7f/Avianca_logo_2013.svg/200px-Avianca_logo_2013.svg.png',
+  'AMX':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Aeromexico_logo.svg/200px-Aeromexico_logo.svg.png',
+  'GLO':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/36/Gol_Linhas_Aereas_logo.svg/200px-Gol_Linhas_Aereas_logo.svg.png',
+  'AZU':'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c8/Azul_Brazilian_Airlines_logo.svg/200px-Azul_Brazilian_Airlines_logo.svg.png',
+  'ARG':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/ef/Aerolineas_Argentinas_Logo.svg/200px-Aerolineas_Argentinas_Logo.svg.png',
+  // Asia-Pacific
+  'SIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f1/Singapore_Airlines_Logo_2.svg/200px-Singapore_Airlines_Logo_2.svg.png',
+  'CPA':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Cathay_Pacific_Logo.svg/200px-Cathay_Pacific_Logo.svg.png',
+  'ANA':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/99/ANA_logo_%282013%29.svg/200px-ANA_logo_%282013%29.svg.png',
+  'JAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/2e/JAL_logo.svg/200px-JAL_logo.svg.png',
+  'QFA':'https://upload.wikimedia.org/wikipedia/commons/thumb/5/5d/Qantas_logo_2016.svg/200px-Qantas_logo_2016.svg.png',
+  'THA':'https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/Thai_Airways_Logo.svg/200px-Thai_Airways_Logo.svg.png',
+  'MAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Malaysia_Airlines_Logo.svg/200px-Malaysia_Airlines_Logo.svg.png',
+  'GIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Garuda_Indonesia_Logo.svg/200px-Garuda_Indonesia_Logo.svg.png',
+  'PAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b5/Philippine_Airlines_logo.svg/200px-Philippine_Airlines_logo.svg.png',
+  'HVN':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Vietnam_Airlines_logo.svg/200px-Vietnam_Airlines_logo.svg.png',
+  'CSN':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/China_Southern_Airlines_logo.svg/200px-China_Southern_Airlines_logo.svg.png',
+  'CCA':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Air_China_logo.svg/200px-Air_China_logo.svg.png',
+  'CHH':'https://upload.wikimedia.org/wikipedia/commons/thumb/7/7b/Hainan_Airlines_logo.svg/200px-Hainan_Airlines_logo.svg.png',
+  'KAL':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a4/Korean_Air_logo.svg/200px-Korean_Air_logo.svg.png',
+  'AAR':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/45/Asiana_Airlines_Logo.svg/200px-Asiana_Airlines_Logo.svg.png',
+  'ANZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/a/a8/Air_New_Zealand_Logo.svg/200px-Air_New_Zealand_Logo.svg.png',
+  'VOZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e8/Virgin_Australia_Logo.svg/200px-Virgin_Australia_Logo.svg.png',
+  // Pacific
+  'VTA':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/200px-Air_Tahiti_Nui_logo.svg.png',
+  'THT':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/200px-Air_Tahiti_Nui_logo.svg.png',
+  // Virgin
+  'VIR':'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f7/Virgin-atlantic-2014-logo.svg/200px-Virgin-atlantic-2014-logo.svg.png',
 };
 
 function airlineLogoHtml(icao) {
@@ -1815,15 +1868,24 @@ function renderLegs() {
     const depCol = document.createElement('div');
     depCol.className = 'leg-col';
     depCol.innerHTML = '<div class="leg-label">Departure</div>';
-    if (isFirst && leg.dep) {
-      depCol.innerHTML += apBox(leg.dep);
+    if (leg.dep) {
+      // Always show apBox when airport is set — click to change
+      const boxWrap = document.createElement('div');
+      boxWrap.style.position = 'relative';
+      boxWrap.innerHTML = apBox(leg.dep);
+      boxWrap.style.cursor = 'pointer';
+      boxWrap.title = 'Click to change';
+      boxWrap.onclick = () => {
+        legs[i].dep = null;
+        renderLegs();
+      };
+      depCol.appendChild(boxWrap);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
       const inp = document.createElement('input');
       inp.className = 'leg-input';
       inp.placeholder = 'Type ICAO or city…';
-      inp.value = leg.dep ? formatAp(leg.dep) : '';
       wrap.appendChild(inp);
       depCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
@@ -1838,15 +1900,24 @@ function renderLegs() {
     const arrCol = document.createElement('div');
     arrCol.className = 'leg-col';
     arrCol.innerHTML = '<div class="leg-label">Destination</div>';
-    if (isLast && leg.arr) {
-      arrCol.innerHTML += apBox(leg.arr);
+    if (leg.arr) {
+      // Always show apBox when airport is set — click to change
+      const boxWrap = document.createElement('div');
+      boxWrap.style.position = 'relative';
+      boxWrap.innerHTML = apBox(leg.arr);
+      boxWrap.style.cursor = 'pointer';
+      boxWrap.title = 'Click to change';
+      boxWrap.onclick = () => {
+        legs[i].arr = null;
+        renderLegs();
+      };
+      arrCol.appendChild(boxWrap);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
       const inp = document.createElement('input');
       inp.className = 'leg-input';
       inp.placeholder = 'Type ICAO or city…';
-      inp.value = leg.arr ? formatAp(leg.arr) : '';
       wrap.appendChild(inp);
       arrCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
@@ -1854,7 +1925,6 @@ function renderLegs() {
         if (i < legs.length - 1) legs[i+1].dep = ap;
         updateRosterLines();
         renderLegs();
-        // Fetch block time for this leg
         fetchBlockTime(i);
       });
     }
@@ -1954,54 +2024,51 @@ async function fetchBlockTime(idx) {
   const arrCity = leg.arr[7] || leg.arr[2];
 
   try {
-    // Use Claude API to search for real block time
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 200,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 100,
         tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{
           role: 'user',
-          content: `What is the typical nonstop flight duration (block time) from ${depCity} (${depIata}) to ${arrCity} (${arrIata})? Search for "${depIata} to ${arrIata} flight duration nonstop". Reply with ONLY the time in format H:MM, for example 2:45. If no nonstop route exists reply with NONE.`
+          content: `Flight duration nonstop ${depIata} to ${arrIata} (${depCity} to ${arrCity}). Reply ONLY with H:MM format like 2:45, or NONE if no nonstop exists.`
         }]
       })
     });
     if (resp.ok) {
       const data = await resp.json();
-      const text = data.content?.map(b => b.text || '').join('').trim();
-      const match = text.match(/(\d{1,2}):(\d{2})/);
-      if (match && text.toUpperCase() !== 'NONE') {
+      const allText = (data.content || []).map(b => b.text || '').join('').trim();
+      const match = allText.match(/\b(\d{1,2}):(\d{2})\b/);
+      if (match && !allText.toUpperCase().includes('NONE')) {
         leg.blockTime = match[0];
-        leg.blockTimeCalculated = false;
+        leg.blockTimeReal = true;
         btEl.textContent = match[0];
         btEl.style.fontStyle = 'normal';
-        btEl.title = `Real block time: ${depIata}→${arrIata}`;
+        btEl.title = `Nonstop block time ${depIata}→${arrIata}`;
         return;
       }
     }
-  } catch(e) { /* fall through to calculation */ }
+  } catch(e) { /* fall through */ }
 
-  // Fallback: calculate from great circle distance
+  // Fallback: great circle estimate shown in italic
   const R = 6371;
-  const lat1 = leg.dep[3] * Math.PI / 180;
-  const lat2 = leg.arr[3] * Math.PI / 180;
+  const lat1 = leg.dep[3] * Math.PI / 180, lat2 = leg.arr[3] * Math.PI / 180;
   const dLat = (leg.arr[3] - leg.dep[3]) * Math.PI / 180;
   const dLon = (leg.arr[4] - leg.dep[4]) * Math.PI / 180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
   const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-  let speed = 850;
-  if (dist < 500) speed = 600;
-  if (dist < 200) speed = 450;
-  const blockMins = Math.round((dist / speed) * 60) + 20;
-  const hh = Math.floor(blockMins / 60);
-  const mm = String(blockMins % 60).padStart(2, '0');
-  leg.blockTime = hh + ':' + mm;
-  leg.blockTimeCalculated = true;
+  const speed = dist < 200 ? 450 : dist < 500 ? 600 : 850;
+  const mins = Math.round((dist / speed) * 60) + 20;
+  leg.blockTime = Math.floor(mins/60) + ':' + String(mins%60).padStart(2,'0');
+  leg.blockTimeReal = false;
   btEl.textContent = leg.blockTime;
-  btEl.style.fontStyle = 'italic'; // italic = estimated
-  btEl.title = `Estimated (no nonstop route found): ${depIata}→${arrIata}`;
+  btEl.style.fontStyle = 'italic';
+  btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data)`;
 }
 
 function updateFlightConnectionsBtn() {
@@ -2165,29 +2232,44 @@ function renderLogbook() {
     flights = flights.filter(f => [f.dep,f.arr,f.dep_icao,f.arr_icao,f.airline,f.aircraft]
       .join(' ').toLowerCase().includes(logbookFilterText));
   }
+
+  const apCell = (icao, iata, city) => {
+    if (!icao && !city) return '<td colspan="1" style="padding:3px 6px;color:var(--txt3);">–</td>';
+    return `<td style="padding:3px 6px;min-width:130px;">
+      <div style="font-family:'SF Mono','Courier New',monospace;font-size:12px;font-weight:700;color:var(--acc2);">
+        ${icao||''}${iata?`<span style="color:var(--blue);font-weight:400;"> / ${iata}</span>`:''}
+      </div>
+      <div style="font-size:10px;color:var(--txt2);margin-top:1px;">${city||''}</div>
+    </td>`;
+  };
+
   tbody.innerHTML = flights.map((f, i) => {
-    const logoHtml = f.airline ? `<div style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:26px;background:#fff;border-radius:3px;border:1px solid var(--bdr);padding:1px;overflow:hidden;" id="lbl-${i}">
-      ${AIRLINE_LOGOS[f.airline]
-        ? `<img src="${AIRLINE_LOGOS[f.airline]}" style="max-width:42px;max-height:24px;object-fit:contain;" alt="${f.airline}" onerror="this.parentNode.innerHTML='<span style=font-size:8px;color:var(--txt3)>${f.airline}</span>'">`
-        : `<span style="font-size:8px;color:var(--txt3);">${f.airline}</span>`}
-    </div>` : '';
     const realIdx = logbookFlights.indexOf(f);
+    const logoUrl = f.airline ? AIRLINE_LOGOS[f.airline.toUpperCase()] : null;
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" style="max-width:44px;max-height:26px;object-fit:contain;background:#fff;border-radius:3px;padding:2px;border:1px solid var(--bdr);" alt="${f.airline}" onerror="this.style.display='none'">`
+      : `<span style="font-size:10px;color:var(--txt3);">${f.airline||''}</span>`;
     return `<tr>
-      <td class="lb-muted" style="font-size:10px;padding:4px 6px;">${i+1}</td>
-      <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.dep || ''}</td>
-      <td class="lb-mono" style="padding:4px 5px;">${f.dep_icao || ''}</td>
-      <td class="lb-mono lb-muted" style="padding:4px 5px;">${f.dep_iata || ''}</td>
-      <td style="width:8px;background:rgba(255,255,255,.03);"></td>
-      <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.arr || ''}</td>
-      <td class="lb-mono" style="padding:4px 5px;">${f.arr_icao || ''}</td>
-      <td class="lb-mono lb-muted" style="padding:4px 5px;">${f.arr_iata || ''}</td>
-      <td style="width:8px;background:rgba(255,255,255,.03);"></td>
-      <td class="lb-muted" style="font-size:11px;">${f.airline || ''}</td>
-      <td class="lb-muted" style="font-size:11px;">${f.aircraft || ''}</td>
-      <td style="padding:2px 4px;">${logoHtml}</td>
-      <td style="padding:2px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
+      <td style="padding:3px 6px;font-size:10px;color:var(--txt3);text-align:right;">${i+1}</td>
+      ${apCell(f.dep_icao, f.dep_iata, f.dep)}
+      <td style="width:10px;background:rgba(255,255,255,.025);"></td>
+      ${apCell(f.arr_icao, f.arr_iata, f.arr)}
+      <td style="width:10px;background:rgba(255,255,255,.025);"></td>
+      <td style="padding:3px 6px;">
+        <input value="${f.airline||''}" maxlength="5"
+          style="width:54px;font-size:11px;padding:2px 5px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].airline=this.value;saveLogbook();">
+      </td>
+      <td style="padding:3px 6px;">
+        <input value="${f.aircraft||''}" maxlength="8"
+          style="width:64px;font-size:11px;padding:2px 5px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
+          oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].aircraft=this.value;saveLogbook();">
+      </td>
+      <td style="padding:3px 6px;text-align:center;min-width:50px;">${f.airline ? logoHtml : ''}</td>
+      <td style="padding:3px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
     </tr>`;
   }).join('');
+
   const cnt = document.getElementById('lb-count');
   if (cnt) cnt.textContent = logbookFilterText
     ? `${flights.length} of ${logbookFlights.length} flights`
