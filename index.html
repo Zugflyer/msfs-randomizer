@@ -2766,10 +2766,10 @@ function renderCalc() {
     return;
   }
 
-  const inStyle = 'font-size:12px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr2);background:transparent;color:#e6edf3;font-family:\'SF Mono\',\'Courier New\',monospace;width:60px;text-align:center;';
-  const outStyle = 'font-size:12px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:rgba(255,255,255,.04);color:#e6edf3;font-family:\'SF Mono\',\'Courier New\',monospace;width:60px;text-align:center;';
-  const dayStyle = inStyle.replace('width:60px','width:36px');
-  const dayOutStyle = outStyle.replace('width:60px','width:36px');
+  const inStyle = 'font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr2);background:transparent;color:#e6edf3;font-family:monospace;width:60px;text-align:center;';
+  const outStyle = 'font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr);background:rgba(255,255,255,.04);color:#e6edf3;font-family:monospace;width:60px;text-align:center;';
+  const dayStyle = 'font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr2);background:transparent;color:#e6edf3;font-family:monospace;width:36px;text-align:center;';
+  const dayOutStyle = 'font-size:12px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr);background:rgba(255,255,255,.04);color:#e6edf3;font-family:monospace;width:36px;text-align:center;';
 
   tbody.innerHTML = calcRows.map((row, i) => {
     const logoUrl = row.airline ? AIRLINE_LOGOS[row.airline.toUpperCase()] : null;
@@ -2777,7 +2777,12 @@ function renderCalc() {
       ? `<img src="${logoUrl}" style="max-width:48px;max-height:28px;object-fit:contain;background:#fff;border-radius:3px;padding:2px;" alt="${row.airline}" onerror="this.style.display='none'">`
       : (row.airline ? `<span style="font-size:10px;color:var(--txt2);">${row.airline}</span>` : '');
 
-    const apDisp = ap => ap ? `<div style="font-family:\'SF Mono\',\'Courier New\',monospace;font-size:11px;font-weight:700;color:var(--acc2);">${ap[0]}${ap[1]?`<span style=\'color:var(--blue);font-weight:400;\'>/${ap[1]}</span>`:\'\'}</div><div style="font-size:10px;color:var(--txt2);">${ap[7]||ap[2]}</div>` : '–';
+    const apDisp = ap => {
+      if (!ap) return '–';
+      const iata = ap[1] ? '<span style="color:var(--blue);font-size:10px;font-weight:400;"> / ' + ap[1] + '</span>' : '';
+      return '<div style="font-family:'SF Mono',monospace;font-size:11px;font-weight:700;color:var(--acc2);">' + ap[0] + iata + '</div>'
+           + '<div style="font-size:10px;color:var(--txt2);">' + (ap[7]||ap[2]) + '</div>';
+    };
     const blockStyle = row.blockTimeReal ? '' : 'font-style:italic;';
     const depUtc = getUtcOffset(row.dep);
     const arrUtc = getUtcOffset(row.arr);
