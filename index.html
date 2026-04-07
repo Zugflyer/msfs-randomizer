@@ -58,7 +58,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .nf-controls{display:flex;align-items:flex-start;gap:10px;flex:1;}
 .depart-wrap{display:flex;flex-direction:column;gap:3px;flex:0 0 220px;position:relative;}
 .depart-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;}
-.depart-input{font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:100%;}
+.depart-input{font-size:13px;padding:6px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:100%;min-height:62px;}
 .depart-input:focus{outline:none;border-color:var(--acc);}
 .depart-resolved{font-size:11px;color:var(--blue);margin-top:2px;min-height:14px;}
 .suggest-item{padding:6px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid var(--bdr);}
@@ -367,7 +367,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <input class="depart-input" id="depart-input" placeholder="ICAO / IATA / city"
                 oninput="departInput(this.value)" onkeydown="departKeydown(event)"
                 autocomplete="off" spellcheck="false">
-              <div id="depart-box" onclick="dashClearField('depart')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);padding:5px 10px;"></div>
+              <div id="depart-box" onclick="dashClearField('depart')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);padding:5px 10px;min-height:62px;"></div>
               <div id="depart-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
             </div>
           </div>
@@ -378,7 +378,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <input class="depart-input" id="dest-input" placeholder="ICAO / IATA / city"
                 oninput="destInput(this.value)" onkeydown="destKeydown(event)"
                 autocomplete="off" spellcheck="false">
-              <div id="dest-box" onclick="dashClearField('dest')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc2);background:var(--bg);padding:5px 10px;"></div>
+              <div id="dest-box" onclick="dashClearField('dest')" style="display:none;cursor:pointer;position:absolute;inset:0;border-radius:var(--r);border:1px solid var(--acc2);background:var(--bg);padding:5px 10px;min-height:62px;"></div>
               <div id="dest-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
             </div>
           </div>
@@ -432,6 +432,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
     <!-- CATEGORIES -->
     <div id="view-categories" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
+      <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <button onclick="openApEditor()" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+          Airport Base Data
+        </button>
+      </div>
       <div class="cat-tabs-row" id="cat-tabs"></div>
       <div class="filter-bar" id="cat-filter-bar" style="display:none;">
         <span class="filter-label">Filter:</span>
@@ -604,6 +610,44 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 </div><!-- main -->
 <!-- BOTTOM NAV -->
 
+
+<!-- ═══ AIRPORT BASE DATA EDITOR ═══ -->
+<div id="ap-editor-modal" style="display:none;position:fixed;inset:0;z-index:3000;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
+  <div style="background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;width:780px;max-width:95vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
+      <div style="font-size:14px;font-weight:700;color:var(--txt);">✈ Airport Base Data Editor</div>
+      <button onclick="closeApEditor()" style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:18px;padding:2px 8px;">✕</button>
+    </div>
+    <!-- Search bar -->
+    <div style="padding:12px 20px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:flex;gap:8px;align-items:center;">
+      <input id="ap-ed-search" placeholder="Enter ICAO, IATA or city name…" 
+        style="flex:1;font-size:13px;padding:7px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);"
+        oninput="apEdSearchInput(this.value)" onkeydown="if(event.key==='Enter')apEdDoSearch()">
+      <button onclick="apEdDoSearch()" style="font-size:13px;padding:7px 18px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Search</button>
+    </div>
+    <!-- Search suggestions -->
+    <div id="ap-ed-suggestions" style="display:none;padding:0 20px 8px;flex-shrink:0;max-height:140px;overflow-y:auto;border-bottom:1px solid var(--bdr);"></div>
+    <!-- Two-column editor -->
+    <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+      <!-- LEFT: current data -->
+      <div style="flex:1;padding:16px 20px;overflow-y:auto;border-right:1px solid var(--bdr);">
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Current Data</div>
+        <div id="ap-ed-left"></div>
+      </div>
+      <!-- RIGHT: edit fields -->
+      <div style="flex:1;padding:16px 20px;overflow-y:auto;">
+        <div style="font-size:11px;font-weight:700;color:var(--acc2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">New Values <span style="font-weight:400;color:var(--txt3);font-size:10px;">(leave blank to keep current)</span></div>
+        <div id="ap-ed-right"></div>
+        <button onclick="apEdSave()" id="ap-ed-save-btn" style="display:none;margin-top:16px;width:100%;font-size:13px;padding:9px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">💾 Save Edits to Airport Base Data</button>
+      </div>
+    </div>
+    <!-- Result confirmation -->
+    <div id="ap-ed-result" style="display:none;padding:12px 20px;border-top:1px solid var(--bdr);background:rgba(63,185,80,.08);flex-shrink:0;">
+      <div style="font-size:12px;color:#3fb950;font-weight:600;" id="ap-ed-result-msg"></div>
+    </div>
+  </div>
+</div>
 </div><!-- app -->
 
 <script src="airports.js" onload="airportsLoaded=true;initAfterAirports()"></script>
@@ -1439,9 +1483,10 @@ function renderCatTable() {
         <td><button class="btn-del" onclick="deleteCatItemByIdx('${cat.id}',${cat.items.indexOf(item)})">✕</button></td></tr>`).join('')}
     </tbody></table>`;
     addRow.style.display = 'flex';
-    ['in-icao','in-iata','in-airport','in-diff','in-region2'].forEach(id => document.getElementById(id).style.display='none');
-    document.getElementById('in-city').placeholder = 'Entry text';
-    document.getElementById('in-city').style.width = '300px';
+    ['in-icao','in-iata','in-airport','in-diff','in-region2'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
+    const inSearch = document.getElementById('in-search-wrap'); if(inSearch) inSearch.style.display='none';
+    document.getElementById('in-city').placeholder = 'New routing entry (free text)';
+    document.getElementById('in-city').style.width = '340px';
   }
   else if (cat.type === 'list-simple') {
     area.innerHTML = `<table class="data-tbl"><thead><tr>
@@ -2640,6 +2685,7 @@ window.addEventListener('load', async () => {
   legs = [{ dep: null, arr: null, airline: '', aircraft: '' }];
   renderLegs();
   initDashFCLogo();
+  await loadApOverrides();
 });
 
 window.addEventListener('resize', () => {
@@ -2648,6 +2694,178 @@ window.addEventListener('resize', () => {
   if (calcMap) calcMap.invalidateSize();
 });
 
+// ═══════════════════════════════════════════════════════════
+// AIRPORT BASE DATA EDITOR  (Supabase-backed, permanent + cross-device)
+// ═══════════════════════════════════════════════════════════
+let apEdCurrentAp = null;
+let apOverrides = {};   // icao → patched array (loaded from Supabase on startup)
+
+const AP_ED_FIELDS = [
+  { key:'icao',    label:'ICAO Code',     idx:0 },
+  { key:'iata',    label:'IATA Code',     idx:1 },
+  { key:'name',    label:'Airport Name',  idx:2 },
+  { key:'city',    label:'City',          idx:7 },
+  { key:'country', label:'Country',       idx:6 },
+  { key:'lat',     label:'Latitude',      idx:3 },
+  { key:'lon',     label:'Longitude',     idx:4 },
+  { key:'utc',     label:'UTC Offset',    idx:8 },
+];
+
+// Apply a single override record onto the live DB array
+function applyOneOverride(rec) {
+  var existing = schedByCode[rec.icao];
+  if (!existing) return;
+  AP_ED_FIELDS.forEach(function(f) {
+    if (rec[f.key] !== undefined && rec[f.key] !== null && rec[f.key] !== '') {
+      existing[f.idx] = (f.idx===3||f.idx===4||f.idx===8) ? parseFloat(rec[f.key]) : rec[f.key];
+    }
+  });
+  // Re-index in case IATA changed
+  if (existing[1]) schedByIata[existing[1]] = existing;
+}
+
+// Load all overrides from Supabase and apply to live DB
+async function loadApOverrides() {
+  try {
+    var res = await sb.from('categories').select('items').eq('name','__ap_overrides__').single();
+    if (res.data && Array.isArray(res.data.items)) {
+      res.data.items.forEach(function(rec) {
+        apOverrides[rec.icao] = rec;
+        applyOneOverride(rec);
+      });
+      if (res.data.items.length > 0)
+        console.log('Loaded ' + res.data.items.length + ' airport override(s) from Supabase');
+    }
+  } catch(e) { console.warn('apOverrides load:', e); }
+}
+
+// Save all overrides back to Supabase
+async function saveApOverrides() {
+  var items = Object.values(apOverrides);
+  await sb.from('categories').upsert({ name:'__ap_overrides__', items:items }, { onConflict:'name' });
+}
+
+function openApEditor() {
+  var modal = document.getElementById('ap-editor-modal');
+  if (modal) modal.style.display = 'flex';
+  document.getElementById('ap-ed-search').value = '';
+  document.getElementById('ap-ed-suggestions').style.display = 'none';
+  document.getElementById('ap-ed-left').innerHTML  = '<div style="color:var(--txt3);font-size:12px;padding:8px 0;">Search for an airport above to load its current data.</div>';
+  document.getElementById('ap-ed-right').innerHTML = '';
+  document.getElementById('ap-ed-save-btn').style.display = 'none';
+  document.getElementById('ap-ed-result').style.display = 'none';
+  apEdCurrentAp = null;
+  setTimeout(function() { document.getElementById('ap-ed-search').focus(); }, 100);
+}
+
+function closeApEditor() {
+  var modal = document.getElementById('ap-editor-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function apEdSearchInput(val) {
+  var q = val.trim().toUpperCase();
+  var sug = document.getElementById('ap-ed-suggestions');
+  if (q.length < 2) { sug.style.display = 'none'; return; }
+  var matches = DB_SCHED.filter(function(r) {
+    return r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+           (r[7]||r[2]).toUpperCase().startsWith(q) || (r[7]||r[2]).toUpperCase().includes(q);
+  }).slice(0,8);
+  if (!matches.length) { sug.style.display = 'none'; return; }
+  sug.innerHTML = matches.map(function(ap) {
+    return '<div onmousedown="apEdSelectAp(' + JSON.stringify(ap[0]) + ')" style="padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:10px;align-items:center;">'
+      + '<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--acc2);min-width:52px;">' + ap[0] + '</span>'
+      + '<span style="font-size:11px;color:var(--blue);min-width:36px;">' + (ap[1]||'') + '</span>'
+      + '<span style="font-size:12px;color:var(--txt);">' + (ap[7]||ap[2]) + '</span>'
+      + '<span style="font-size:11px;color:var(--txt3);margin-left:8px;">' + (ap[6]||'') + '</span>'
+      + '</div>';
+  }).join('');
+  sug.style.display = 'block';
+}
+
+function apEdDoSearch() {
+  var val = document.getElementById('ap-ed-search').value.trim().toUpperCase();
+  var ap = schedByCode[val] || schedByIata[val];
+  if (ap) { apEdSelectAp(ap[0]); return; }
+  apEdSearchInput(val);
+}
+
+function apEdSelectAp(icao) {
+  var ap = schedByCode[icao]; if (!ap) return;
+  apEdCurrentAp = ap;
+  document.getElementById('ap-ed-search').value = ap[0] + (ap[1] ? ' / '+ap[1] : '') + '  —  ' + (ap[7]||ap[2]);
+  document.getElementById('ap-ed-suggestions').style.display = 'none';
+  document.getElementById('ap-ed-result').style.display = 'none';
+
+  var rO = 'width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--bdr);background:var(--surf);color:var(--txt2);font-family:monospace;margin-bottom:10px;box-sizing:border-box;';
+  var rE = 'width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;margin-bottom:10px;box-sizing:border-box;';
+  var lS = 'font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;font-weight:600;';
+
+  var leftHtml = '', rightHtml = '';
+  AP_ED_FIELDS.forEach(function(f) {
+    var v = (ap[f.idx] !== null && ap[f.idx] !== undefined) ? String(ap[f.idx]) : '';
+    var overridden = apOverrides[ap[0]] && apOverrides[ap[0]][f.key] !== undefined;
+    var badge = overridden ? ' <span style="font-size:9px;color:var(--acc);background:rgba(139,92,246,.15);padding:1px 5px;border-radius:3px;">edited</span>' : '';
+    leftHtml  += '<div style="' + lS + '">' + f.label + badge + '</div>'
+              + '<input readonly value="' + v.replace(/"/g,'&quot;') + '" style="' + rO + '">';
+    rightHtml += '<div style="' + lS + '">' + f.label + '</div>'
+              + '<input id="ap-ed-new-' + f.key + '" placeholder="' + v.replace(/"/g,'&quot;') + '" style="' + rE + '">';
+  });
+
+  document.getElementById('ap-ed-left').innerHTML  = leftHtml;
+  document.getElementById('ap-ed-right').innerHTML = rightHtml;
+  document.getElementById('ap-ed-save-btn').style.display = 'block';
+}
+
+async function apEdSave() {
+  if (!apEdCurrentAp) return;
+  var ap = apEdCurrentAp;
+  var btn = document.getElementById('ap-ed-save-btn');
+  btn.textContent = 'Saving…'; btn.disabled = true;
+
+  // Build override record: start from existing override or empty
+  var rec = apOverrides[ap[0]] || { icao: ap[0] };
+
+  // Apply each edited field
+  var changed = 0;
+  AP_ED_FIELDS.forEach(function(f) {
+    var inp = document.getElementById('ap-ed-new-' + f.key);
+    if (!inp) return;
+    var newVal = inp.value.trim();
+    if (newVal === '') return;
+    rec[f.key] = newVal;
+    changed++;
+  });
+
+  if (!changed) {
+    btn.textContent = '💾 Save Edits to Airport Base Data'; btn.disabled = false;
+    return;
+  }
+
+  // Apply to live DB immediately
+  apOverrides[ap[0]] = rec;
+  applyOneOverride(rec);
+
+  // Persist to Supabase
+  try {
+    await saveApOverrides();
+    var msg = '✓ Saved ' + changed + ' change(s) for ' + ap[0] + ' — active on all devices immediately.';
+    document.getElementById('ap-ed-result-msg').textContent = msg;
+    document.getElementById('ap-ed-result').style.display = 'block';
+  } catch(e) {
+    document.getElementById('ap-ed-result-msg').textContent = '⚠ Save failed: ' + e.message;
+    document.getElementById('ap-ed-result').style.display = 'block';
+  }
+
+  btn.textContent = '💾 Save Edits to Airport Base Data'; btn.disabled = false;
+  // Reload left column to show new current values
+  apEdSelectAp(ap[0]);
+}
+
+// Close on backdrop click
+document.getElementById('ap-editor-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeApEditor();
+});
 
 // ═══════════════════════════════════════════════════════════
 // DEP / ARR TIME CALCULATOR
