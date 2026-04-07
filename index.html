@@ -343,9 +343,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div class="nf-controls">
           <div class="depart-wrap">
             <div class="depart-label">Depart from</div>
-            <input class="depart-input" id="depart-input" placeholder="ICAO / IATA code" oninput="departInput(this.value)" onkeydown="if(event.key==='Escape')hideSuggestions()">
+            <input class="depart-input" id="depart-input" placeholder="ICAO / IATA code"
+              oninput="departInput(this.value)"
+              onkeydown="departKeydown(event)">
             <div class="depart-resolved" id="depart-resolved"></div>
             <div id="depart-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
+          </div>
+          <div class="depart-wrap" style="margin-left:8px;">
+            <div class="depart-label">Destination</div>
+            <input class="depart-input" id="dest-input" placeholder="ICAO / IATA code"
+              oninput="destInput(this.value)"
+              onkeydown="destKeydown(event)">
+            <div id="dest-suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:200;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;"></div>
           </div>
           <div class="region-wrap">
             <div class="region-label">Region filter</div>
@@ -362,6 +371,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <label class="region-item"><input type="checkbox" value="OC" onchange="updateRegionFilter()"> Oceania</label>
               <label class="region-item"><input type="checkbox" value="AN" onchange="updateRegionFilter()"> Antarctica</label>
             </div>
+          </div>
+          <!-- FlightConnections quick link -->
+          <div style="display:flex;flex-direction:column;justify-content:flex-end;padding-bottom:2px;">
+            <a id="dash-fc-btn" href="https://www.flightconnections.com/" target="_blank"
+              onclick="dashOpenFC(event)" title="Open in FlightConnections"
+              style="display:flex;align-items:center;justify-content:center;padding:5px 8px;background:var(--surf2);border:1px solid var(--bdr);border-radius:var(--r);cursor:pointer;text-decoration:none;min-height:32px;min-width:44px;">
+              <img src="" id="dash-fc-logo" style="max-height:22px;max-width:100px;object-fit:contain;" alt="FlightConnections">
+            </a>
           </div>
         </div>
       </div>
@@ -842,53 +859,53 @@ function updateRegionFilter() {
 // FIX 1: DEPART FIELD — full autocomplete with click-to-select
 // ═══════════════════════════════════════════════════════════
 let departAirport = null;
+let destAirport = null;   // new: manual destination from dashboard
+
+// ── shared search helper ──
+function apSearchSorted(q) {
+  if (q.length < 2) return [];
+  const matches = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
+    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
+  );
+  matches.sort((a,b) => {
+    const s = r => r[0]===q?0:r[0].startsWith(q)?1:(r[1]===q?0:r[1]&&r[1].startsWith(q)?2:3);
+    return s(a)-s(b);
+  });
+  return matches.slice(0,10);
+}
+
+function suggestHtml(ap) {
+  return `<div class="suggest-item" onmousedown="event.preventDefault()">
+    <span class="suggest-icao">${ap[0]}</span>
+    ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+    ${ap[7]||ap[2]}
+    <span style="color:var(--txt3);font-size:11px;margin-left:4px;">${countryName(ap[6])}</span>
+  </div>`;
+}
 
 function departInput(val) {
   const q = val.trim().toUpperCase();
   const suggestEl = document.getElementById('depart-suggestions');
-  const resolvedEl = document.getElementById('depart-resolved');
-
-  if (q.length < 2) {
-    suggestEl.style.display = 'none';
-    resolvedEl.textContent = '';
-    departAirport = null;
-    return;
-  }
-
-  // Search: ICAO starts-with, IATA starts-with, or name/city contains
-  const matches = DB_SCHED.filter(r =>
-    r[0].startsWith(q) ||
-    (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) ||
-    r[7].toUpperCase().startsWith(q) ||
-    r[2].toUpperCase().includes(q) ||
-    r[7].toUpperCase().includes(q)
-  );
-
-  // Sort: exact ICAO match first, then starts-with, then contains
-  matches.sort((a, b) => {
-    const aScore = (a[0] === q ? 0 : a[0].startsWith(q) ? 1 : (a[1]===q?0:a[1]&&a[1].startsWith(q)?2:3));
-    const bScore = (b[0] === q ? 0 : b[0].startsWith(q) ? 1 : (b[1]===q?0:b[1]&&b[1].startsWith(q)?2:3));
-    return aScore - bScore;
-  });
-
-  const top = matches.slice(0, 10);
-
-  if (!top.length) {
-    suggestEl.style.display = 'none';
-    resolvedEl.textContent = q.length >= 3 ? 'Not found' : '';
-    departAirport = null;
-    return;
-  }
-
-  suggestEl.innerHTML = top.map(ap => `
-    <div class="suggest-item" onmousedown="selectDepart('${ap[0]}')" style="cursor:pointer;">
-      <span class="suggest-icao">${ap[0]}</span>
-      ${ap[7] || ap[2]}
-      <span style="color:var(--txt3);font-size:11px;margin-left:4px;">${countryName(ap[6])}</span>
-    </div>`).join('');
+  if (q.length < 2) { suggestEl.style.display='none'; departAirport=null; return; }
+  const top = apSearchSorted(q);
+  if (!top.length) { suggestEl.style.display='none'; departAirport=null; return; }
+  suggestEl.innerHTML = top.map(ap => `<div class="suggest-item" onmousedown="selectDepart('${ap[0]}')" style="cursor:pointer;">
+    <span class="suggest-icao">${ap[0]}</span>
+    ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+    ${ap[7]||ap[2]}<span style="color:var(--txt3);font-size:11px;margin-left:4px;">${countryName(ap[6])}</span>
+  </div>`).join('');
   suggestEl.style.display = 'block';
-  resolvedEl.textContent = '';
+}
+
+function departKeydown(e) {
+  const suggestEl = document.getElementById('depart-suggestions');
+  if (e.key === 'Escape') { suggestEl.style.display='none'; return; }
+  if (e.key === 'Tab' && suggestEl.style.display !== 'none') {
+    const first = suggestEl.querySelector('.suggest-item');
+    if (first) { e.preventDefault(); first.click(); }
+  }
 }
 
 function selectDepart(code) {
@@ -897,21 +914,80 @@ function selectDepart(code) {
   const iata = ap[1] ? ` / ${ap[1]}` : '';
   const city = ap[7] || ap[2];
   document.getElementById('depart-input').value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
-  document.getElementById('depart-resolved').textContent = ''; // hide after selection
+  document.getElementById('depart-resolved').textContent = '';
   document.getElementById('depart-suggestions').style.display = 'none';
-  // Also update first leg dep if roster exists
-  if (legs.length > 0 && !legs[0].dep) {
-    legs[0].dep = ap;
-    renderLegs();
+  updateDashFC();
+  if (legs.length > 0 && !legs[0].dep) { legs[0].dep = ap; renderLegs(); }
+}
+
+function destInput(val) {
+  const q = val.trim().toUpperCase();
+  const suggestEl = document.getElementById('dest-suggestions');
+  if (q.length < 2) { suggestEl.style.display='none'; destAirport=null; return; }
+  const top = apSearchSorted(q);
+  if (!top.length) { suggestEl.style.display='none'; destAirport=null; return; }
+  suggestEl.innerHTML = top.map(ap => `<div class="suggest-item" onmousedown="selectDest('${ap[0]}')" style="cursor:pointer;">
+    <span class="suggest-icao">${ap[0]}</span>
+    ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+    ${ap[7]||ap[2]}<span style="color:var(--txt3);font-size:11px;margin-left:4px;">${countryName(ap[6])}</span>
+  </div>`).join('');
+  suggestEl.style.display = 'block';
+}
+
+function destKeydown(e) {
+  const suggestEl = document.getElementById('dest-suggestions');
+  if (e.key === 'Escape') { suggestEl.style.display='none'; return; }
+  if (e.key === 'Tab' && suggestEl.style.display !== 'none') {
+    const first = suggestEl.querySelector('.suggest-item');
+    if (first) { e.preventDefault(); first.click(); }
   }
+}
+
+function selectDest(code) {
+  const ap = schedByCode[code]; if (!ap) return;
+  destAirport = ap;
+  const iata = ap[1] ? ` / ${ap[1]}` : '';
+  const city = ap[7] || ap[2];
+  document.getElementById('dest-input').value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
+  document.getElementById('dest-suggestions').style.display = 'none';
+  updateDashFC();
+  // Immediately open Roster with dep + dest pre-filled
+  legs = [{ dep: departAirport || null, arr: ap, airline: '', aircraft: '' }];
+  renderLegs();
+  updateFlightConnectionsBtn();
+  switchToMain('roster');
+}
+
+function updateDashFC() {
+  const btn = document.getElementById('dash-fc-btn');
+  if (!btn) return;
+  const dep = departAirport ? (departAirport[1]||departAirport[0]) : '';
+  const arr = destAirport ? (destAirport[1]||destAirport[0]) : '';
+  btn.href = dep ? `https://www.flightconnections.com/#${dep}${arr?'/'+arr:''}` : 'https://www.flightconnections.com/';
+}
+
+function dashOpenFC(e) {
+  e.preventDefault();
+  const btn = document.getElementById('dash-fc-btn');
+  window.open(btn.href || 'https://www.flightconnections.com/', '_blank');
 }
 
 function hideSuggestions() {
   document.getElementById('depart-suggestions').style.display = 'none';
+  const d = document.getElementById('dest-suggestions');
+  if (d) d.style.display = 'none';
 }
 document.addEventListener('click', e => {
-  if (!e.target.closest('.depart-wrap')) hideSuggestions();
+  if (!e.target.closest('.depart-wrap') && !e.target.closest('#dest-input')) hideSuggestions();
 });
+
+// Copy FC logo from roster to dashboard FC button on init
+function initDashFCLogo() {
+  const rosterLogo = document.querySelector('#fc-btn img');
+  const dashLogo = document.getElementById('dash-fc-logo');
+  if (rosterLogo && dashLogo) dashLogo.src = rosterLogo.src;
+}
+
 
 // ═══════════════════════════════════════════════════════════
 // FIX 2+3+4: ROLL — region filter, city names from user data
@@ -2141,6 +2217,7 @@ function initRosterFromDashboard(depAp, arrAp) {
 }
 
 async function saveRoster() {
+  // 1. Save to Supabase __roster__
   const data = legs.map(l => ({
     dep_icao: l.dep?.[0] || '', dep_city: l.dep?.[7] || l.dep?.[2] || '',
     arr_icao: l.arr?.[0] || '', arr_city: l.arr?.[7] || l.arr?.[2] || '',
@@ -2150,8 +2227,38 @@ async function saveRoster() {
   }));
   try {
     await sb.from('categories').upsert({ name: '__roster__', items: data }, { onConflict: 'name' });
-    setCloudStatus('✓ Roster saved', 'ok');
-  } catch(e) { setCloudStatus('⚠ Save failed', 'err'); }
+  } catch(e) {}
+
+  // 2. Add each complete leg to logbook as "planned" (blue) if not already there
+  let added = 0;
+  legs.forEach(leg => {
+    if (!leg.dep || !leg.arr) return;
+    // Check not already in logbook
+    const already = logbookFlights.some(f =>
+      f.dep_icao === leg.dep[0] && f.arr_icao === leg.arr[0] && f.planned
+    );
+    if (already) return;
+    logbookFlights.push({
+      dep: leg.dep[7] || leg.dep[2],
+      dep_icao: leg.dep[0], dep_iata: leg.dep[1]||'',
+      dep_lat: leg.dep[3], dep_lon: leg.dep[4],
+      arr: leg.arr[7] || leg.arr[2],
+      arr_icao: leg.arr[0], arr_iata: leg.arr[1]||'',
+      arr_lat: leg.arr[3], arr_lon: leg.arr[4],
+      airline: leg.airline||'', aircraft: leg.aircraft||'',
+      planned: true,  // ← key flag: planned = blue line, not yet flown
+    });
+    added++;
+  });
+
+  if (added > 0) {
+    await saveLogbook();
+    renderLogbook();
+    // Redraw map lines to include new planned routes
+    if (rosterMap) { drawLogbookLines(); updateRosterLines(); }
+  }
+  setCloudStatus(`✓ Saved${added>0?' +'+added+' to logbook':''}`, 'ok');
+  setTimeout(() => setCloudStatus('✓ Synced','ok'), 2500);
 }
 
 // ── Click dashboard card → transfer to Roster ──
@@ -2159,14 +2266,15 @@ function openInRoster(catId) {
   const res = lastResults.find(r => r.cat.id === catId);
   if (!res) return;
   const r = res.result;
-  if (r.text) return; // text-only, not plannable
+  if (r.text) return;
 
   let arrAp = null;
   if (r.icao) arrAp = schedByCode[r.icao] || DB_SCHED.find(ap => ap[0] === r.icao) || null;
   if (!arrAp && r.lat !== null && r.lon !== null) arrAp = nearestScheduled(r.lat, r.lon, null);
 
-  // Always reset legs completely when selecting a new destination
-  legs = [{ dep: departAirport || null, arr: arrAp || null, airline: '', aircraft: '' }];
+  // Use manually set destination if available, else use card result
+  const finalArr = destAirport || arrAp || null;
+  legs = [{ dep: departAirport || null, arr: finalArr, airline: '', aircraft: '' }];
   renderLegs();
   updateFlightConnectionsBtn();
   switchToMain('roster');
@@ -2196,13 +2304,17 @@ function drawLogbookLines() {
     const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : null;
     const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : null;
     if (!depCoords || !arrCoords) return;
+    // Planned = blue dashed line; flown = grey solid line
+    const color = f.planned ? '#58a6ff' : '#5a6270';
+    const dash = f.planned ? '8,5' : null;
+    const weight = f.planned ? 1.8 : 1.2;
     try {
-      const line = new L.Geodesic([[depCoords, arrCoords]], {
-        color: '#5a6270', weight: 1.2, opacity: 0.5, steps: 8
-      }).addTo(rosterMap);
-      // Dot markers
-      const dm = L.circleMarker(depCoords, { radius: 3, color: '#5a6270', fillColor: '#5a6270', fillOpacity: 0.7, weight: 0 }).addTo(rosterMap);
-      const am = L.circleMarker(arrCoords, { radius: 3, color: '#5a6270', fillColor: '#5a6270', fillOpacity: 0.7, weight: 0 }).addTo(rosterMap);
+      const lineOpts = { color, weight, opacity: f.planned ? 0.75 : 0.5, steps: 8 };
+      if (dash) lineOpts.dashArray = dash;
+      new L.Geodesic([[depCoords, arrCoords]], lineOpts).addTo(rosterMap);
+      const r = f.planned ? 3.5 : 3;
+      L.circleMarker(depCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
+      L.circleMarker(arrCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
     } catch(e) {}
   });
 }
@@ -2255,8 +2367,25 @@ function renderLogbook() {
     const logoHtml = logoUrl
       ? `<img src="${logoUrl}" style="max-width:60px;max-height:34px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;border:1px solid var(--bdr);" alt="${f.airline}" onerror="this.style.display='none'">`
       : `<span style="font-size:10px;color:var(--txt3);">${f.airline||''}</span>`;
-    return `<tr style="border-bottom:1px solid var(--bdr);">
-      <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;">${i+1}</td>
+
+    // Planned flights: blue tinted row
+    const rowStyle = f.planned
+      ? 'border-bottom:1px solid rgba(88,166,255,.3);background:rgba(88,166,255,.06);'
+      : 'border-bottom:1px solid var(--bdr);';
+
+    const actionBtn = f.planned
+      ? `<td style="padding:2px 4px;white-space:nowrap;">
+          <button onclick="markFlightLanded(${realIdx})" title="Mark as flown"
+            style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid #58a6ff;background:rgba(88,166,255,.15);color:#58a6ff;cursor:pointer;white-space:nowrap;">
+            ✈ Landed
+          </button>
+        </td>`
+      : `<td style="padding:2px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>`;
+
+    return `<tr style="${rowStyle}">
+      <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;">
+        ${f.planned ? '<span style="color:#58a6ff;font-size:9px;">✈</span>' : i+1}
+      </td>
       ${apCell(f.dep_icao, f.dep_iata, f.dep)}
       <td style="width:12px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
       ${apCell(f.arr_icao, f.arr_iata, f.arr)}
@@ -2272,20 +2401,32 @@ function renderLogbook() {
           oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].aircraft=this.value;saveLogbook();">
       </td>
       <td style="padding:2px 6px;text-align:left;white-space:nowrap;">${f.airline ? logoHtml : ''}</td>
-      <td style="padding:2px 3px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
+      ${actionBtn}
     </tr>`;
   }).join('');
 
   const cnt = document.getElementById('lb-count');
+  const planned = logbookFlights.filter(f => f.planned).length;
+  const flown = logbookFlights.length - planned;
   if (cnt) cnt.textContent = logbookFilterText
-    ? `${flights.length} of ${logbookFlights.length} flights`
-    : `${logbookFlights.length} flights`;
+    ? `${flights.length} of ${logbookFlights.length}`
+    : `${flown} flown${planned>0?' · '+planned+' planned':''}`;
 }
 
 function deleteLogbookFlight(i) {
   logbookFlights.splice(i, 1);
   saveLogbook();
   renderLogbook();
+  if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); }
+}
+
+function markFlightLanded(i) {
+  if (!logbookFlights[i]) return;
+  logbookFlights[i].planned = false;  // convert to flown
+  saveLogbook();
+  renderLogbook();
+  // Redraw map to move from blue to grey
+  if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); }
 }
 
 async function saveLogbook() {
@@ -2401,6 +2542,7 @@ window.addEventListener('load', async () => {
   renderResults();
   legs = [{ dep: null, arr: null, airline: '', aircraft: '' }];
   renderLegs();
+  initDashFCLogo();
 });
 
 window.addEventListener('resize', () => {
