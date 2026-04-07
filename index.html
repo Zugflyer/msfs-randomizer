@@ -1317,225 +1317,83 @@ function exportJSON() {
 // ═══════════════════════════════════════════════════════════
 // VIEW SWITCHING
 // ═══════════════════════════════════════════════════════════
-// Bottom nav: switch between main views (Next Flight = dashboard, or Roster)
-let lastMainView = 'dashboard'; // 'dashboard' or 'roster'
 
-function switchToMain(mainView) {
-  lastMainView = mainView;
-  // Update bottom nav active state
-  ['dashboard','roster','logbook','categories','data'].forEach(v => {
-    const btn = document.getElementById('bn-'+v);
-    if (btn) btn.className = 'bn-btn' + (v===mainView?' active':'');
+
+const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
+
+// ═══════════════════════════════════════════════════════════
+// BOTTOM NAV + VIEW SWITCHING (replaces old switchView)
+// ═══════════════════════════════════════════════════════════
+let lastMainView = 'dashboard';
+
+function switchToMain(target) {
+  lastMainView = target;
+  switchView(target);
+  // Update bottom nav buttons
+  document.querySelectorAll('.bn-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.view === target);
   });
-  
-  if (mainView === 'dashboard') {
-    switchView('dashboard');
-  } else if (mainView === 'roster') {
-    switchView('roster');
-  } else {
-    switchView(mainView);
-  }
 }
 
 function switchView(view) {
   currentView = view;
-  const allViews = ['dashboard','categories','roster','logbook','data'];
-  allViews.forEach(v => {
+  // Show/hide all views
+  ['dashboard','categories','roster','logbook','data'].forEach(v => {
     const el = document.getElementById('view-'+v);
-    if (el) el.style.display = v===view ? 'flex' : 'none';
+    if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
-    if (tab) tab.className = 'topnav-tab' + (v===view?' active':'');
+    if (tab) tab.className = 'topnav-tab' + (v === view ? ' active' : '');
+    const btn = document.getElementById('bn-'+v);
+    if (btn) btn.classList.toggle('active', v === view);
   });
-  if (view==='categories') renderCatView();
-  if (view==='dashboard' && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
-  // Toggle full-screen for roster
-  const mainEl = document.querySelector('.main');
-  if (mainEl) mainEl.classList.toggle('roster-active', view==='roster'||view==='logbook');
-  if (view==='roster') { setTimeout(() => { if(rosterMap) rosterMap.invalidateSize(); else initRosterMap(); }, 100); }
-  if (view==='logbook') renderLogbook();
-}
 
-// ═══════════════════════════════════════════════════════════
-// ROSTER & LEG PLANNER
-// ═══════════════════════════════════════════════════════════
-let legs = [];           // [{dep, arr, airline, aircraft}] — each is an airport object or null
-let rosterMap = null;
-let rosterFlightLines = [];
-let logbookFlights = []; // persisted Volanta flights
+  // Full-screen mode for roster/logbook: hide the map column entirely
+  const mapCol = document.querySelector('.map-col');
+  const isFullScreen = (view === 'roster' || view === 'logbook');
+  if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
-const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
-
-// ── Airport autocomplete for leg inputs ──
-function legAirportSearch(q) {
-  q = q.trim().toUpperCase();
-  if (q.length < 2) return [];
-  const matches = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
-    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
-  );
-  matches.sort((a,b) => {
-    const sa = a[0]===q?0:a[0].startsWith(q)?1:(a[1]===q?0:2);
-    const sb = b[0]===q?0:b[0].startsWith(q)?1:(b[1]===q?0:2);
-    return sa-sb;
-  });
-  return matches.slice(0, 10);
-}
-
-function showLegSuggest(inputEl, results, onSelect) {
-  let box = inputEl.nextElementSibling;
-  if (!box || !box.classList.contains('leg-suggest')) {
-    box = document.createElement('div');
-    box.className = 'leg-suggest';
-    inputEl.parentNode.appendChild(box);
+  // View-specific init
+  if (view === 'categories') renderCatView();
+  if (view === 'logbook') renderLogbook();
+  if (view === 'dashboard' && leafletMap) {
+    setTimeout(() => leafletMap.invalidateSize(), 100);
   }
-  if (!results.length) { box.classList.remove('open'); return; }
-  box.innerHTML = results.map(ap =>
-    `<div class="leg-sug-item" onmousedown="event.preventDefault()">
-      <span class="leg-sug-icao">${ap[0]}</span>${ap[7]||ap[2]}
-      <span style="color:var(--txt3);font-size:10px;margin-left:4px;">${countryName(ap[6])}</span>
-    </div>`
-  ).join('');
-  box.querySelectorAll('.leg-sug-item').forEach((el, i) => {
-    el.addEventListener('mousedown', () => { onSelect(results[i]); box.classList.remove('open'); });
-  });
-  box.classList.add('open');
-  // Close on outside click
-  setTimeout(() => {
-    const closer = () => { box.classList.remove('open'); document.removeEventListener('click', closer); };
-    document.addEventListener('click', closer);
-  }, 10);
+  if (view === 'roster') {
+    setTimeout(() => {
+      if (rosterMap) rosterMap.invalidateSize();
+      else initRosterMap();
+    }, 120);
+  }
 }
 
-// ── Leg row rendering ──
-function airportBox(ap, prefilled) {
-  if (!ap) return `<div class="leg-box"><div class="leg-code" style="color:var(--txt3);">–</div></div>`;
-  const iata = ap[1] ? ` <span style="color:var(--blue);font-size:12px;">/ ${ap[1]}</span>` : '';
-  return `<div class="leg-box${prefilled?' prefilled':''}">
-    <div class="leg-code">${ap[0]}${iata}</div>
-    <div class="leg-city">${ap[7]||ap[2]}, <span style="color:var(--txt3)">${countryName(ap[6])}</span></div>
-  </div>`;
-}
+// ═══════════════════════════════════════════════════════════
+// ROSTER STATE
+// ═══════════════════════════════════════════════════════════
+let legs = [];
+let rosterMap = null;
+let rosterLayers = []; // all dynamically added layers
+let logbookFlights = [];
 
-function renderLegs() {
-  const container = document.getElementById('legs-container');
-  if (!container) return;
-  container.innerHTML = '';
-
-  legs.forEach((leg, i) => {
-    const row = document.createElement('div');
-    row.className = 'leg-row';
-    row.dataset.idx = i;
-
-    const isFirst = i === 0;
-    const isLast = i === legs.length - 1;
-
-    // DEP column
-    const depHtml = isFirst && leg.dep
-      ? airportBox(leg.dep, true)
-      : `<div style="position:relative;">
-          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.dep ? formatAirportForInput(leg.dep) : ''}" 
-            data-leg="${i}" data-side="dep" oninput="onLegInput(this)" onfocus="onLegInput(this)">
-          <div class="leg-suggest"></div>
-        </div>`;
-
-    // ARR column — if last leg and has arr, show prefilled
-    const arrHtml = isLast && leg.arr
-      ? airportBox(leg.arr, true)
-      : `<div style="position:relative;">
-          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.arr ? formatAirportForInput(leg.arr) : ''}"
-            data-leg="${i}" data-side="arr" oninput="onLegInput(this)" onfocus="onLegInput(this)">
-          <div class="leg-suggest"></div>
-        </div>`;
-
-    row.innerHTML = `
-      <div class="leg-col">
-        <div class="leg-label">Departure</div>
-        ${depHtml}
-      </div>
-      <div class="leg-arrow">→</div>
-      <div class="leg-col">
-        <div class="leg-label">Destination</div>
-        ${arrHtml}
-      </div>
-      <div class="leg-col" style="gap:2px;">
-        <div class="leg-label">Airline ICAO</div>
-        <input class="leg-sm-input" placeholder="e.g. DLH" value="${leg.airline||''}" 
-          data-leg="${i}" data-field="airline" oninput="onLegFieldInput(this);updateAirlineLogo(this,${i})" style="width:78px;text-transform:uppercase;">
-        <div id="logo-${i}" class="airline-logo-wrap" style="margin-top:3px;">
-          ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
-        </div>
-      </div>
-      <div class="leg-col" style="gap:2px;">
-        <div class="leg-label">Aircraft</div>
-        <input class="leg-sm-input" placeholder="e.g. A388" value="${leg.aircraft||''}"
-          data-leg="${i}" data-field="aircraft" oninput="onLegFieldInput(this)" style="width:78px;text-transform:uppercase;">
-      </div>
-      ${legs.length > 1 ? `<button class="leg-del" onclick="deleteLeg(${i})">✕</button>` : ''}`;
-
-    container.appendChild(row);
-  });
-
-  updateRosterLines();
-}
-
-function formatAirportForInput(ap) {
-  if (!ap) return '';
-  const iata = ap[1] ? ` / ${ap[1]}` : '';
-  const city = ap[7] || ap[2];
-  return `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
-}
-
-function onLegInput(inputEl) {
-  const idx = parseInt(inputEl.dataset.leg);
-  const side = inputEl.dataset.side;
-  const q = inputEl.value;
-  const results = legAirportSearch(q);
-  showLegSuggest(inputEl, results, (ap) => {
-    legs[idx][side] = ap;
-    // Cascade: if setting arr of non-last leg → next dep gets same airport
-    if (side === 'arr' && idx < legs.length - 1) {
-      legs[idx+1].dep = ap;
-    }
-    // Cascade: if setting dep of non-first leg → prev arr gets same airport
-    if (side === 'dep' && idx > 0) {
-      legs[idx-1].arr = ap;
-    }
-    // Update the input field immediately with full format
-    inputEl.value = formatAirportForInput(ap);
-    // Re-render all legs to show cascaded updates
-    renderLegs();
-  });
-}
-
-function onLegFieldInput(inputEl) {
-  const idx = parseInt(inputEl.dataset.leg);
-  const field = inputEl.dataset.field;
-  legs[idx][field] = inputEl.value;
-}
-
-// ── Airline ICAO → Name and Logo ──
+// ── Airline data ──
 const AIRLINE_NAMES = {
-  'DLH':'Lufthansa','BAW':'British Airways','AFR':'Air France','KLM':'KLM',
+  'DLH':'Lufthansa','BAW':'British Airways','AFR':'Air France','KLM':'KLM Dutch Airlines',
   'UAL':'United Airlines','DAL':'Delta Air Lines','AAL':'American Airlines',
-  'SWR':'Swiss','AUA':'Austrian Airlines','TAP':'TAP Air Portugal',
+  'SWR':'Swiss International','AUA':'Austrian Airlines','TAP':'TAP Air Portugal',
   'IBE':'Iberia','VUE':'Vueling','EZY':'easyJet','RYR':'Ryanair',
   'SIA':'Singapore Airlines','CPA':'Cathay Pacific','ANA':'All Nippon Airways',
-  'JAL':'Japan Airlines','QFA':'Qantas','UAE':'Emirates','ETD':'Etihad',
+  'JAL':'Japan Airlines','QFA':'Qantas','UAE':'Emirates','ETD':'Etihad Airways',
   'QTR':'Qatar Airways','THY':'Turkish Airlines','IRA':'Iran Air',
-  'TAM':'LATAM Brasil','LAN':'LATAM Airlines','AVA':'Avianca',
-  'VIR':'Virgin Atlantic','BAW':'British Airways','EIN':'Aer Lingus',
-  'FIN':'Finnair','SAS':'SAS','NOR':'Norwegian','WZZ':'Wizz Air',
-  'VTA':'Air Tahiti','ANE':'Air Nostrum','MEA':'Middle East Airlines',
-  'ASA':'Alaska Airlines','LNE':'Linea Aerea','LPE':'LAN Peru',
-  'ITY':'ITA Airways','RRR':'Royal Air Force','THT':'Air Tahiti Nui',
-  'FDY':'FedEx','HVN':'Vietnam Airlines','CSN':'China Southern',
-  'CCA':'Air China','CHH':'Hainan Airlines','MAS':'Malaysia Airlines',
-  'THA':'Thai Airways','GIA':'Garuda Indonesia','PAL':'Philippine Airlines',
-  'AMX':'Aeromexico','GLO':'Gol','AZU':'Azul','ABC':'Air Bridge Cargo',
+  'TAM':'LATAM Brasil','AVA':'Avianca','VIR':'Virgin Atlantic',
+  'EIN':'Aer Lingus','FIN':'Finnair','SAS':'Scandinavian Airlines',
+  'NOR':'Norwegian','WZZ':'Wizz Air','VTA':'Air Tahiti Nui',
+  'ANE':'Air Nostrum','MEA':'Middle East Airlines','ASA':'Alaska Airlines',
+  'LNE':'Linea Aerea','LPE':'LAN Peru','ITY':'ITA Airways',
+  'THT':'Air Tahiti Nui','CSN':'China Southern','CCA':'Air China',
+  'MAS':'Malaysia Airlines','THA':'Thai Airways','GIA':'Garuda Indonesia',
+  'AMX':'Aeromexico','GLO':'Gol','AZU':'Azul Brazilian Airlines',
+  'HVN':'Vietnam Airlines','PAL':'Philippine Airlines',
 };
 
-// Wiki logos for common airlines (direct Wikipedia file URLs)
 const AIRLINE_LOGOS = {
   'DLH':'https://upload.wikimedia.org/wikipedia/commons/thumb/b/b8/Lufthansa_Logo_2018.svg/120px-Lufthansa_Logo_2018.svg.png',
   'BAW':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/42/British_Airways_Logo.svg/120px-British_Airways_Logo.svg.png',
@@ -1574,155 +1432,365 @@ const AIRLINE_LOGOS = {
   'EIN':'https://upload.wikimedia.org/wikipedia/commons/thumb/9/9b/Aer_Lingus_logo.svg/120px-Aer_Lingus_logo.svg.png',
   'CPA':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/15/Cathay_Pacific_Logo.svg/120px-Cathay_Pacific_Logo.svg.png',
   'WZZ':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/4f/Wizz_Air_logo.svg/120px-Wizz_Air_logo.svg.png',
+  'VUE':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Vueling_Airlines_logo.svg/120px-Vueling_Airlines_logo.svg.png',
+  'NOR':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Norwegian_Air_Shuttle_logo.svg/120px-Norwegian_Air_Shuttle_logo.svg.png',
+  'CSN':'https://upload.wikimedia.org/wikipedia/commons/thumb/1/1e/China_Southern_Airlines_logo.svg/120px-China_Southern_Airlines_logo.svg.png',
+  'CCA':'https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Air_China_logo.svg/120px-Air_China_logo.svg.png',
+  'GIA':'https://upload.wikimedia.org/wikipedia/commons/thumb/3/33/Garuda_Indonesia_Logo.svg/120px-Garuda_Indonesia_Logo.svg.png',
+  'MAS':'https://upload.wikimedia.org/wikipedia/commons/thumb/e/e5/Malaysia_Airlines_Logo.svg/120px-Malaysia_Airlines_Logo.svg.png',
+  'THT':'https://upload.wikimedia.org/wikipedia/commons/thumb/6/6a/Air_Tahiti_Nui_logo.svg/120px-Air_Tahiti_Nui_logo.svg.png',
 };
 
 function airlineLogoHtml(icao) {
-  const code = (icao||'').toUpperCase().trim();
+  const code = (icao || '').toUpperCase().trim();
+  if (!code) return '';
   const name = AIRLINE_NAMES[code] || code;
-  const logoUrl = AIRLINE_LOGOS[code];
-  if (logoUrl) {
-    return `<img class="airline-logo-img" src="${logoUrl}" alt="${name}" title="${name}" 
-      onerror="this.style.display='none';this.nextSibling.style.display='block'">
-      <div class="airline-logo-name" style="display:none">${code}</div>`;
+  const url = AIRLINE_LOGOS[code];
+  if (url) {
+    return `<div class="airline-logo-wrap">
+      <img src="${url}" alt="${name}" title="${name}" class="airline-logo-img"
+        onerror="this.parentNode.innerHTML='<div class=airline-logo-txt>${code}</div>'">
+    </div>`;
   }
-  return `<div class="airline-logo-name" style="font-size:10px;color:var(--txt2);">${name}</div>`;
+  return `<div class="airline-logo-wrap"><div class="airline-logo-txt">${name}</div></div>`;
 }
 
-function updateAirlineLogo(inputEl, idx) {
-  const code = inputEl.value.toUpperCase().trim();
-  legs[idx].airline = code;
-  const logoWrap = document.getElementById('logo-'+idx);
-  if (logoWrap) {
-    logoWrap.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '';
-  }
+// ── Airport formatting ──
+function formatAp(ap) {
+  // Returns "ICAO / IATA — City, Country"
+  if (!ap) return '';
+  const iata = ap[1] ? ` / ${ap[1]}` : '';
+  const city = ap[7] || ap[2];
+  return `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
 }
 
-function addLeg() {
-  // New leg: dep = previous arr, arr = null (unless only 1 leg, then arr = final dest)
-  const prev = legs[legs.length - 1];
-  const finalArr = prev.arr;
-  prev.arr = null; // will be filled by user
-  legs.push({ dep: null, arr: finalArr, airline: '', aircraft: '' });
+function apBox(ap) {
+  // Prefilled airport display box
+  if (!ap) return '';
+  const iata = ap[1] ? `<span class="ap-iata"> / ${ap[1]}</span>` : '';
+  const city = ap[7] || ap[2];
+  return `<div class="leg-box prefilled">
+    <div class="leg-code">${ap[0]}${iata}</div>
+    <div class="leg-city">${city}, <span class="leg-country">${countryName(ap[6])}</span></div>
+  </div>`;
+}
+
+// ── Airport search autocomplete ──
+function apSearch(q) {
+  q = (q || '').trim().toUpperCase();
+  if (q.length < 2) return [];
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
+    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
+  );
+  hits.sort((a, b) => {
+    const s = r => r[0]===q?0:r[0].startsWith(q)?1:(r[1]===q?0:r[1]&&r[1].startsWith(q)?2:3);
+    return s(a) - s(b);
+  });
+  return hits.slice(0, 10);
+}
+
+function buildSuggestBox(inputEl, onSelect) {
+  // Create a suggest dropdown bound to this input
+  let box = inputEl._suggestBox;
+  if (!box) {
+    box = document.createElement('div');
+    box.className = 'leg-suggest';
+    inputEl.parentNode.style.position = 'relative';
+    inputEl.parentNode.appendChild(box);
+    inputEl._suggestBox = box;
+  }
+
+  inputEl.addEventListener('input', () => {
+    const hits = apSearch(inputEl.value);
+    if (!hits.length) { box.style.display = 'none'; return; }
+    box.innerHTML = hits.map((ap, i) =>
+      `<div class="leg-sug-item" data-i="${i}">
+        <span class="leg-sug-icao">${ap[0]}</span>
+        ${ap[1] ? `<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>` : ''}
+        ${ap[7] || ap[2]}
+        <span style="color:var(--txt3);font-size:10px;margin-left:3px;">${countryName(ap[6])}</span>
+      </div>`
+    ).join('');
+    box.style.display = 'block';
+    box.querySelectorAll('.leg-sug-item').forEach((el, i) => {
+      el.addEventListener('mousedown', e => {
+        e.preventDefault();
+        const ap = hits[i];
+        inputEl.value = formatAp(ap);
+        box.style.display = 'none';
+        onSelect(ap);
+      });
+    });
+  });
+
+  inputEl.addEventListener('focus', () => {
+    if (inputEl.value.length >= 2) inputEl.dispatchEvent(new Event('input'));
+  });
+
+  document.addEventListener('click', e => {
+    if (!inputEl.contains(e.target) && !box.contains(e.target)) box.style.display = 'none';
+  }, true);
+}
+
+// ── Render legs ──
+function renderLegs() {
+  const container = document.getElementById('legs-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  legs.forEach((leg, i) => {
+    const isFirst = (i === 0);
+    const isLast = (i === legs.length - 1);
+    const row = document.createElement('div');
+    row.className = 'leg-row';
+
+    // DEP: first leg always shows prefilled box; others show input
+    const depSection = document.createElement('div');
+    depSection.className = 'leg-col';
+    depSection.innerHTML = '<div class="leg-label">Departure</div>';
+    if (isFirst && leg.dep) {
+      depSection.innerHTML += apBox(leg.dep);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.style.position = 'relative';
+      const inp = document.createElement('input');
+      inp.className = 'leg-input';
+      inp.placeholder = 'Type ICAO or city…';
+      inp.value = leg.dep ? formatAp(leg.dep) : '';
+      wrap.appendChild(inp);
+      depSection.appendChild(wrap);
+      buildSuggestBox(inp, ap => {
+        legs[i].dep = ap;
+        if (i > 0) legs[i-1].arr = ap;
+        rerenderLeg(i);
+        if (i > 0) rerenderLeg(i-1);
+        updateRosterLines();
+      });
+    }
+
+    // ARR: last leg shows prefilled box; others show input
+    const arrSection = document.createElement('div');
+    arrSection.className = 'leg-col';
+    arrSection.innerHTML = '<div class="leg-label">Destination</div>';
+    if (isLast && leg.arr) {
+      arrSection.innerHTML += apBox(leg.arr);
+    } else {
+      const wrap = document.createElement('div');
+      wrap.style.position = 'relative';
+      const inp = document.createElement('input');
+      inp.className = 'leg-input';
+      inp.placeholder = 'Type ICAO or city…';
+      inp.value = leg.arr ? formatAp(leg.arr) : '';
+      wrap.appendChild(inp);
+      arrSection.appendChild(wrap);
+      buildSuggestBox(inp, ap => {
+        legs[i].arr = ap;
+        if (i < legs.length - 1) legs[i+1].dep = ap;
+        rerenderLeg(i);
+        if (i < legs.length - 1) rerenderLeg(i+1);
+        updateRosterLines();
+      });
+    }
+
+    // Airline + logo
+    const airlineSection = document.createElement('div');
+    airlineSection.className = 'leg-col';
+    airlineSection.style.gap = '3px';
+    airlineSection.innerHTML = `
+      <div class="leg-label">Airline ICAO</div>
+      <input class="leg-sm-input" id="al-${i}" placeholder="e.g. DLH"
+        value="${leg.airline || ''}" style="width:76px;text-transform:uppercase;">
+      <div id="logo-${i}" style="min-height:32px;margin-top:2px;">
+        ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
+      </div>`;
+
+    // Aircraft
+    const aircraftSection = document.createElement('div');
+    aircraftSection.className = 'leg-col';
+    aircraftSection.style.gap = '3px';
+    aircraftSection.innerHTML = `
+      <div class="leg-label">Aircraft</div>
+      <input class="leg-sm-input" placeholder="e.g. A388"
+        value="${leg.aircraft || ''}" style="width:76px;text-transform:uppercase;">`;
+
+    const arrow = document.createElement('div');
+    arrow.className = 'leg-arrow';
+    arrow.textContent = '→';
+
+    row.appendChild(depSection);
+    row.appendChild(arrow);
+    row.appendChild(arrSection);
+    row.appendChild(airlineSection);
+    row.appendChild(aircraftSection);
+
+    if (legs.length > 1) {
+      const del = document.createElement('button');
+      del.className = 'leg-del';
+      del.textContent = '✕';
+      del.onclick = () => deleteLeg(i);
+      row.appendChild(del);
+    }
+
+    container.appendChild(row);
+
+    // Wire airline input AFTER DOM insertion
+    const alInput = document.getElementById('al-'+i);
+    if (alInput) {
+      alInput.addEventListener('input', () => {
+        const code = alInput.value.toUpperCase().trim();
+        legs[i].airline = code;
+        const logoDiv = document.getElementById('logo-'+i);
+        if (logoDiv) logoDiv.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '';
+      });
+    }
+    // Wire aircraft input
+    const acInput = aircraftSection.querySelector('input');
+    if (acInput) {
+      acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
+    }
+  });
+
+  updateRosterLines();
+}
+
+function rerenderLeg(i) {
+  // Re-render just one leg row without full re-render
+  // For simplicity, do full renderLegs (fast enough)
   renderLegs();
 }
 
-function deleteLeg(idx) {
+// ── Roster actions ──
+function addLeg() {
+  const last = legs[legs.length - 1];
+  const savedArr = last.arr;
+  last.arr = null;
+  legs.push({ dep: null, arr: savedArr, airline: '', aircraft: '' });
+  renderLegs();
+}
+
+function deleteLeg(i) {
   if (legs.length <= 1) return;
-  // Reconnect: if deleting middle leg, connect prev.arr with next.dep
-  if (idx > 0 && idx < legs.length - 1) {
-    legs[idx-1].arr = legs[idx+1].dep;
-  } else if (idx === 0 && legs.length > 1) {
-    // deleting first: second becomes first, keep its dep
-  } else if (idx === legs.length - 1 && idx > 0) {
-    // deleting last: prev gets final arr
-    legs[idx-1].arr = legs[idx].arr;
+  if (i > 0 && i < legs.length - 1) {
+    legs[i-1].arr = legs[i+1].dep;
+  } else if (i === legs.length - 1 && i > 0) {
+    legs[i-1].arr = legs[i].arr;
   }
-  legs.splice(idx, 1);
+  legs.splice(i, 1);
   renderLegs();
 }
 
 function clearRoster() {
-  // Reset to initial state with depart from dashboard
-  initRosterFromDashboard();
+  legs = [{ dep: departAirport || null, arr: null, airline: '', aircraft: '' }];
+  renderLegs();
 }
 
 function initRosterFromDashboard(depAp, arrAp) {
-  // Called when user clicks a result card on dashboard
-  const dep = depAp || departAirport || null;
-  legs = [{ dep, arr: arrAp || null, airline: '', aircraft: '' }];
+  legs = [{ dep: depAp || null, arr: arrAp || null, airline: '', aircraft: '' }];
   renderLegs();
 }
 
 async function saveRoster() {
-  // Save current legs to Supabase
-  const rosterData = legs.map(l => ({
-    dep_icao: l.dep ? l.dep[0] : '',
-    dep_city: l.dep ? l.dep[7]||l.dep[2] : '',
-    dep_country: l.dep ? countryName(l.dep[6]) : '',
-    arr_icao: l.arr ? l.arr[0] : '',
-    arr_city: l.arr ? l.arr[7]||l.arr[2] : '',
-    arr_country: l.arr ? countryName(l.arr[6]) : '',
-    dep_lat: l.dep ? l.dep[3] : null,
-    dep_lon: l.dep ? l.dep[4] : null,
-    arr_lat: l.arr ? l.arr[3] : null,
-    arr_lon: l.arr ? l.arr[4] : null,
-    airline: l.airline,
-    aircraft: l.aircraft,
+  const data = legs.map(l => ({
+    dep_icao: l.dep?.[0] || '', dep_city: l.dep?.[7] || l.dep?.[2] || '',
+    arr_icao: l.arr?.[0] || '', arr_city: l.arr?.[7] || l.arr?.[2] || '',
+    dep_lat: l.dep?.[3] || null, dep_lon: l.dep?.[4] || null,
+    arr_lat: l.arr?.[3] || null, arr_lon: l.arr?.[4] || null,
+    airline: l.airline, aircraft: l.aircraft,
   }));
   try {
-    await sb.from('categories').upsert({ name: '__roster__', items: rosterData }, { onConflict: 'name' });
+    await sb.from('categories').upsert({ name: '__roster__', items: data }, { onConflict: 'name' });
     setCloudStatus('✓ Roster saved', 'ok');
-  } catch(e) {
-    setCloudStatus('⚠ Save failed', 'err');
-  }
+  } catch(e) { setCloudStatus('⚠ Save failed', 'err'); }
 }
 
-// ── Roster Map ──
+// ── Click dashboard card → transfer to Roster ──
+function openInRoster(catId) {
+  const res = lastResults.find(r => r.cat.id === catId);
+  if (!res) return;
+  const r = res.result;
+  if (r.text) return; // text-only, not plannable
+
+  let arrAp = null;
+  if (r.icao) arrAp = schedByCode[r.icao] || DB_SCHED.find(ap => ap[0] === r.icao) || null;
+  if (!arrAp && r.lat !== null) arrAp = nearestScheduled(r.lat, r.lon, null);
+
+  initRosterFromDashboard(departAirport || null, arrAp);
+  switchToMain('roster');
+}
+
+// ── Roster map ──
 function initRosterMap() {
   const el = document.getElementById('roster-map');
   if (!el || rosterMap) return;
-  rosterMap = L.map('roster-map', { center: [20,10], zoom: 2, minZoom:1, maxZoom:18, zoomControl:true });
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    attribution:'© OpenStreetMap © CARTO', subdomains:'abcd', maxZoom:19
-  }).addTo(rosterMap);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-    attribution:'', subdomains:'abcd', maxZoom:19, pane:'overlayPane'
-  }).addTo(rosterMap);
+  rosterMap = L.map('roster-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
   drawLogbookLines();
   updateRosterLines();
 }
 
+function clearRosterLayers() {
+  rosterLayers.forEach(l => rosterMap && rosterMap.removeLayer(l));
+  rosterLayers = [];
+}
+
 function drawLogbookLines() {
   if (!rosterMap) return;
-  // Draw thin grey lines for historical flights
   logbookFlights.forEach(f => {
-    const depAp = schedByCode[f.dep_icao] || schedByCode[f.arr_icao] ? schedByCode[f.dep_icao] : null;
-    const arrAp = schedByCode[f.arr_icao];
-    // Use coords from logbook directly if stored, else look up
-    const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : depAp ? [depAp[3], depAp[4]] : null;
-    const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : arrAp ? [arrAp[3], arrAp[4]] : null;
-    if (depCoords && arrCoords) {
-      new L.Geodesic([depCoords, arrCoords], {
-        color:'#5a6270', weight:1.2, opacity:0.55, steps:8
+    const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : null;
+    const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : null;
+    if (!depCoords || !arrCoords) return;
+    try {
+      const line = new L.Geodesic([[depCoords, arrCoords]], {
+        color: '#5a6270', weight: 1.2, opacity: 0.5, steps: 8
       }).addTo(rosterMap);
-    }
+      // Dot markers
+      const dm = L.circleMarker(depCoords, { radius: 3, color: '#5a6270', fillColor: '#5a6270', fillOpacity: 0.7, weight: 0 }).addTo(rosterMap);
+      const am = L.circleMarker(arrCoords, { radius: 3, color: '#5a6270', fillColor: '#5a6270', fillOpacity: 0.7, weight: 0 }).addTo(rosterMap);
+    } catch(e) {}
   });
 }
 
 function updateRosterLines() {
   if (!rosterMap) return;
-  // Remove old planned lines
-  rosterFlightLines.forEach(l => rosterMap.removeLayer(l));
-  rosterFlightLines = [];
-  // Draw red lines for planned legs
+  clearRosterLayers();
   legs.forEach(leg => {
-    if (leg.dep && leg.arr) {
-      const line = new L.Geodesic(
-        [[[leg.dep[3], leg.dep[4]], [leg.arr[3], leg.arr[4]]]],
-        { color:'#f85149', weight:2.5, opacity:0.9, steps:12 }
-      ).addTo(rosterMap);
-      // Markers
-      const depM = L.circleMarker([leg.dep[3], leg.dep[4]], {radius:6, color:'#0e1117', weight:2, fillColor:'#f85149', fillOpacity:1}).addTo(rosterMap);
-      const arrM = L.circleMarker([leg.arr[3], leg.arr[4]], {radius:6, color:'#0e1117', weight:2, fillColor:'#f85149', fillOpacity:1}).addTo(rosterMap);
-      rosterFlightLines.push(line, depM, arrM);
-    }
+    if (!leg.dep || !leg.arr) return;
+    const dc = [leg.dep[3], leg.dep[4]];
+    const ac = [leg.arr[3], leg.arr[4]];
+    try {
+      const line = new L.Geodesic([[dc, ac]], {
+        color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12
+      }).addTo(rosterMap);
+      const dm = L.circleMarker(dc, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
+      const am = L.circleMarker(ac, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
+      dm.bindTooltip(`<b>${leg.dep[0]}</b> ${leg.dep[7]||leg.dep[2]}`, { direction: 'top' });
+      am.bindTooltip(`<b>${leg.arr[0]}</b> ${leg.arr[7]||leg.arr[2]}`, { direction: 'top' });
+      rosterLayers.push(line, dm, am);
+    } catch(e) {}
   });
 }
 
-// ── Logbook ──
+// ═══════════════════════════════════════════════════════════
+// LOGBOOK
+// ═══════════════════════════════════════════════════════════
 function renderLogbook() {
   const tbody = document.getElementById('lb-body');
   if (!tbody) return;
   tbody.innerHTML = logbookFlights.map((f, i) => `<tr>
-    <td class="lb-muted">${i+1}</td>
-    <td>${f.dep}</td>
-    <td class="lb-mono">${f.dep_icao}</td>
-    <td class="lb-mono lb-muted">${f.dep_iata||''}</td>
-    <td>${f.arr}</td>
-    <td class="lb-mono">${f.arr_icao}</td>
-    <td class="lb-mono lb-muted">${f.arr_iata||''}</td>
-    <td class="lb-muted">${f.airline||''}</td>
-    <td class="lb-muted">${f.aircraft||''}</td>
+    <td class="lb-muted" style="font-size:10px;">${i+1}</td>
+    <td>${f.dep || ''}</td>
+    <td class="lb-mono">${f.dep_icao || ''}</td>
+    <td class="lb-mono lb-muted">${f.dep_iata || ''}</td>
+    <td>${f.arr || ''}</td>
+    <td class="lb-mono">${f.arr_icao || ''}</td>
+    <td class="lb-mono lb-muted">${f.arr_iata || ''}</td>
+    <td class="lb-muted">${f.airline || ''}</td>
+    <td class="lb-muted">${f.aircraft || ''}</td>
     <td><button class="btn-del" onclick="deleteLogbookFlight(${i})">✕</button></td>
   </tr>`).join('');
   const cnt = document.getElementById('lb-count');
@@ -1737,38 +1805,37 @@ function deleteLogbookFlight(i) {
 
 async function saveLogbook() {
   try {
-    await sb.from('categories').upsert({ name:'__logbook__', items: logbookFlights }, { onConflict:'name' });
+    await sb.from('categories').upsert({ name: '__logbook__', items: logbookFlights }, { onConflict: 'name' });
     const st = document.getElementById('lb-status');
-    if(st) { st.textContent='✓ Saved'; setTimeout(()=>{st.textContent='';},2000); }
+    if (st) { st.textContent = '✓ Saved'; setTimeout(() => { st.textContent = ''; }, 2500); }
   } catch(e) { console.error('Logbook save error:', e); }
 }
 
 async function loadLogbook() {
   try {
-    const { data } = await sb.from('categories').select('items').eq('name','__logbook__').single();
-    if (data && data.items && data.items.length > 0) {
+    const { data } = await sb.from('categories').select('items').eq('name', '__logbook__').single();
+    if (data?.items?.length > 0) {
       logbookFlights = data.items;
     } else {
-      // First time — use embedded default data
-      logbookFlights = DEFAULT_LOGBOOK.map(f => ({
-        dep: f.dep, dep_icao: f.dep_icao, dep_iata: f.dep_iata,
-        dep_lat: schedByCode[f.dep_icao] ? schedByCode[f.dep_icao][3] : null,
-        dep_lon: schedByCode[f.dep_icao] ? schedByCode[f.dep_icao][4] : null,
-        arr: f.arr, arr_icao: f.arr_icao, arr_iata: f.arr_iata,
-        arr_lat: schedByCode[f.arr_icao] ? schedByCode[f.arr_icao][3] : null,
-        arr_lon: schedByCode[f.arr_icao] ? schedByCode[f.arr_icao][4] : null,
-        airline: f.airline, aircraft: f.aircraft,
-      }));
+      logbookFlights = DEFAULT_LOGBOOK.map(f => {
+        const depDb = schedByCode[f.dep_icao];
+        const arrDb = schedByCode[f.arr_icao];
+        return { ...f,
+          dep_lat: depDb?.[3] ?? null, dep_lon: depDb?.[4] ?? null,
+          arr_lat: arrDb?.[3] ?? null, arr_lon: arrDb?.[4] ?? null,
+        };
+      });
       await saveLogbook();
     }
   } catch(e) {
-    logbookFlights = DEFAULT_LOGBOOK.map(f => ({
-      dep: f.dep, dep_icao: f.dep_icao, dep_iata: f.dep_iata,
-      dep_lat: null, dep_lon: null,
-      arr: f.arr, arr_icao: f.arr_icao, arr_iata: f.arr_iata,
-      arr_lat: null, arr_lon: null,
-      airline: f.airline, aircraft: f.aircraft,
-    }));
+    logbookFlights = DEFAULT_LOGBOOK.map(f => {
+      const depDb = schedByCode[f.dep_icao];
+      const arrDb = schedByCode[f.arr_icao];
+      return { ...f,
+        dep_lat: depDb?.[3] ?? null, dep_lon: depDb?.[4] ?? null,
+        arr_lat: arrDb?.[3] ?? null, arr_lon: arrDb?.[4] ?? null,
+      };
+    });
   }
 }
 
@@ -1784,71 +1851,57 @@ function importLogbookXlsx(input) {
   const reader = new FileReader();
   reader.onload = async e => {
     try {
-      const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
       const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      const first = (rows[0]||[]).map(c=>String(c).toLowerCase());
-      const hasHeader = first.some(c=>c.includes('dep')||c.includes('icao')||c.includes('arr'));
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      const firstRow = (rows[0] || []).map(c => String(c).toLowerCase());
+      const hasHeader = firstRow.some(c => c.includes('dep') || c.includes('icao'));
       const dataRows = hasHeader ? rows.slice(1) : rows;
-      
-      // Detect format: Volanta raw (4 cols) or enriched (8 cols)
-      let added = 0;
-      // Resolve =B formulas
-      let prevRow = null;
+      let prevRow = null, added = 0;
+      logbookFlights = [];
       dataRows.forEach(row => {
-        let dep = row[0], arr, airline, aircraft, dep_icao, dep_iata, arr_icao, arr_iata;
+        let dep = row[0];
         if (String(dep).startsWith('=B') && prevRow) dep = prevRow[1];
-        
-        if (row.length >= 6 && row[1] && String(row[1]).length === 4) {
-          // Enriched format: dep, dep_icao, dep_iata, arr, arr_icao, arr_iata, airline, aircraft
+        const isEnriched = row.length >= 6 && row[1] && String(row[1]).length >= 3 && String(row[1]).length <= 5;
+        let dep_icao, dep_iata, arr, arr_icao, arr_iata, airline, aircraft;
+        if (isEnriched) {
           dep_icao = String(row[1]||'').trim(); dep_iata = String(row[2]||'').trim();
-          arr = String(row[3]||'').trim(); arr_icao = String(row[4]||'').trim(); arr_iata = String(row[5]||'').trim();
-          airline = String(row[6]||'').trim(); aircraft = String(row[7]||'').trim();
+          arr = String(row[3]||'').trim(); arr_icao = String(row[4]||'').trim();
+          arr_iata = String(row[5]||'').trim(); airline = String(row[6]||'').trim();
+          aircraft = String(row[7]||'').trim();
         } else {
-          // Raw Volanta format: dep, arr, airline, aircraft
-          arr = String(row[1]||'').trim(); airline = String(row[2]||'').trim(); aircraft = String(row[3]||'').trim();
-          const depAp = schedByCode[String(dep).split(' ').pop().toUpperCase()] || null;
-          const arrAp = schedByCode[String(arr).split(' ').pop().toUpperCase()] || null;
-          dep_icao = depAp ? depAp[0] : ''; dep_iata = depAp ? depAp[1] : '';
-          arr_icao = arrAp ? arrAp[0] : ''; arr_iata = arrAp ? arrAp[1] : '';
+          arr = String(row[1]||'').trim(); airline = String(row[2]||'').trim();
+          aircraft = String(row[3]||'').trim();
+          const lastWord = s => String(s||'').trim().split(' ').pop().toUpperCase();
+          const depAp = by_iata[lastWord(dep)] || schedByCode[lastWord(dep)];
+          const arrAp = by_iata[lastWord(arr)] || schedByCode[lastWord(arr)];
+          dep_icao = depAp?.[0] || ''; dep_iata = depAp?.[1] || '';
+          arr_icao = arrAp?.[0] || ''; arr_iata = arrAp?.[1] || '';
         }
-        
-        const depDb = schedByCode[dep_icao];
-        const arrDb = schedByCode[arr_icao];
-        
+        const depDb = schedByCode[dep_icao]; const arrDb = schedByCode[arr_icao];
         logbookFlights.push({
           dep: String(dep||'').trim(), dep_icao, dep_iata,
-          dep_lat: depDb ? depDb[3] : null, dep_lon: depDb ? depDb[4] : null,
-          arr: String(arr||'').trim(), arr_icao, arr_iata,
-          arr_lat: arrDb ? arrDb[3] : null, arr_lon: arrDb ? arrDb[4] : null,
+          dep_lat: depDb?.[3]??null, dep_lon: depDb?.[4]??null,
+          arr, arr_icao, arr_iata,
+          arr_lat: arrDb?.[3]??null, arr_lon: arrDb?.[4]??null,
           airline, aircraft,
         });
-        prevRow = row;
-        added++;
+        prevRow = row; added++;
       });
-      
       await saveLogbook();
       renderLogbook();
-      if (rosterMap) { rosterMap.eachLayer(l => { if(l instanceof L.Polyline) rosterMap.removeLayer(l); }); drawLogbookLines(); updateRosterLines(); }
+      // Redraw map lines
+      if (rosterMap) {
+        rosterMap.eachLayer(l => { if (l instanceof L.Geodesic || (l._latlng && l instanceof L.CircleMarker)) rosterMap.removeLayer(l); });
+        drawLogbookLines(); updateRosterLines();
+      }
       const st = document.getElementById('lb-status');
-      if (st) { st.textContent = `✓ ${added} flights imported`; }
-    } catch(err) { alert('Error: '+err.message); }
+      if (st) st.textContent = `✓ ${added} flights imported`;
+    } catch(err) { alert('Error: ' + err.message); }
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
 }
-
-// ── Click result card to open Roster ──
-function selectResultForRoster(catId, resultIdx) {
-  const res = lastResults.find(r => r.cat.id === catId);
-  if (!res) return;
-  const r = res.result;
-  const depAp = departAirport;  // from depart field
-  const arrAp = r.lat !== null ? DB_SCHED.find(ap => ap[0] === r.icao) || null : null;
-  initRosterFromDashboard(depAp, arrAp);
-  switchView('roster');
-}
-
 
 // ═══════════════════════════════════════════════════════════
 // INIT
@@ -1857,42 +1910,17 @@ document.getElementById('view-dashboard').style.display = 'flex';
 renderResults();
 
 window.addEventListener('load', async () => {
-  try { initMap(); } catch(e) { console.error('Map init error:', e); }
+  try { initMap(); } catch(e) { console.error('Map init:', e); }
   await loadAllFromCloud();
   await loadLogbook();
   renderResults();
-  // Init roster with empty state
-  legs = [{ dep: departAirport || null, arr: null, airline: '', aircraft: '' }];
+  legs = [{ dep: null, arr: null, airline: '', aircraft: '' }];
   renderLegs();
 });
 
-// Open result in Roster planner
-function openInRoster(catId) {
-  const res = lastResults.find(r => r.cat.id === catId);
-  if (!res) return;
-  const r = res.result;
-  if (!r.icao && !r.text) return;
-  if (r.text) return; // routing/text only - not plannable yet
-  
-  // Find arr airport from DB - check schedByCode first, then full scan
-  let arrAp = null;
-  if (r.icao) {
-    arrAp = schedByCode[r.icao] || null;
-    if (!arrAp) arrAp = DB_SCHED.find(ap => ap[0] === r.icao) || null;
-  }
-  // For coord results, use the nearest airport that was found
-  if (!arrAp && r.lat !== null && r.lon !== null) {
-    arrAp = nearestScheduled(r.lat, r.lon, null);
-  }
-  
-  const depAp = departAirport || null;
-  initRosterFromDashboard(depAp, arrAp);
-  switchToMain('roster');
-}
-
-
 window.addEventListener('resize', () => {
   if (leafletMap) leafletMap.invalidateSize();
+  if (rosterMap) rosterMap.invalidateSize();
 });
 
 </script>
