@@ -28,6 +28,9 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 /* TOP NAV */
 .topnav{display:flex;align-items:center;gap:0;padding:0 16px;height:44px;border-bottom:1px solid var(--bdr);flex-shrink:0;background:var(--surf);}
 .topnav-tabs{display:flex;gap:2px;}
+.topnav-sep{width:1px;height:20px;background:var(--bdr2);margin:0 6px;align-self:center;}
+.topnav-primary{font-size:14px;font-weight:600;padding:6px 16px;}
+.topnav-secondary{font-size:12px;padding:4px 11px;color:var(--txt2);}
 .topnav-tab{font-size:13px;padding:5px 14px;border-radius:var(--r);border:none;background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);}
 .topnav-tab:hover{background:var(--surf2);color:var(--txt);}
 .topnav-tab.active{background:var(--surf2);color:var(--txt);font-weight:500;}
@@ -75,7 +78,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .results-area{flex:1;overflow-y:auto;padding:12px 14px;}
 .results-row-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 6px;display:flex;align-items:center;gap:6px;}
 .results-row-label::after{content:'';flex:1;height:1px;background:var(--bdr);}
-.results-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px;margin-bottom:10px;}
+.row-group{border:1px solid var(--bdr);border-radius:8px;padding:10px 10px 4px 10px;margin-bottom:10px;background:rgba(255,255,255,.02);}
+.results-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px;margin-bottom:6px;}
 .res-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:10px 12px;cursor:default;transition:border-color .15s;}
 .res-card:hover{border-color:var(--bdr2);}
 .res-cat{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.09em;display:flex;align-items:center;gap:4px;margin-bottom:6px;}
@@ -218,7 +222,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
 /* ── AIRLINE LOGO ── */
 .airline-logo-wrap{display:flex;flex-direction:column;align-items:center;gap:3px;min-width:54px;}
-.airline-logo-img{width:44px;height:28px;object-fit:contain;border-radius:3px;background:var(--surf2);border:1px solid var(--bdr);}
+.airline-logo-img{width:52px;height:32px;object-fit:contain;border-radius:3px;background:#fff;border:1px solid var(--bdr);padding:2px;}
 .airline-logo-name{font-size:9px;color:var(--txt3);text-align:center;max-width:54px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
 /* ── ROSTER LEG LAYOUT FIX ── */
@@ -308,11 +312,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 <!-- TOP NAV -->
 <div class="topnav">
   <div class="topnav-tabs">
-    <button class="topnav-tab active" id="t-dashboard" onclick="switchView('dashboard')">Dashboard</button>
-    <button class="topnav-tab" id="t-categories" onclick="switchView('categories')">Categories</button>
-    <button class="topnav-tab" id="t-roster" onclick="switchView('roster')">Roster</button>
-    <button class="topnav-tab" id="t-logbook" onclick="switchView('logbook')">Logbook</button>
-    <button class="topnav-tab" id="t-data" onclick="switchView('data')">Data</button>
+    <button class="topnav-tab topnav-primary active" id="t-dashboard" onclick="switchView('dashboard')">Dashboard</button>
+    <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">Roster</button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-logbook" onclick="switchView('logbook')">Logbook</button>
+    <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">Categories</button>
   </div>
   <div id="cloud-status" style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:5px;padding:0 8px;"></div>
 </div>
@@ -363,14 +367,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
       <!-- Results -->
       <div class="results-area" id="results-area">
-        <div class="results-row" id="row-r1"></div>
-        <div class="results-row" id="row-r2"></div>
-        <div class="row-divider"></div>
-        <div class="results-row" id="row-r3"></div>
-        <div class="results-row" id="row-r4"></div>
-        <div class="row-divider"></div>
-        <div class="results-row" id="row-r5"></div>
-        <div class="results-row" id="row-r6"></div>
+        <div class="row-group">
+          <div class="results-row" id="row-r1"></div>
+          <div class="results-row" id="row-r2"></div>
+        </div>
+        <div class="row-group">
+          <div class="results-row" id="row-r3"></div>
+          <div class="results-row" id="row-r4"></div>
+        </div>
+        <div class="row-group">
+          <div class="results-row" id="row-r5"></div>
+          <div class="results-row" id="row-r6"></div>
+        </div>
       </div>
     </div>
 
@@ -495,9 +503,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div class="logbook-body">
         <table class="lb-tbl">
           <thead><tr>
-            <th>#</th><th>Departure</th><th>Dep ICAO</th><th>Dep IATA</th>
-            <th>Arrival</th><th>Arr ICAO</th><th>Arr IATA</th>
-            <th>Airline</th><th>Aircraft</th><th></th>
+            <th style="width:28px;">#</th>
+            <th>City</th><th style="width:52px;">ICAO</th><th style="width:44px;">IATA</th>
+            <th style="width:16px;background:transparent;"></th>
+            <th>City</th><th style="width:52px;">ICAO</th><th style="width:44px;">IATA</th>
+            <th style="width:16px;background:transparent;"></th>
+            <th style="width:52px;">Airline</th><th style="width:60px;">Aircraft</th>
+            <th style="width:44px;">Logo</th><th style="width:24px;"></th>
           </tr></thead>
           <tbody id="lb-body"></tbody>
         </table>
@@ -529,11 +541,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Categories
     </button>
-    <div class="bn-sep"></div>
-    <button class="bn-btn" id="bn-data" onclick="switchView('data')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-      Data
-    </button>
+
   </div>
 </div>
 </div><!-- app -->
@@ -636,7 +644,7 @@ let CATEGORIES = [
   {name:'Lufthansa B747 → La Paz'},{name:'UTA B747 → Nouméa'},{name:'Pan Am 1 round-the-world'},
   {name:'TBD'},{name:'TBD'},{name:'TBD'},
 ]},
-{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[{"icao":"EGBB","name":"Alpine-Mercedes"},{"icao":"EGGW","name":"Aston Martin Aramco-Honda"},{"icao":"EGLL","name":"Atlassian Williams-Mercedes"},{"icao":"LSZH","name":"Audi"},{"icao":"KIND","name":"Cadillac-Ferrari"},{"icao":"EGLL","name":"McLaren-Mercedes"},{"icao":"EGGW","name":"Mercedes"},{"icao":"EGGW","name":"Red Bull Racing-Red Bull Ford"},{"icao":"LIPE","name":"Ferrari"},{"icao":"EGGW","name":"Haas-Ferrari"},{"icao":"LIPE","name":"Racing Bulls-Red Bull Ford"},{"icao":"YMML","name":"Australian Grand Prix"},{"icao":"ZSPD","name":"Chinese Grand Prix"},{"icao":"RJGG","name":"Japanese Grand Prix"},{"icao":"KMIA","name":"Miami Grand Prix"},{"icao":"CYUL","name":"Canadian Grand Prix"},{"icao":"LFMN","name":"Monaco Grand Prix"},{"icao":"LEBL","name":"Barcelona-Catalunya Grand Prix"},{"icao":"LOWG","name":"Austrian Grand Prix"},{"icao":"EGGW","name":"British Grand Prix"},{"icao":"EBLG","name":"Belgian Grand Prix"},{"icao":"LHBP","name":"Hungarian Grand Prix"},{"icao":"EHAM","name":"Dutch Grand Prix"},{"icao":"LIML","name":"Italian Grand Prix"},{"icao":"LEMD","name":"Spanish Grand Prix"},{"icao":"UBBB","name":"Azerbaijan Grand Prix"},{"icao":"WSSS","name":"Singapore Grand Prix"},{"icao":"KAUS","name":"United States Grand Prix"},{"icao":"MMMX","name":"Mexico City Grand Prix"},{"icao":"SBGR","name":"São Paulo Grand Prix"},{"icao":"KLAS","name":"Las Vegas Grand Prix"},{"icao":"OTHH","name":"Qatar Grand Prix"},{"icao":"OMAA","name":"Abu Dhabi Grand Prix"}]},
+{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[{"icao":"EGBB","iata":"BHX","name":"Alpine-Mercedes","city":"Birmingham, West Midlands","country":"GB"},{"icao":"EGGW","iata":"LTN","name":"Aston Martin Aramco-Honda","city":"Luton","country":"GB"},{"icao":"EGLL","iata":"LHR","name":"Atlassian Williams-Mercedes","city":"London","country":"GB"},{"icao":"LSZH","iata":"ZRH","name":"Audi","city":"Zurich","country":"CH"},{"icao":"KIND","iata":"IND","name":"Cadillac-Ferrari","city":"Indianapolis","country":"US"},{"icao":"EGLL","iata":"LHR","name":"McLaren-Mercedes","city":"London","country":"GB"},{"icao":"EGGW","iata":"LTN","name":"Mercedes","city":"Luton","country":"GB"},{"icao":"EGGW","iata":"LTN","name":"Red Bull Racing-Red Bull Ford","city":"Luton","country":"GB"},{"icao":"LIPE","iata":"BLQ","name":"Ferrari","city":"Bologna","country":"IT"},{"icao":"EGGW","iata":"LTN","name":"Haas-Ferrari","city":"Luton","country":"GB"},{"icao":"LIPE","iata":"BLQ","name":"Racing Bulls-Red Bull Ford","city":"Bologna","country":"IT"},{"icao":"YMML","iata":"MEL","name":"Australian Grand Prix","city":"Melbourne","country":"AU"},{"icao":"ZSPD","iata":"PVG","name":"Chinese Grand Prix","city":"Shanghai (Pudong)","country":"CN"},{"icao":"RJGG","iata":"NGO","name":"Japanese Grand Prix","city":"Tokoname","country":"JP"},{"icao":"KMIA","iata":"MIA","name":"Miami Grand Prix","city":"Miami","country":"US"},{"icao":"CYUL","iata":"YUL","name":"Canadian Grand Prix","city":"Montréal","country":"CA"},{"icao":"LFMN","iata":"NCE","name":"Monaco Grand Prix","city":"Nice, Alpes-Maritimes","country":"FR"},{"icao":"LEBL","iata":"BCN","name":"Barcelona-Catalunya Grand Prix","city":"Barcelona","country":"ES"},{"icao":"LOWG","iata":"GRZ","name":"Austrian Grand Prix","city":"Feldkirchen bei Graz","country":"AT"},{"icao":"EGGW","iata":"LTN","name":"British Grand Prix","city":"Luton","country":"GB"},{"icao":"EBLG","iata":"LGG","name":"Belgian Grand Prix","city":"Grâce-Hollogne","country":"BE"},{"icao":"LHBP","iata":"BUD","name":"Hungarian Grand Prix","city":"Budapest","country":"HU"},{"icao":"EHAM","iata":"AMS","name":"Dutch Grand Prix","city":"Amsterdam","country":"NL"},{"icao":"LIML","iata":"LIN","name":"Italian Grand Prix","city":"Segrate (MI)","country":"IT"},{"icao":"LEMD","iata":"MAD","name":"Spanish Grand Prix","city":"Madrid","country":"ES"},{"icao":"UBBB","iata":"GYD","name":"Azerbaijan Grand Prix","city":"Baku","country":"AZ"},{"icao":"WSSS","iata":"SIN","name":"Singapore Grand Prix","city":"Singapore","country":"SG"},{"icao":"KAUS","iata":"AUS","name":"United States Grand Prix","city":"Austin","country":"US"},{"icao":"MMMX","iata":"MEX","name":"Mexico City Grand Prix","city":"Mexico City","country":"MX"},{"icao":"SBGR","iata":"GRU","name":"São Paulo Grand Prix","city":"São Paulo","country":"BR"},{"icao":"KLAS","iata":"LAS","name":"Las Vegas Grand Prix","city":"Las Vegas","country":"US"},{"icao":"OTHH","iata":"DOH","name":"Qatar Grand Prix","city":"Doha","country":"QA"},{"icao":"OMAA","iata":"AUH","name":"Abu Dhabi Grand Prix","city":"Abu Dhabi","country":"AE"}]},
 {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
 {id:'rand_nonsched',name:'Random Non-Scheduled',group:'randoms',colorIdx:6,type:'rand-nonsched',items:[]},
 {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
@@ -1156,6 +1164,10 @@ function renderPins() {
         className: 'map-pin-tooltip',
         offset: [0, -8],
       });
+
+      // Click pin → open in roster
+      marker.on('click', () => { openInRoster(cat.id); });
+      marker.getElement()?.style && (marker.getElement().style.cursor = 'pointer');
 
       entry.marker = marker;
     }
@@ -1740,9 +1752,24 @@ function buildSuggestBox(inputEl, onSelect) {
     inputEl.parentNode.appendChild(box);
     inputEl._suggestBox = box;
   }
+  let currentHits = [];
+
+  inputEl.addEventListener('keydown', e => {
+    if (e.key === 'Tab' && currentHits.length > 0 && box.style.display !== 'none') {
+      e.preventDefault();
+      // Auto-select first (or only) result
+      onSelect(currentHits[0]);
+      box.style.display = 'none';
+      // Move focus to next input
+      const inputs = Array.from(document.querySelectorAll('.leg-input, .leg-sm-input'));
+      const idx = inputs.indexOf(inputEl);
+      if (idx >= 0 && idx < inputs.length - 1) inputs[idx + 1].focus();
+    }
+  });
 
   inputEl.addEventListener('input', () => {
     const hits = apSearch(inputEl.value);
+    currentHits = hits;
     if (!hits.length) { box.style.display = 'none'; return; }
     box.innerHTML = hits.map((ap, i) =>
       `<div class="leg-sug-item" data-i="${i}">
@@ -1898,9 +1925,11 @@ function renderLegs() {
     if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
   });
 
-  // Fetch block times for any completed legs
+  // Fetch block times for any completed legs (staggered to avoid rate limits)
   legs.forEach((leg, i) => {
-    if (leg.dep && leg.arr && !leg.blockTime) fetchBlockTime(i);
+    if (leg.dep && leg.arr && !leg.blockTime) {
+      setTimeout(() => fetchBlockTime(i), i * 1500); // stagger by 1.5s each
+    }
   });
 
   updateRosterLines();
@@ -2136,18 +2165,29 @@ function renderLogbook() {
     flights = flights.filter(f => [f.dep,f.arr,f.dep_icao,f.arr_icao,f.airline,f.aircraft]
       .join(' ').toLowerCase().includes(logbookFilterText));
   }
-  tbody.innerHTML = flights.map((f, i) => `<tr>
-    <td class="lb-muted" style="font-size:10px;">${i+1}</td>
-    <td>${f.dep || ''}</td>
-    <td class="lb-mono">${f.dep_icao || ''}</td>
-    <td class="lb-mono lb-muted">${f.dep_iata || ''}</td>
-    <td>${f.arr || ''}</td>
-    <td class="lb-mono">${f.arr_icao || ''}</td>
-    <td class="lb-mono lb-muted">${f.arr_iata || ''}</td>
-    <td class="lb-muted">${f.airline || ''}</td>
-    <td class="lb-muted">${f.aircraft || ''}</td>
-    <td><button class="btn-del" onclick="deleteLogbookFlight(${logbookFlights.indexOf(f)})">✕</button></td>
-  </tr>`).join('');
+  tbody.innerHTML = flights.map((f, i) => {
+    const logoHtml = f.airline ? `<div style="display:inline-flex;align-items:center;justify-content:center;width:44px;height:26px;background:#fff;border-radius:3px;border:1px solid var(--bdr);padding:1px;overflow:hidden;" id="lbl-${i}">
+      ${AIRLINE_LOGOS[f.airline]
+        ? `<img src="${AIRLINE_LOGOS[f.airline]}" style="max-width:42px;max-height:24px;object-fit:contain;" alt="${f.airline}" onerror="this.parentNode.innerHTML='<span style=font-size:8px;color:var(--txt3)>${f.airline}</span>'">`
+        : `<span style="font-size:8px;color:var(--txt3);">${f.airline}</span>`}
+    </div>` : '';
+    const realIdx = logbookFlights.indexOf(f);
+    return `<tr>
+      <td class="lb-muted" style="font-size:10px;padding:4px 6px;">${i+1}</td>
+      <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.dep || ''}</td>
+      <td class="lb-mono" style="padding:4px 5px;">${f.dep_icao || ''}</td>
+      <td class="lb-mono lb-muted" style="padding:4px 5px;">${f.dep_iata || ''}</td>
+      <td style="width:8px;background:rgba(255,255,255,.03);"></td>
+      <td style="max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${f.arr || ''}</td>
+      <td class="lb-mono" style="padding:4px 5px;">${f.arr_icao || ''}</td>
+      <td class="lb-mono lb-muted" style="padding:4px 5px;">${f.arr_iata || ''}</td>
+      <td style="width:8px;background:rgba(255,255,255,.03);"></td>
+      <td class="lb-muted" style="font-size:11px;">${f.airline || ''}</td>
+      <td class="lb-muted" style="font-size:11px;">${f.aircraft || ''}</td>
+      <td style="padding:2px 4px;">${logoHtml}</td>
+      <td style="padding:2px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>
+    </tr>`;
+  }).join('');
   const cnt = document.getElementById('lb-count');
   if (cnt) cnt.textContent = logbookFilterText
     ? `${flights.length} of ${logbookFlights.length} flights`
