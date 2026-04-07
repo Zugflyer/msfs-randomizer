@@ -451,11 +451,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
       <!-- Add row: appears ABOVE table when Add airport is clicked -->
       <div class="add-row" id="cat-add-row" style="display:none;border-bottom:1px solid var(--bdr);background:var(--surf);">
-        <div style="position:relative;flex:1;max-width:340px;">
+        <!-- Airport search (list/list-simple) -->
+        <div id="in-search-wrap" style="position:relative;flex:1;max-width:340px;">
           <input id="in-search" placeholder="Type ICAO, IATA or city name…" style="width:100%;font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);color:var(--txt);font-family:var(--ff);"
             oninput="catAddSearch(this.value)" autocomplete="off">
           <div id="cat-add-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
         </div>
+        <!-- Free text (text/routing type) -->
+        <input id="in-freetext" placeholder="New routing entry…" style="display:none;flex:1;max-width:400px;font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);color:var(--txt);font-family:var(--ff);"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();addCatItemManual();}" autocomplete="off">
         <input id="in-diff" placeholder="Diff (***)" style="width:80px;display:none;">
         <button class="btn-add" onclick="addCatItemManual()">+ Add</button>
         <button class="btn-add" onclick="showAddCatItem()" style="background:transparent;color:var(--txt3);border-color:var(--bdr);">✕</button>
@@ -623,7 +627,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <div style="padding:12px 20px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:flex;gap:8px;align-items:center;">
       <input id="ap-ed-search" placeholder="Enter ICAO, IATA or city name…" 
         style="flex:1;font-size:13px;padding:7px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);"
-        oninput="apEdSearchInput(this.value)" onkeydown="if(event.key==='Enter')apEdDoSearch()">
+        oninput="apEdSearchInput(this.value)" onkeydown="if(event.key==='Enter')apEdDoSearch()"
+        onblur="setTimeout(function(){document.getElementById('ap-ed-suggestions').style.display='none';},200)">
       <button onclick="apEdDoSearch()" style="font-size:13px;padding:7px 18px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Search</button>
     </div>
     <!-- Search suggestions -->
@@ -1484,9 +1489,8 @@ function renderCatTable() {
     </tbody></table>`;
     addRow.style.display = 'flex';
     ['in-icao','in-iata','in-airport','in-diff','in-region2'].forEach(id => { const el=document.getElementById(id); if(el) el.style.display='none'; });
-    const inSearch = document.getElementById('in-search-wrap'); if(inSearch) inSearch.style.display='none';
-    document.getElementById('in-city').placeholder = 'New routing entry (free text)';
-    document.getElementById('in-city').style.width = '340px';
+    const inSearchWrap = document.getElementById('in-search-wrap'); if(inSearchWrap) inSearchWrap.style.display='none';
+    const inFreetext = document.getElementById('in-freetext'); if(inFreetext) { inFreetext.style.display=''; inFreetext.value=''; setTimeout(()=>inFreetext.focus(),50); }
   }
   else if (cat.type === 'list-simple') {
     area.innerHTML = `<table class="data-tbl"><thead><tr>
@@ -1535,6 +1539,8 @@ function renderCatTable() {
     ['in-iata','in-airport','in-region2'].forEach(id => document.getElementById(id).style.display='none');
     document.getElementById('in-city').placeholder = 'City (optional)';
     document.getElementById('in-city').style.width = '130px';
+    const sw3 = document.getElementById('in-search-wrap'); if(sw3) sw3.style.display='';
+    const ft3 = document.getElementById('in-freetext'); if(ft3) ft3.style.display='none';
   }
 }
 
@@ -1597,6 +1603,19 @@ function catAddSelectAp(e, code) {
 
 function addCatItemManual() {
   const cat = CATEGORIES.find(c => c.id === activeCatId); if (!cat) return;
+  // Free text type (routings)
+  if (cat.type === 'text') {
+    const ft = document.getElementById('in-freetext');
+    const txt = (ft?.value || '').trim();
+    if (!txt) return;
+    cat.items.push({ name: txt });
+    if (ft) ft.value = '';
+    ft?.focus();
+    saveCategory(cat);
+    renderCatTable();
+    return;
+  }
+  // Airport types
   if (!catAddSelectedAp) {
     const val = (document.getElementById('in-search')?.value || '').trim().toUpperCase().split(/[\s\/—]+/)[0];
     catAddSelectedAp = schedByCode[val] || null;
@@ -1608,8 +1627,6 @@ function addCatItemManual() {
     cat.items.push({ icao: ap[0], diff, region: ap[5] || '' });
   } else if (cat.type === 'list-simple') {
     cat.items.push({ icao: ap[0], iata: ap[1]||'', name: ap[7]||ap[2], country: countryName(ap[6]) });
-  } else if (cat.type === 'text') {
-    cat.items.push({ name: ap[7]||ap[2] });
   }
   catAddSelectedAp = null;
   const inp = document.getElementById('in-search'); if (inp) inp.value = '';
@@ -1806,12 +1823,12 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'logbook' || view === 'calc');
+  const isFullScreen = (view === 'roster' || view === 'calc');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
   if (view === 'categories') renderCatView();
-  if (view === 'logbook') renderLogbook();
+  if (view === 'logbook') { renderLogbook(); if (rosterMap) { clearRosterLayers(); drawLogbookLines(); } }
   if (view === 'dashboard' && leafletMap) {
     setTimeout(() => leafletMap.invalidateSize(), 100);
   }
@@ -2773,7 +2790,7 @@ function apEdSearchInput(val) {
   }).slice(0,8);
   if (!matches.length) { sug.style.display = 'none'; return; }
   sug.innerHTML = matches.map(function(ap) {
-    return '<div onmousedown="apEdSelectAp(' + JSON.stringify(ap[0]) + ')" style="padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:10px;align-items:center;">'
+    return '<div onmousedown="event.preventDefault();apEdSelectAp(' + JSON.stringify(ap[0]) + ')" style="padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:10px;align-items:center;">'
       + '<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--acc2);min-width:52px;">' + ap[0] + '</span>'
       + '<span style="font-size:11px;color:var(--blue);min-width:36px;">' + (ap[1]||'') + '</span>'
       + '<span style="font-size:12px;color:var(--txt);">' + (ap[7]||ap[2]) + '</span>'
@@ -2858,8 +2875,10 @@ async function apEdSave() {
   }
 
   btn.textContent = '💾 Save Edits to Airport Base Data'; btn.disabled = false;
-  // Reload left column to show new current values
-  apEdSelectAp(ap[0]);
+  // Reload using new ICAO in case it changed, show updated values
+  var newIcao = (rec.icao && rec.icao !== ap[0]) ? rec.icao : ap[0];
+  apEdCurrentAp = schedByCode[newIcao] || ap;
+  apEdSelectAp(apEdCurrentAp[0]);
 }
 
 // Close on backdrop click
