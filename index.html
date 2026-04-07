@@ -75,7 +75,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font
 .results-area{flex:1;overflow-y:auto;padding:12px 14px;}
 .results-row-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin:10px 0 6px;display:flex;align-items:center;gap:6px;}
 .results-row-label::after{content:'';flex:1;height:1px;background:var(--bdr);}
-.results-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px;margin-bottom:4px;}
+.results-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:7px;margin-bottom:10px;}
 .res-card{background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);padding:10px 12px;cursor:default;transition:border-color .15s;}
 .res-card:hover{border-color:var(--bdr2);}
 .res-cat{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.09em;display:flex;align-items:center;gap:4px;margin-bottom:6px;}
@@ -387,16 +387,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input type="file" id="cat-xlsx-input" accept=".xlsx" style="display:none;" onchange="importXlsxForActiveCat(this)">
         <span class="row-count" id="row-count"></span>
       </div>
-      <div class="table-area" id="cat-table-area"></div>
-      <div class="add-row" id="cat-add-row" style="display:none;">
-        <input id="in-icao" placeholder="ICAO" style="width:65px;" maxlength="4">
-        <input id="in-iata" placeholder="IATA" style="width:55px;" maxlength="4">
-        <input id="in-city" placeholder="City / Name" style="width:130px;">
-        <input id="in-airport" placeholder="Airport name" style="width:175px;">
-        <input id="in-diff" placeholder="***" style="width:50px;">
-        <input id="in-region2" placeholder="Region" style="width:100px;">
-        <button class="btn-add" onclick="addCatItem()">+ Add</button>
+      <!-- Add row: appears ABOVE table when Add airport is clicked -->
+      <div class="add-row" id="cat-add-row" style="display:none;border-bottom:1px solid var(--bdr);background:var(--surf);">
+        <div style="position:relative;flex:1;max-width:340px;">
+          <input id="in-search" placeholder="Type ICAO, IATA or city name…" style="width:100%;font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);color:var(--txt);font-family:var(--ff);"
+            oninput="catAddSearch(this.value)" autocomplete="off">
+          <div id="cat-add-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+        </div>
+        <input id="in-diff" placeholder="Diff (***)" style="width:80px;display:none;">
+        <button class="btn-add" onclick="addCatItemManual()">+ Add</button>
+        <button class="btn-add" onclick="showAddCatItem()" style="background:transparent;color:var(--txt3);border-color:var(--bdr);">✕</button>
       </div>
+      <div class="table-area" id="cat-table-area"></div>
     </div>
 
     <!-- DATA / IMPORT -->
@@ -474,6 +476,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input type="file" id="lb-xlsx-input" accept=".xlsx" style="display:none;" onchange="importLogbookXlsx(this)">
         <span id="lb-status" style="font-size:11px;color:var(--txt3);"></span>
         <span id="lb-count" style="font-size:11px;color:var(--txt2);font-weight:600;"></span>
+      </div>
+      <!-- Inline add-leg row -->
+      <div id="lb-add-row" style="display:none;padding:6px 14px;background:var(--surf);border-bottom:1px solid var(--bdr);display:none;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="lb-in-dep" placeholder="Dep ICAO" maxlength="4" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+        <input id="lb-in-arr" placeholder="Arr ICAO" maxlength="4" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+        <input id="lb-in-airline" placeholder="Airline" maxlength="5" oninput="this.value=this.value.toUpperCase()" style="width:70px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+        <input id="lb-in-aircraft" placeholder="Aircraft" maxlength="8" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+        <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
+        <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
       </div>
       <div class="logbook-body">
         <table class="lb-tbl">
@@ -858,7 +869,7 @@ function selectDepart(code) {
   const iata = ap[1] ? ` / ${ap[1]}` : '';
   const city = ap[7] || ap[2];
   document.getElementById('depart-input').value = `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
-  document.getElementById('depart-resolved').textContent = `${ap[0]}${iata} · ${city} · ${countryName(ap[6])}`;
+  document.getElementById('depart-resolved').textContent = ''; // hide after selection
   document.getElementById('depart-suggestions').style.display = 'none';
   // Also update first leg dep if roster exists
   if (legs.length > 0 && !legs[0].dep) {
@@ -910,9 +921,12 @@ function rollAll() {
       result.diff = item.diff || '';
       if (db) {
         result.name = db[2];
-        result.city = db[7] || db[2]; // FIX 4: municipality
+        result.city = db[7] || db[2];
         result.country = countryName(db[6]);
         result.lat = db[3]; result.lon = db[4];
+      } else {
+        result.city = item.icao || '';
+        result.country = '';
       }
     }
     else if (cat.type === 'list-simple') {
@@ -929,10 +943,17 @@ function rollAll() {
       const item = pool[Math.floor(Math.random() * pool.length)];
       const db = item.icao ? (schedByCode[item.icao] || null) : null;
       result.icao = item.icao || '';
-      result.city = item.name || (db ? db[7] || db[2] : '');
-      result.country = item.country || (db ? countryName(db[6]) : '');
+      // For formula1: show DB city/country, keep item.name as theme badge only
+      // For other list-simple: item.name IS the city display name
+      if (cat.id === 'formula1') {
+        result.city = db ? db[7] || db[2] : item.icao || '';
+        result.country = db ? countryName(db[6]) : '';
+      } else {
+        result.city = item.name || (db ? db[7] || db[2] : '');
+        result.country = item.country || (db ? countryName(db[6]) : '');
+      }
       result.name = db ? db[2] : item.name || '';
-      result.itemName = item.name || '';  // for badge display (e.g. F1 team/race name)
+      result.itemName = item.name || '';  // badge: F1 theme or list-simple name
       if (db) { result.lat = db[3]; result.lon = db[4]; }
     }
     else if (cat.type === 'text') {
@@ -1285,31 +1306,100 @@ function deleteCatItemByRef(catId, ref) {
 function showAddCatItem() {
   const row = document.getElementById('cat-add-row');
   if (!row) return;
-  row.style.display = row.style.display === 'none' ? 'flex' : 'none';
+  const isHidden = row.style.display === 'none' || !row.style.display;
+  row.style.display = isHidden ? 'flex' : 'none';
+  if (isHidden) setTimeout(() => document.getElementById('in-search')?.focus(), 50);
+}
+
+let catAddSelectedAp = null;
+
+function catAddSearch(val) {
+  const q = val.trim().toUpperCase();
+  const box = document.getElementById('cat-add-suggest');
+  if (!box) return;
+  if (q.length < 2) { box.style.display = 'none'; catAddSelectedAp = null; return; }
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
+    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
+  ).slice(0, 10);
+  if (!hits.length) { box.style.display = 'none'; return; }
+  box.innerHTML = hits.map(ap =>
+    `<div class="leg-sug-item" onmousedown="catAddSelectAp(event,'${ap[0]}')">
+      <span class="leg-sug-icao">${ap[0]}</span>
+      ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+      ${ap[7]||ap[2]}
+      <span style="color:var(--txt3);font-size:10px;margin-left:4px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function catAddSelectAp(e, code) {
+  e.preventDefault();
+  const ap = schedByCode[code]; if (!ap) return;
+  catAddSelectedAp = ap;
+  const inp = document.getElementById('in-search');
+  if (inp) inp.value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}, ${countryName(ap[6])}`;
+  const box = document.getElementById('cat-add-suggest');
+  if (box) box.style.display = 'none';
+}
+
+function addCatItemManual() {
+  const cat = CATEGORIES.find(c => c.id === activeCatId); if (!cat) return;
+  if (!catAddSelectedAp) {
+    const val = (document.getElementById('in-search')?.value || '').trim().toUpperCase().split(/[\s\/—]+/)[0];
+    catAddSelectedAp = schedByCode[val] || null;
+    if (!catAddSelectedAp) { alert('Please select an airport from the list first'); return; }
+  }
+  const ap = catAddSelectedAp;
+  const diff = (document.getElementById('in-diff')?.value || '').trim();
+  if (cat.type === 'list') {
+    cat.items.push({ icao: ap[0], diff, region: ap[5] || '' });
+  } else if (cat.type === 'list-simple') {
+    cat.items.push({ icao: ap[0], iata: ap[1]||'', name: ap[7]||ap[2], country: countryName(ap[6]) });
+  } else if (cat.type === 'text') {
+    cat.items.push({ name: ap[7]||ap[2] });
+  }
+  catAddSelectedAp = null;
+  const inp = document.getElementById('in-search'); if (inp) inp.value = '';
+  saveCategory(cat);
+  renderCatTable();
 }
 
 function showAddLogbookRow() {
-  // Simple prompt-based add for logbook
-  const dep = prompt('Departure ICAO:');
-  if (!dep) return;
-  const arr = prompt('Arrival ICAO:');
-  if (!arr) return;
-  const airline = prompt('Airline ICAO (optional):') || '';
-  const aircraft = prompt('Aircraft (optional):') || '';
-  const depDb = schedByCode[dep.toUpperCase()];
-  const arrDb = schedByCode[arr.toUpperCase()];
+  const row = document.getElementById('lb-add-row');
+  if (!row) return;
+  const isHidden = row.style.display === 'none' || !row.style.display;
+  row.style.display = isHidden ? 'flex' : 'none';
+  if (isHidden) setTimeout(() => document.getElementById('lb-in-dep')?.focus(), 50);
+}
+
+function addLogbookLeg() {
+  const dep = (document.getElementById('lb-in-dep')?.value || '').trim().toUpperCase();
+  const arr = (document.getElementById('lb-in-arr')?.value || '').trim().toUpperCase();
+  const airline = (document.getElementById('lb-in-airline')?.value || '').trim().toUpperCase();
+  const aircraft = (document.getElementById('lb-in-aircraft')?.value || '').trim().toUpperCase();
+  if (!dep || !arr) { alert('Please enter departure and arrival ICAO codes'); return; }
+  const depDb = schedByCode[dep];
+  const arrDb = schedByCode[arr];
   logbookFlights.push({
     dep: depDb ? depDb[7]||depDb[2] : dep,
-    dep_icao: dep.toUpperCase(), dep_iata: depDb ? depDb[1]||'' : '',
-    dep_lat: depDb ? depDb[3] : null, dep_lon: depDb ? depDb[4] : null,
+    dep_icao: dep, dep_iata: depDb?depDb[1]||'':'',
+    dep_lat: depDb?depDb[3]:null, dep_lon: depDb?depDb[4]:null,
     arr: arrDb ? arrDb[7]||arrDb[2] : arr,
-    arr_icao: arr.toUpperCase(), arr_iata: arrDb ? arrDb[1]||'' : '',
-    arr_lat: arrDb ? arrDb[3] : null, arr_lon: arrDb ? arrDb[4] : null,
+    arr_icao: arr, arr_iata: arrDb?arrDb[1]||'':'',
+    arr_lat: arrDb?arrDb[3]:null, arr_lon: arrDb?arrDb[4]:null,
     airline, aircraft,
+  });
+  ['lb-in-dep','lb-in-arr','lb-in-airline','lb-in-aircraft'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
   });
   saveLogbook();
   renderLogbook();
 }
+
+
 
 let logbookFilterText = '';
 function applyLogbookFilter() {
@@ -1516,7 +1606,37 @@ function airlineLogoHtml(icao) {
         onerror="this.parentNode.innerHTML='<div class=airline-logo-txt>${code}</div>'">
     </div>`;
   }
-  return `<div class="airline-logo-wrap"><div class="airline-logo-txt">${name}</div></div>`;
+  // For unknown airlines, show name and try to fetch from Wikipedia
+  return `<div class="airline-logo-wrap" id="logo-wiki-${code}">
+    <div class="airline-logo-txt" style="font-size:10px;color:var(--txt2);">${name}</div>
+  </div>`;
+}
+
+// Try to fetch airline logo from Wikipedia for unknown airlines
+const logoCache = {};
+async function fetchAirlineLogo(code, containerId) {
+  if (logoCache[code]) {
+    const el = document.getElementById(containerId);
+    if (el && logoCache[code] !== 'none') {
+      el.innerHTML = `<img src="${logoCache[code]}" class="airline-logo-img" alt="${code}" title="${AIRLINE_NAMES[code]||code}" onerror="this.style.display='none'">`;
+    }
+    return;
+  }
+  // Search Wikipedia for the airline
+  try {
+    const searchName = AIRLINE_NAMES[code] ? AIRLINE_NAMES[code] + ' airline' : code + ' airline ICAO';
+    const searchUrl = `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(AIRLINE_NAMES[code] || code)}`;
+    const resp = await fetch(searchUrl);
+    if (!resp.ok) { logoCache[code] = 'none'; return; }
+    const data = await resp.json();
+    if (data.thumbnail?.source) {
+      logoCache[code] = data.thumbnail.source;
+      const el = document.getElementById(containerId);
+      if (el) el.innerHTML = `<img src="${data.thumbnail.source}" class="airline-logo-img" alt="${code}" title="${AIRLINE_NAMES[code]||code}" onerror="this.style.display='none'">`;
+    } else {
+      logoCache[code] = 'none';
+    }
+  } catch(e) { logoCache[code] = 'none'; }
 }
 
 // ── Airport formatting ──
@@ -1765,16 +1885,33 @@ function updateFlightConnectionsBtn() {
   if (!btn) return;
   const dep = legs[0]?.dep;
   const arr = legs[legs.length-1]?.arr;
-  const depSlug = dep ? (dep[7]||dep[2]).toLowerCase().replace(/[^a-z0-9]/g,'-') + '-' + dep[0].toLowerCase() : '';
-  btn.href = dep
-    ? 'https://www.flightconnections.com/flights-from-' + depSlug
-    : 'https://www.flightconnections.com/';
+  // FlightConnections uses IATA codes in URL: flightconnections.com/?from=FLR&to=FIH
+  const depIata = dep ? (dep[1] || dep[0]) : '';
+  const arrIata = arr ? (arr[1] || arr[0]) : '';
+  if (depIata && arrIata) {
+    btn.dataset.dep = depIata;
+    btn.dataset.arr = arrIata;
+  } else if (depIata) {
+    btn.dataset.dep = depIata;
+    btn.dataset.arr = '';
+  }
 }
 
 function openFlightConnections(e) {
   e.preventDefault();
   const btn = document.getElementById('fc-btn');
-  window.open(btn?.href || 'https://www.flightconnections.com/', '_blank');
+  const dep = btn?.dataset.dep || '';
+  const arr = btn?.dataset.arr || '';
+  // Open FlightConnections and use postMessage or URL hash to pre-fill
+  // The correct URL format for FlightConnections search
+  let url = 'https://www.flightconnections.com/';
+  if (dep && arr) {
+    // FlightConnections supports ?from=IATA&to=IATA format
+    url = `https://www.flightconnections.com/?origin=${dep}&destination=${arr}`;
+  } else if (dep) {
+    url = `https://www.flightconnections.com/?origin=${dep}`;
+  }
+  window.open(url, '_blank');
 }
 
 // ── Roster actions ──
