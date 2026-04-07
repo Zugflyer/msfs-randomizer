@@ -238,6 +238,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 /* ── ROSTER RETURN ARROW ── */
 .roster-back-btn{font-size:11px;padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);display:flex;align-items:center;gap:5px;}
 .roster-back-btn:hover{background:var(--surf2);color:var(--txt);}
+/* Full-screen roster - hide map column */
+.main.roster-active .map-col{display:none;}
+.main.roster-active .right-panel{flex:1;}
 
 /* ── KNOWN AIRLINE LOGOS ── */
 
@@ -1345,6 +1348,9 @@ function switchView(view) {
   });
   if (view==='categories') renderCatView();
   if (view==='dashboard' && leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
+  // Toggle full-screen for roster
+  const mainEl = document.querySelector('.main');
+  if (mainEl) mainEl.classList.toggle('roster-active', view==='roster'||view==='logbook');
   if (view==='roster') { setTimeout(() => { if(rosterMap) rosterMap.invalidateSize(); else initRosterMap(); }, 100); }
   if (view==='logbook') renderLogbook();
 }
@@ -1428,7 +1434,7 @@ function renderLegs() {
     const depHtml = isFirst && leg.dep
       ? airportBox(leg.dep, true)
       : `<div style="position:relative;">
-          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.dep ? leg.dep[0] : ''}" 
+          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.dep ? formatAirportForInput(leg.dep) : ''}" 
             data-leg="${i}" data-side="dep" oninput="onLegInput(this)" onfocus="onLegInput(this)">
           <div class="leg-suggest"></div>
         </div>`;
@@ -1437,7 +1443,7 @@ function renderLegs() {
     const arrHtml = isLast && leg.arr
       ? airportBox(leg.arr, true)
       : `<div style="position:relative;">
-          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.arr ? leg.arr[0] : ''}"
+          <input class="leg-input" placeholder="Type ICAO or city…" value="${leg.arr ? formatAirportForInput(leg.arr) : ''}"
             data-leg="${i}" data-side="arr" oninput="onLegInput(this)" onfocus="onLegInput(this)">
           <div class="leg-suggest"></div>
         </div>`;
@@ -1456,7 +1462,7 @@ function renderLegs() {
         <div class="leg-label">Airline ICAO</div>
         <input class="leg-sm-input" placeholder="e.g. DLH" value="${leg.airline||''}" 
           data-leg="${i}" data-field="airline" oninput="onLegFieldInput(this);updateAirlineLogo(this,${i})" style="width:78px;text-transform:uppercase;">
-        <div id="logo-${i}" class="airline-logo-wrap" style="margin-top:3px;display:${leg.airline?'flex':'none'}">
+        <div id="logo-${i}" class="airline-logo-wrap" style="margin-top:3px;">
           ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
         </div>
       </div>
@@ -1473,6 +1479,13 @@ function renderLegs() {
   updateRosterLines();
 }
 
+function formatAirportForInput(ap) {
+  if (!ap) return '';
+  const iata = ap[1] ? ` / ${ap[1]}` : '';
+  const city = ap[7] || ap[2];
+  return `${ap[0]}${iata} — ${city}, ${countryName(ap[6])}`;
+}
+
 function onLegInput(inputEl) {
   const idx = parseInt(inputEl.dataset.leg);
   const side = inputEl.dataset.side;
@@ -1480,14 +1493,17 @@ function onLegInput(inputEl) {
   const results = legAirportSearch(q);
   showLegSuggest(inputEl, results, (ap) => {
     legs[idx][side] = ap;
-    // If setting arr of a non-last leg, cascade to next dep
+    // Cascade: if setting arr of non-last leg → next dep gets same airport
     if (side === 'arr' && idx < legs.length - 1) {
       legs[idx+1].dep = ap;
     }
-    // If setting dep of non-first leg, update prev arr
+    // Cascade: if setting dep of non-first leg → prev arr gets same airport
     if (side === 'dep' && idx > 0) {
       legs[idx-1].arr = ap;
     }
+    // Update the input field immediately with full format
+    inputEl.value = formatAirportForInput(ap);
+    // Re-render all legs to show cascaded updates
     renderLegs();
   });
 }
@@ -1577,12 +1593,7 @@ function updateAirlineLogo(inputEl, idx) {
   legs[idx].airline = code;
   const logoWrap = document.getElementById('logo-'+idx);
   if (logoWrap) {
-    if (code.length >= 2) {
-      logoWrap.style.display = 'flex';
-      logoWrap.innerHTML = airlineLogoHtml(code);
-    } else {
-      logoWrap.style.display = 'none';
-    }
+    logoWrap.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '';
   }
 }
 
@@ -1863,9 +1874,18 @@ function openInRoster(catId) {
   if (!r.icao && !r.text) return;
   if (r.text) return; // routing/text only - not plannable yet
   
-  const arrAp = r.icao ? (schedByCode[r.icao] || DB_SCHED.find(ap => ap[0] === r.icao) || null) : null;
-  const depAp = departAirport || null;
+  // Find arr airport from DB - check schedByCode first, then full scan
+  let arrAp = null;
+  if (r.icao) {
+    arrAp = schedByCode[r.icao] || null;
+    if (!arrAp) arrAp = DB_SCHED.find(ap => ap[0] === r.icao) || null;
+  }
+  // For coord results, use the nearest airport that was found
+  if (!arrAp && r.lat !== null && r.lon !== null) {
+    arrAp = nearestScheduled(r.lat, r.lon, null);
+  }
   
+  const depAp = departAirport || null;
   initRosterFromDashboard(depAp, arrAp);
   switchToMain('roster');
 }
