@@ -256,6 +256,26 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .roster-header-title{font-size:13px;font-weight:600;color:var(--txt);}
 .roster-selected-info{font-size:11px;color:var(--txt2);margin-left:auto;}
 
+/* ── ROSTER: single container frame ── */
+.legs-frame{border:1px solid var(--bdr2);border-radius:var(--r);padding:10px;background:var(--surf);margin-bottom:10px;}
+.leg-row{display:flex;align-items:flex-start;gap:8px;padding:8px 6px;border-bottom:1px solid var(--bdr);position:relative;}
+.leg-row:last-child{border-bottom:none;}
+/* ── Block time ── */
+.blocktime-box{display:flex;flex-direction:column;gap:2px;min-width:60px;flex-shrink:0;}
+.blocktime-val{font-size:13px;font-weight:600;color:#d29922;font-family:'SF Mono','Courier New',monospace;padding:4px 8px;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:var(--r);text-align:center;cursor:pointer;min-height:30px;display:flex;align-items:center;justify-content:center;}
+.blocktime-val:hover{background:rgba(210,153,34,.18);}
+.blocktime-loading{font-size:10px;color:var(--txt3);text-align:center;margin-top:2px;}
+/* ── External links panel ── */
+.ext-panel{display:flex;flex-direction:column;gap:8px;min-width:160px;flex-shrink:0;align-self:flex-start;padding:10px;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);}
+.ext-btn{display:flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--surf2);cursor:pointer;text-decoration:none;transition:background .15s;}
+.ext-btn:hover{background:var(--surf3);}
+.ext-btn img{max-height:28px;max-width:130px;object-fit:contain;}
+/* ── Roster main layout ── */
+.roster-content{display:flex;gap:12px;align-items:flex-start;}
+.roster-legs-col{flex:1;min-width:0;}
+/* ── ap-iata color ── */
+.ap-iata{color:var(--blue);}
+
 /* ── ROSTER SELECTED AIRPORT TAG ── */
 .selected-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(125,94,232,.15);border:1px solid var(--acc);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--acc2);cursor:pointer;}
 .selected-tag:hover{background:rgba(125,94,232,.25);}
@@ -337,17 +357,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
       <!-- Results -->
       <div class="results-area" id="results-area">
-        <div class="results-row-label">Difficult Airports &nbsp;·&nbsp; Interesting Airports &nbsp;·&nbsp; Routings</div>
         <div class="results-row" id="row-r1"></div>
-        <div class="results-row-label">Mountain Climbing &nbsp;·&nbsp; Formula 1</div>
         <div class="results-row" id="row-r2"></div>
-        <div class="results-row-label">Random World &nbsp;·&nbsp; Random ICAO &nbsp;·&nbsp; Random Non-Scheduled</div>
+        <div class="row-divider"></div>
         <div class="results-row" id="row-r3"></div>
-        <div class="results-row-label">Random Europe &nbsp;·&nbsp; Random North America &nbsp;·&nbsp; Random South America &nbsp;·&nbsp; Random Oceania</div>
         <div class="results-row" id="row-r4"></div>
-        <div class="results-row-label">British Isles &nbsp;·&nbsp; Nordics &nbsp;·&nbsp; Central Europe</div>
+        <div class="row-divider"></div>
         <div class="results-row" id="row-r5"></div>
-        <div class="results-row-label">France / Belux &nbsp;·&nbsp; Iberia &nbsp;·&nbsp; Eastern Mediterranean</div>
         <div class="results-row" id="row-r6"></div>
       </div>
     </div>
@@ -410,14 +426,31 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <div id="view-roster" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
       <div class="roster-top">
         <div class="sec-label-sm">Flight Planner</div>
-        <div id="legs-container"></div>
-        <div class="roster-actions">
-          <button class="btn-addleg" onclick="addLeg()">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-            Add Leg
-          </button>
-          <button class="btn-saveroster" onclick="saveRoster()">✓ Save Roster</button>
-          <button class="btn-addleg" onclick="clearRoster()" style="color:var(--red);border-color:#3a1a1a;">Clear</button>
+        <div class="roster-content">
+          <div class="roster-legs-col">
+            <div class="legs-frame" id="legs-container"></div>
+            <div class="roster-actions">
+              <button class="btn-addleg" onclick="addLeg()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                Add Leg
+              </button>
+              <button class="btn-saveroster" onclick="saveRoster()">✓ Save Roster</button>
+              <button class="btn-addleg" onclick="clearRoster()" style="color:var(--red);border-color:#3a1a1a;">Clear</button>
+            </div>
+          </div>
+          <div class="ext-panel">
+            <div style="font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;">External Links</div>
+            <a id="fc-btn" class="ext-btn" href="#" target="_blank" title="Open in FlightConnections" onclick="openFlightConnections(event)">
+              <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8e/FlightConnections_logo.png/200px-FlightConnections_logo.png"
+                onerror="this.outerHTML='<span style='font-size:11px;font-weight:700;color:#1a73e8;'>✈ FlightConnections</span>'"
+                alt="FlightConnections">
+            </a>
+            <a class="ext-btn" href="https://www.expertflyer.com/" target="_blank" title="Open ExpertFlyer">
+              <img src="https://www.expertflyer.com/img/logo.svg"
+                onerror="this.outerHTML='<span style='font-size:11px;font-weight:700;color:#2563eb;'>ExpertFlyer</span>'"
+                alt="ExpertFlyer" style="max-height:24px;">
+            </a>
+          </div>
         </div>
       </div>
       <div class="roster-map-wrap">
@@ -579,17 +612,7 @@ let CATEGORIES = [
   {name:'Lufthansa B747 → La Paz'},{name:'UTA B747 → Nouméa'},{name:'Pan Am 1 round-the-world'},
   {name:'TBD'},{name:'TBD'},{name:'TBD'},
 ]},
-{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'text',items:[
-  {name:'Zürich – Alfa Romeo // Bologna – Ferrari'},{name:'Bologna – AlphaTauri // Ibaraki – Honda'},
-  {name:'Heathrow – Renault // Orly – Renault'},{name:'Luton/Birmingham – Aston Martin'},
-  {name:'Heathrow – McLaren // Birmingham – Mercedes'},{name:'Luton – Red Bull // Salzburg – Red Bull'},
-  {name:'Bahrain race'},{name:'Imola race'},{name:'Portimao race'},{name:'Barcelona race'},
-  {name:'Monaco race'},{name:'Baku race'},{name:'Silverstone race'},{name:'Hungaroring'},
-  {name:'Spa-Francorchamps'},{name:'Zandvoort race'},{name:'Monza race'},{name:'Singapore race'},
-  {name:'Suzuka race'},{name:'Austin race'},{name:'Mexico City race'},{name:'São Paulo race'},
-  {name:'Melbourne race'},{name:'Jeddah race'},{name:'Abu Dhabi race'},{name:'Miami race'},
-  {name:'Nürburgring'},{name:'Shanghai race'},{name:'Montreal race'},
-]},
+{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[{"icao":"EGBB","name":"Alpine-Mercedes"},{"icao":"EGGW","name":"Aston Martin Aramco-Honda"},{"icao":"EGLL","name":"Atlassian Williams-Mercedes"},{"icao":"LSZH","name":"Audi"},{"icao":"KIND","name":"Cadillac-Ferrari"},{"icao":"EGLL","name":"McLaren-Mercedes"},{"icao":"EGGW","name":"Mercedes"},{"icao":"EGGW","name":"Red Bull Racing-Red Bull Ford"},{"icao":"LIPE","name":"Ferrari"},{"icao":"EGGW","name":"Haas-Ferrari"},{"icao":"LIPE","name":"Racing Bulls-Red Bull Ford"},{"icao":"YMML","name":"Australian Grand Prix"},{"icao":"ZSPD","name":"Chinese Grand Prix"},{"icao":"RJGG","name":"Japanese Grand Prix"},{"icao":"KMIA","name":"Miami Grand Prix"},{"icao":"CYUL","name":"Canadian Grand Prix"},{"icao":"LFMN","name":"Monaco Grand Prix"},{"icao":"LEBL","name":"Barcelona-Catalunya Grand Prix"},{"icao":"LOWG","name":"Austrian Grand Prix"},{"icao":"EGGW","name":"British Grand Prix"},{"icao":"EBLG","name":"Belgian Grand Prix"},{"icao":"LHBP","name":"Hungarian Grand Prix"},{"icao":"EHAM","name":"Dutch Grand Prix"},{"icao":"LIML","name":"Italian Grand Prix"},{"icao":"LEMD","name":"Spanish Grand Prix"},{"icao":"UBBB","name":"Azerbaijan Grand Prix"},{"icao":"WSSS","name":"Singapore Grand Prix"},{"icao":"KAUS","name":"United States Grand Prix"},{"icao":"MMMX","name":"Mexico City Grand Prix"},{"icao":"SBGR","name":"São Paulo Grand Prix"},{"icao":"KLAS","name":"Las Vegas Grand Prix"},{"icao":"OTHH","name":"Qatar Grand Prix"},{"icao":"OMAA","name":"Abu Dhabi Grand Prix"}]]},
 {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
 {id:'rand_nonsched',name:'Random Non-Scheduled',group:'randoms',colorIdx:6,type:'rand-nonsched',items:[]},
 {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
@@ -899,10 +922,10 @@ function rollAll() {
       const item = pool[Math.floor(Math.random() * pool.length)];
       const db = item.icao ? (schedByCode[item.icao] || null) : null;
       result.icao = item.icao || '';
-      // FIX 3: use user-provided name (preserves special chars like ø, ä etc)
       result.city = item.name || (db ? db[7] || db[2] : '');
       result.country = item.country || (db ? countryName(db[6]) : '');
       result.name = db ? db[2] : item.name || '';
+      result.itemName = item.name || '';  // for badge display (e.g. F1 team/race name)
       if (db) { result.lat = db[3]; result.lon = db[4]; }
     }
     else if (cat.type === 'text') {
@@ -984,6 +1007,8 @@ function renderResults() {
         <div class="res-country">${result.country}</div>`;
       if (result.coord) inner = `<div class="res-coord">${result.coordLat}°, ${result.coordLon}°</div>` + inner;
       if (result.diff && result.diff !== '') inner += `<div class="res-badge">${result.diff}</div>`;
+      // For list-simple categories (like F1), show the item name as orange label
+      if (result.itemName) inner += `<div class="res-badge" style="background:rgba(240,136,62,.18);color:#f0883e;border-color:#f0883e;">${result.itemName}</div>`;
     }
     return `<div class="res-card" onclick="openInRoster('${cat.id}')" style="cursor:pointer;" title="Click to plan this flight"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
   }
@@ -1317,14 +1342,26 @@ function exportJSON() {
 // ═══════════════════════════════════════════════════════════
 // VIEW SWITCHING
 // ═══════════════════════════════════════════════════════════
+// Bottom nav: switch between main views (Next Flight = dashboard, or Roster)
+let lastMainView = 'dashboard'; // 'dashboard' or 'roster'
 
+function switchToMain(mainView) {
+  lastMainView = mainView;
+  // Update bottom nav active state
+  ['dashboard','roster','logbook','categories','data'].forEach(v => {
+    const btn = document.getElementById('bn-'+v);
+    if (btn) btn.className = 'bn-btn' + (v===mainView?' active':'');
+  });
+  
+  if (mainView === 'dashboard') {
+    switchView('dashboard');
+  } else if (mainView === 'roster') {
+    switchView('roster');
+  } else {
+    switchView(mainView);
+  }
+}
 
-const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
-
-// ═══════════════════════════════════════════════════════════
-// BOTTOM NAV + VIEW SWITCHING (replaces old switchView)
-// ═══════════════════════════════════════════════════════════
-let lastMainView = 'dashboard';
 
 function switchToMain(target) {
   lastMainView = target;
@@ -1365,6 +1402,8 @@ function switchView(view) {
     }, 120);
   }
 }
+
+const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
 
 // ═══════════════════════════════════════════════════════════
 // ROSTER STATE
@@ -1534,7 +1573,6 @@ function buildSuggestBox(inputEl, onSelect) {
   }, true);
 }
 
-// ── Render legs ──
 function renderLegs() {
   const container = document.getElementById('legs-container');
   if (!container) return;
@@ -1546,12 +1584,12 @@ function renderLegs() {
     const row = document.createElement('div');
     row.className = 'leg-row';
 
-    // DEP: first leg always shows prefilled box; others show input
-    const depSection = document.createElement('div');
-    depSection.className = 'leg-col';
-    depSection.innerHTML = '<div class="leg-label">Departure</div>';
+    // ── Departure ──
+    const depCol = document.createElement('div');
+    depCol.className = 'leg-col';
+    depCol.innerHTML = '<div class="leg-label">Departure</div>';
     if (isFirst && leg.dep) {
-      depSection.innerHTML += apBox(leg.dep);
+      depCol.innerHTML += apBox(leg.dep);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
@@ -1560,22 +1598,21 @@ function renderLegs() {
       inp.placeholder = 'Type ICAO or city…';
       inp.value = leg.dep ? formatAp(leg.dep) : '';
       wrap.appendChild(inp);
-      depSection.appendChild(wrap);
+      depCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
         legs[i].dep = ap;
         if (i > 0) legs[i-1].arr = ap;
-        rerenderLeg(i);
-        if (i > 0) rerenderLeg(i-1);
         updateRosterLines();
+        renderLegs();
       });
     }
 
-    // ARR: last leg shows prefilled box; others show input
-    const arrSection = document.createElement('div');
-    arrSection.className = 'leg-col';
-    arrSection.innerHTML = '<div class="leg-label">Destination</div>';
+    // ── Destination ──
+    const arrCol = document.createElement('div');
+    arrCol.className = 'leg-col';
+    arrCol.innerHTML = '<div class="leg-label">Destination</div>';
     if (isLast && leg.arr) {
-      arrSection.innerHTML += apBox(leg.arr);
+      arrCol.innerHTML += apBox(leg.arr);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
@@ -1584,46 +1621,57 @@ function renderLegs() {
       inp.placeholder = 'Type ICAO or city…';
       inp.value = leg.arr ? formatAp(leg.arr) : '';
       wrap.appendChild(inp);
-      arrSection.appendChild(wrap);
+      arrCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
         legs[i].arr = ap;
         if (i < legs.length - 1) legs[i+1].dep = ap;
-        rerenderLeg(i);
-        if (i < legs.length - 1) rerenderLeg(i+1);
         updateRosterLines();
+        renderLegs();
+        // Fetch block time for this leg
+        fetchBlockTime(i);
       });
     }
 
-    // Airline + logo
-    const airlineSection = document.createElement('div');
-    airlineSection.className = 'leg-col';
-    airlineSection.style.gap = '3px';
-    airlineSection.innerHTML = `
+    // ── Airline ──
+    const alCol = document.createElement('div');
+    alCol.className = 'leg-col';
+    alCol.style.gap = '3px';
+    alCol.innerHTML = `
       <div class="leg-label">Airline ICAO</div>
       <input class="leg-sm-input" id="al-${i}" placeholder="e.g. DLH"
         value="${leg.airline || ''}" style="width:76px;text-transform:uppercase;">
-      <div id="logo-${i}" style="min-height:32px;margin-top:2px;">
+      <div id="logo-${i}" style="min-height:28px;margin-top:2px;">
         ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
       </div>`;
 
-    // Aircraft
-    const aircraftSection = document.createElement('div');
-    aircraftSection.className = 'leg-col';
-    aircraftSection.style.gap = '3px';
-    aircraftSection.innerHTML = `
+    // ── Aircraft ──
+    const acCol = document.createElement('div');
+    acCol.className = 'leg-col';
+    acCol.style.gap = '3px';
+    acCol.innerHTML = `
       <div class="leg-label">Aircraft</div>
       <input class="leg-sm-input" placeholder="e.g. A388"
         value="${leg.aircraft || ''}" style="width:76px;text-transform:uppercase;">`;
+
+    // ── Block Time ──
+    const btCol = document.createElement('div');
+    btCol.className = 'leg-col blocktime-box';
+    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
+    btCol.innerHTML = `
+      <div class="leg-label">Block Time</div>
+      <div class="blocktime-val" id="bt-${i}" title="Click to refresh"
+        onclick="fetchBlockTime(${i})">${btDisplay}</div>`;
 
     const arrow = document.createElement('div');
     arrow.className = 'leg-arrow';
     arrow.textContent = '→';
 
-    row.appendChild(depSection);
+    row.appendChild(depCol);
     row.appendChild(arrow);
-    row.appendChild(arrSection);
-    row.appendChild(airlineSection);
-    row.appendChild(aircraftSection);
+    row.appendChild(arrCol);
+    row.appendChild(alCol);
+    row.appendChild(acCol);
+    row.appendChild(btCol);
 
     if (legs.length > 1) {
       const del = document.createElement('button');
@@ -1635,7 +1683,7 @@ function renderLegs() {
 
     container.appendChild(row);
 
-    // Wire airline input AFTER DOM insertion
+    // Wire airline input after DOM insertion
     const alInput = document.getElementById('al-'+i);
     if (alInput) {
       alInput.addEventListener('input', () => {
@@ -1646,19 +1694,62 @@ function renderLegs() {
       });
     }
     // Wire aircraft input
-    const acInput = aircraftSection.querySelector('input');
-    if (acInput) {
-      acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
-    }
+    const acInput = acCol.querySelector('input');
+    if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
+  });
+
+  // Fetch block times for any completed legs
+  legs.forEach((leg, i) => {
+    if (leg.dep && leg.arr && !leg.blockTime) fetchBlockTime(i);
   });
 
   updateRosterLines();
+  updateFlightConnectionsBtn();
 }
 
-function rerenderLeg(i) {
-  // Re-render just one leg row without full re-render
-  // For simplicity, do full renderLegs (fast enough)
-  renderLegs();
+
+
+
+// ── Block time (estimated from great circle distance) ──
+async function fetchBlockTime(idx) {
+  const leg = legs[idx];
+  if (!leg || !leg.dep || !leg.arr) return;
+  const btEl = document.getElementById('bt-' + idx);
+  if (!btEl) return;
+  btEl.textContent = '…';
+  const R = 6371;
+  const lat1 = leg.dep[3] * Math.PI / 180;
+  const lat2 = leg.arr[3] * Math.PI / 180;
+  const dLat = (leg.arr[3] - leg.dep[3]) * Math.PI / 180;
+  const dLon = (leg.arr[4] - leg.dep[4]) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+  const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  let speed = 850;
+  if (dist < 500) speed = 600;
+  if (dist < 200) speed = 450;
+  const flightMins = Math.round((dist / speed) * 60);
+  const blockMins = flightMins + 20;
+  const hh = Math.floor(blockMins / 60);
+  const mm = String(blockMins % 60).padStart(2, '0');
+  leg.blockTime = hh + ':' + mm;
+  if (btEl) btEl.textContent = leg.blockTime;
+}
+
+function updateFlightConnectionsBtn() {
+  const btn = document.getElementById('fc-btn');
+  if (!btn) return;
+  const dep = legs[0]?.dep;
+  const arr = legs[legs.length-1]?.arr;
+  const depSlug = dep ? (dep[7]||dep[2]).toLowerCase().replace(/[^a-z0-9]/g,'-') + '-' + dep[0].toLowerCase() : '';
+  btn.href = dep
+    ? 'https://www.flightconnections.com/flights-from-' + depSlug
+    : 'https://www.flightconnections.com/';
+}
+
+function openFlightConnections(e) {
+  e.preventDefault();
+  const btn = document.getElementById('fc-btn');
+  window.open(btn?.href || 'https://www.flightconnections.com/', '_blank');
 }
 
 // ── Roster actions ──
