@@ -560,9 +560,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
         <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
       </div>
-      <!-- Table (top, ~half height) + Map (bottom, ~half height) -->
-      <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
-        <div class="logbook-body" style="overflow:auto;padding:8px 14px;flex:0 0 auto;max-height:55%;">
+      <!-- Top row: table left (5 rows) + Europa map right -->
+      <div style="display:flex;flex:0 0 auto;border-bottom:1px solid var(--bdr);overflow:hidden;">
+        <div class="logbook-body" style="overflow:auto;padding:0 0 0 0;flex:1;min-width:0;max-height:220px;">
           <table class="lb-tbl">
             <thead><tr>
               <th style="width:28px;">#</th>
@@ -578,9 +578,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <tbody id="lb-body"></tbody>
           </table>
         </div>
-        <!-- Logbook map fills remaining space -->
-        <div id="lb-map" style="flex:1;min-height:200px;background:#0e1117;border-top:1px solid var(--bdr);"></div>
+        <!-- Europa zoom map top-right -->
+        <div id="lb-map-eu" style="width:340px;flex-shrink:0;background:#0e1117;border-left:1px solid var(--bdr);min-height:220px;"></div>
       </div>
+      <!-- World map fills rest -->
+      <div id="lb-map" style="flex:1;min-height:200px;background:#0e1117;"></div>
     </div>
 
     <!-- ═══ DEP/ARR CALCULATOR ═══ -->
@@ -645,7 +647,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
       <!-- LEFT: current data -->
       <div style="flex:1;padding:16px 20px;overflow-y:auto;border-right:1px solid var(--bdr);">
-        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;">Current Data</div>
+        <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:12px;display:flex;align-items:center;gap:8px;">Current Data <span id="ap-ed-new-badge" style="display:none;font-size:9px;color:#3fb950;background:rgba(63,185,80,.15);padding:1px 6px;border-radius:3px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;"></span></div>
         <div id="ap-ed-left"></div>
       </div>
       <!-- RIGHT: edit fields -->
@@ -2705,11 +2707,56 @@ document.getElementById('view-dashboard').style.display = 'flex';
 renderResults();
 
 
-// ── Logbook dedicated map ──
-let lbMap = null;
+// ── Logbook dedicated maps ──
+let lbMap = null;       // world map
+let lbMapEu = null;    // Europe zoom
 let lbMapLayers = [];
+let lbMapEuLayers = [];
+
+function initLbMapEu() {
+  const el = document.getElementById('lb-map-eu');
+  if (!el || lbMapEu) return;
+  // Europe bounds: roughly Portugal/Ireland to Greece
+  lbMapEu = L.map('lb-map-eu', {
+    center: [48, 15], zoom: 4, minZoom: 3, maxZoom: 7,
+    zoomControl: false, dragging: false, scrollWheelZoom: false,
+    doubleClickZoom: false, boxZoom: false, keyboard: false,
+    maxBounds: [[-10, -30], [75, 50]]  // soft bounds for Europe
+  });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
+  setTimeout(function() { if (lbMapEu) lbMapEu.invalidateSize(); }, 200);
+}
+
+function drawLbMapEu() {
+  if (!lbMapEu) return;
+  lbMapEuLayers.forEach(function(l) { try { lbMapEu.removeLayer(l); } catch(e) {} });
+  lbMapEuLayers = [];
+  // Only draw legs where BOTH endpoints are in European bounds
+  const euBounds = { latMin:30, latMax:72, lonMin:-15, lonMax:40 };
+  logbookFlights.forEach(function(f) {
+    if (!f.dep_lat || !f.arr_lat) return;
+    const inEu = f.dep_lat >= euBounds.latMin && f.dep_lat <= euBounds.latMax &&
+                 f.dep_lon >= euBounds.lonMin && f.dep_lon <= euBounds.lonMax &&
+                 f.arr_lat >= euBounds.latMin && f.arr_lat <= euBounds.latMax &&
+                 f.arr_lon >= euBounds.lonMin && f.arr_lon <= euBounds.lonMax;
+    if (!inEu) return;
+    const dc = [f.dep_lat, f.dep_lon];
+    const ac = [f.arr_lat, f.arr_lon];
+    const color = f.planned ? '#4a9eda' : '#8b949e';
+    try {
+      const line = new L.Geodesic([[dc, ac]], { color, weight: 1.5, opacity: f.planned ? 0.85 : 0.55, steps: 6 }).addTo(lbMapEu);
+      const dm = L.circleMarker(dc, { radius: 3, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(lbMapEu);
+      const am = L.circleMarker(ac, { radius: 3, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(lbMapEu);
+      lbMapEuLayers.push(line, dm, am);
+    } catch(e) {}
+  });
+}
 
 function initLbMap() {
+  initLbMapEu();
   const el = document.getElementById('lb-map');
   if (!el || lbMap) return;
   lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
@@ -2764,6 +2811,44 @@ function drawLbMap() {
   }
 
   setTimeout(function() { if (lbMap) lbMap.invalidateSize(); }, 100);
+  drawLbMapEu();
+  setTimeout(function() { if (lbMapEu) lbMapEu.invalidateSize(); }, 150);
+}
+
+
+// ── Parse routing string and open in Legs ──
+function openRoutingInLegs(routingStr) {
+  // Format: "DLH B742 // EDDF-TJSJ-SKBO-SPJC-SLLP"
+  // or just: "EDDF-TJSJ-SKBO"
+  var airline = '', aircraft = '';
+  var icaoPart = routingStr;
+
+  var slashIdx = routingStr.indexOf('//');
+  if (slashIdx >= 0) {
+    var metaPart = routingStr.slice(0, slashIdx).trim();
+    icaoPart = routingStr.slice(slashIdx + 2).trim();
+    // Parse "DLH B742" → airline=DLH, aircraft=B742
+    var metaTokens = metaPart.trim().split(/\s+/);
+    if (metaTokens.length >= 1) airline = metaTokens[0].toUpperCase();
+    if (metaTokens.length >= 2) aircraft = metaTokens[1].toUpperCase();
+  }
+
+  // Split airports by dash
+  var icaos = icaoPart.split('-').map(function(s) { return s.trim().toUpperCase(); }).filter(Boolean);
+  if (icaos.length < 2) { alert('Need at least 2 airports in routing'); return; }
+
+  // Build legs
+  var newLegs = [];
+  for (var i = 0; i < icaos.length - 1; i++) {
+    var depAp = schedByCode[icaos[i]] || null;
+    var arrAp = schedByCode[icaos[i+1]] || null;
+    newLegs.push({ dep: depAp, arr: arrAp, airline: airline, aircraft: aircraft });
+  }
+
+  legs = newLegs;
+  renderLegs();
+  updateFlightConnectionsBtn();
+  switchToMain('roster');
 }
 
 window.addEventListener('load', async () => {
@@ -2785,6 +2870,7 @@ window.addEventListener('resize', () => {
   if (rosterMap) rosterMap.invalidateSize();
   if (calcMap) calcMap.invalidateSize();
   if (lbMap) lbMap.invalidateSize();
+  if (lbMapEu) lbMapEu.invalidateSize();
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -2877,17 +2963,20 @@ function apEdSearchInput(val) {
 }
 
 function apEdKeydown(e) {
+  if (e.key !== 'Tab' && e.key !== 'Enter') return;
   var sug = document.getElementById('ap-ed-suggestions');
-  var items = sug ? sug.querySelectorAll('[onmousedown]') : [];
-  if (e.key === 'Tab' || e.key === 'Enter') {
-    // If only one result or Tab pressed, select first
-    if (items.length === 1 || (e.key === 'Tab' && items.length > 0)) {
-      e.preventDefault();
-      var m = (items[0].getAttribute('onmousedown')||'').match(/"([A-Z0-9]{3,6})"/);
-      if (m) { apEdSelectAp(m[1]); return; }
-    }
-    if (e.key === 'Enter') apEdDoSearch();
+  var items = sug ? Array.from(sug.querySelectorAll('[onmousedown]')) : [];
+  if (items.length > 0) {
+    e.preventDefault();
+    // Extract ICAO from onmousedown: apEdSelectAp("ICAO")
+    var attr = items[0].getAttribute('onmousedown') || '';
+    var m = attr.match(/apEdSelectAp\(["']?([A-Z0-9]{3,6})["']?\)/);
+    if (m) { apEdSelectAp(m[1]); return; }
+    // Fallback: try JSON.stringify format
+    var m2 = attr.match(/"([A-Z0-9]{3,6})"/);
+    if (m2) { apEdSelectAp(m2[1]); return; }
   }
+  if (e.key === 'Enter') apEdDoSearch();
 }
 
 function apEdDoSearch() {
@@ -2916,23 +3005,31 @@ function apEdSelectAp(icao) {
     var v = (ap[f.idx] !== null && ap[f.idx] !== undefined) ? String(ap[f.idx]) : '';
     // Check if this airport has an override (EDITED) or is itself an override result (NEW)
     var hasOverride = apOverrides[ap[0]] !== undefined;
-    var isNew = !hasOverride && Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; });
-    var overridden = hasOverride && apOverrides[ap[0]][f.key] !== undefined && apOverrides[ap[0]][f.key] !== '';
-    var badge = overridden ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.15);padding:1px 5px;border-radius:3px;">EDITED</span>' : '';
+    var overrideRec = hasOverride ? apOverrides[ap[0]] : null;
+    var overridden = overrideRec && overrideRec[f.key] !== undefined && String(overrideRec[f.key]).trim() !== '';
+    var badge = overridden ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.15);padding:1px 5px;border-radius:3px;font-weight:700;">EDITED</span>' : '';
     leftHtml  += '<div style="' + lS + '">' + f.label + badge + '</div>'
               + '<input readonly value="' + v.replace(/"/g,'&quot;') + '" style="' + rO + '">';
     rightHtml += '<div style="' + lS + '">' + f.label + '</div>'
               + '<input id="ap-ed-new-' + f.key + '" placeholder="' + v.replace(/"/g,'&quot;') + '" style="' + rE + '">';
   });
 
-  // Add overall status banner
-  var statusBanner = '';
-  if (Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; })) {
-    statusBanner = '<div style="background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);border-radius:4px;padding:5px 10px;margin-bottom:10px;font-size:11px;color:#3fb950;font-weight:600;">NEW — created by a previous edit</div>';
-  } else if (apOverrides[ap[0]]) {
-    statusBanner = '<div style="background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:4px;padding:5px 10px;margin-bottom:10px;font-size:11px;color:#d29922;font-weight:600;">EDITED — this airport has saved overrides</div>';
+  // Show badge next to "Current Data" header
+  var badge = document.getElementById('ap-ed-new-badge');
+  if (badge) {
+    var isNewAp = Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; });
+    var isEdited = apOverrides[ap[0]] !== undefined;
+    if (isNewAp) {
+      badge.textContent = 'NEW'; badge.style.color='#3fb950';
+      badge.style.background='rgba(63,185,80,.15)'; badge.style.display='';
+    } else if (isEdited) {
+      badge.textContent = 'EDITED'; badge.style.color='#d29922';
+      badge.style.background='rgba(210,153,34,.15)'; badge.style.display='';
+    } else {
+      badge.style.display = 'none';
+    }
   }
-  document.getElementById('ap-ed-left').innerHTML  = statusBanner + leftHtml;
+  document.getElementById('ap-ed-left').innerHTML = leftHtml;
   document.getElementById('ap-ed-right').innerHTML = rightHtml;
   document.getElementById('ap-ed-save-btn').style.display = 'block';
 }
