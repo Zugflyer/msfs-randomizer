@@ -673,16 +673,21 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 <!-- ═══ API KEY DIALOG ═══ -->
 <div id="apikey-modal" style="display:none;position:fixed;inset:0;z-index:4000;background:rgba(0,0,0,.7);backdrop-filter:blur(4px);align-items:center;justify-content:center;">
   <div style="background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;width:480px;max-width:95vw;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.5);">
-    <div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:8px;">🔑 Anthropic API Key</div>
-    <div style="font-size:12px;color:var(--txt3);margin-bottom:16px;line-height:1.5;">
-      Required for looking up real block times via web search.<br>
-      Your key is stored only in this browser (localStorage). Get yours at <a href="https://console.anthropic.com" target="_blank" style="color:var(--acc);">console.anthropic.com</a>
-    </div>
+    <div style="font-size:14px;font-weight:700;color:var(--txt);margin-bottom:16px;">🔑 API Keys</div>
+    
+    <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Anthropic API Key</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">For block time lookup. Get yours at <a href="https://console.anthropic.com" target="_blank" style="color:var(--acc);">console.anthropic.com</a></div>
     <input id="apikey-input" type="password" placeholder="sk-ant-..." 
-      style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:12px;">
+      style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
+    
+    <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">GitHub Token</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">For uploading airline logos directly from the app. Classic token with <code>repo</code> scope.</div>
+    <input id="githubtoken-input" type="password" placeholder="ghp_..." 
+      style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
+    
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button onclick="closeApiKeyDialog()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">Cancel</button>
-      <button onclick="saveApiKey()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Save Key</button>
+      <button onclick="saveApiKey()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Save</button>
     </div>
     <div id="apikey-status" style="font-size:11px;color:#3fb950;margin-top:8px;"></div>
   </div>
@@ -2051,8 +2056,12 @@ function airlineLogoHtml(icao) {
     return `<div style="${wrapStyle}"><img src="${aviasalesUrl}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
   }
 
-  // Last resort: text label
-  return `<div style="${wrapStyle};min-width:52px;"><span style="font-size:9px;color:#333;text-align:center;line-height:1.2;word-break:break-all;">${name}</span></div>`;
+  // Try GitHub-hosted logo
+  const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
+  return `<div style="${wrapStyle}" id="logo-wrap-${code}">
+    <img src="${ghUrl}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;"
+      onerror="this.parentNode.innerHTML='<span onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'font-size:9px;color:#666;cursor:pointer;text-align:center;padding:2px;\'>${name} ✚</span>'">
+  </div>`;
 }
 
 // Try to fetch airline logo from Wikipedia for unknown airlines
@@ -2349,12 +2358,12 @@ function openApiKeyDialog() {
   var modal = document.getElementById('apikey-modal');
   if (modal) modal.style.display = 'flex';
   var inp = document.getElementById('apikey-input');
-  if (inp) {
-    inp.value = localStorage.getItem('anthropic_api_key') || '';
-    setTimeout(function() { inp.focus(); }, 100);
-  }
+  if (inp) inp.value = localStorage.getItem('anthropic_api_key') || '';
+  var ghinp = document.getElementById('githubtoken-input');
+  if (ghinp) ghinp.value = localStorage.getItem('github_token') || '';
   var st = document.getElementById('apikey-status');
   if (st) st.textContent = '';
+  setTimeout(function() { if(inp) inp.focus(); }, 100);
 }
 function closeApiKeyDialog() {
   var modal = document.getElementById('apikey-modal');
@@ -2363,16 +2372,22 @@ function closeApiKeyDialog() {
 function saveApiKey() {
   var inp = document.getElementById('apikey-input');
   var key = (inp ? inp.value : '').trim();
+  var ghinp = document.getElementById('githubtoken-input');
+  var ghkey = (ghinp ? ghinp.value : '').trim();
   var st = document.getElementById('apikey-status');
-  if (!key.startsWith('sk-ant-') && key !== '') {
-    if (st) { st.style.color='#f85149'; st.textContent='⚠ Key should start with sk-ant-'; }
+  if (key && !key.startsWith('sk-ant-')) {
+    if (st) { st.style.color='#f85149'; st.textContent='⚠ Anthropic key should start with sk-ant-'; }
     return;
   }
-  localStorage.setItem('anthropic_api_key', key);
-  if (st) { st.style.color='#3fb950'; st.textContent='✓ Saved — block times will be looked up via web search'; }
+  if (key) localStorage.setItem('anthropic_api_key', key);
+  if (ghkey) localStorage.setItem('github_token', ghkey);
+  if (st) { st.style.color='#3fb950'; st.textContent='✓ Keys saved'; }
   var btn = document.getElementById('apikey-btn');
   if (btn) btn.style.color = '#3fb950';
-  setTimeout(closeApiKeyDialog, 1500);
+  setTimeout(closeApiKeyDialog, 1200);
+}
+function getGitHubToken() {
+  return localStorage.getItem('github_token') || '';
 }
 function getApiKey() {
   return localStorage.getItem('anthropic_api_key') || '';
@@ -3010,6 +3025,65 @@ window.addEventListener('load', async () => {
   // Pre-fill departure from last logbook arrival
   prefillDepartFromLogbook();
 });
+
+
+// ── Logo Upload via GitHub API ──
+async function uploadLogoToGitHub(icaoCode, file) {
+  const token = getGitHubToken();
+  if (!token) { alert('Please set your GitHub token in 🔑 settings first.'); return false; }
+  
+  const reader = new FileReader();
+  return new Promise(function(resolve) {
+    reader.onload = async function(e) {
+      const base64 = e.target.result.split(',')[1];
+      const path = 'logos/' + icaoCode.toUpperCase() + '.png';
+      const url = 'https://api.github.com/repos/Zugflyer/msfs-randomizer/contents/' + path;
+      
+      // Check if file exists (to get SHA for update)
+      let sha = null;
+      try {
+        const check = await fetch(url, { headers: { 'Authorization': 'token ' + token } });
+        if (check.ok) { const data = await check.json(); sha = data.sha; }
+      } catch(e) {}
+      
+      const body = { message: 'Add logo ' + icaoCode, content: base64 };
+      if (sha) body.sha = sha;
+      
+      const resp = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      
+      if (resp.ok) {
+        // Update AIRLINE_LOGOS in memory immediately
+        AIRLINE_LOGOS[icaoCode.toUpperCase()] = 'https://zugflyer.github.io/msfs-randomizer/logos/' + icaoCode.toUpperCase() + '.png';
+        resolve(true);
+      } else {
+        const err = await resp.json();
+        alert('Upload failed: ' + (err.message || 'unknown error'));
+        resolve(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function triggerLogoUpload(icaoCode) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/png,image/jpeg,image/svg+xml';
+  input.onchange = async function() {
+    const file = input.files[0];
+    if (!file) return;
+    const ok = await uploadLogoToGitHub(icaoCode, file);
+    if (ok) {
+      renderLogbook();
+      alert('✓ Logo for ' + icaoCode + ' uploaded! It will appear after GitHub Pages rebuilds (~1 min).');
+    }
+  };
+  input.click();
+}
 
 window.addEventListener('resize', () => {
   if (leafletMap) leafletMap.invalidateSize();
