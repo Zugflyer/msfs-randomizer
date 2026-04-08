@@ -579,7 +579,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           </table>
         </div>
         <!-- Europa zoom map top-right -->
-        <div id="lb-map-eu" style="width:340px;flex-shrink:0;background:#0e1117;border-left:1px solid var(--bdr);min-height:220px;"></div>
+        <div id="lb-map-eu" style="flex:1;min-width:280px;background:#0e1117;border-left:1px solid var(--bdr);min-height:220px;"></div>
       </div>
       <!-- World map fills rest -->
       <div id="lb-map" style="flex:1;min-height:200px;background:#0e1117;"></div>
@@ -1291,6 +1291,15 @@ function renderResults() {
       // Orange theme badge: ONLY for formula1
       if (result.itemName && cat.id === 'formula1') inner += `<div class="res-badge" style="background:rgba(240,136,62,.18);color:#f0883e;border-color:#f0883e;">${result.itemName}</div>`;
     }
+    // Routing cards: clickable if text contains //
+    if (result.text) {
+      const isRouting = result.text.includes('//');
+      if (isRouting) {
+        const escaped = result.text.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        return `<div class="res-card" onclick="openRoutingInLegs('${escaped}')" style="cursor:pointer;" title="Click to open routing in Legs"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}<div style="font-size:9px;color:var(--acc);margin-top:3px;">▶ Open in Legs</div></div>`;
+      }
+      return `<div class="res-card" style="cursor:default;"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
+    }
     return `<div class="res-card" onclick="openInRoster('${cat.id}')" style="cursor:pointer;" title="Click to plan this flight"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
   }
 
@@ -1839,8 +1848,22 @@ function switchView(view) {
   // View-specific init
   if (view === 'categories') renderCatView();
   if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
-  if (view === 'dashboard' && leafletMap) {
-    setTimeout(() => leafletMap.invalidateSize(), 100);
+  if (view === 'dashboard') {
+    if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
+    // Pre-fill departure from last logbook entry if depart not already set
+    if (!departAirport && logbookFlights.length > 0) {
+      const last = logbookFlights[logbookFlights.length - 1];
+      const lastIcao = last.arr_icao || '';
+      if (lastIcao) {
+        const ap = schedByCode[lastIcao];
+        if (ap) {
+          departAirport = ap;
+          const inp = document.getElementById('depart-input');
+          if (inp) inp.value = ap[0] + (ap[1]?' / '+ap[1]:'') + ' — ' + (ap[7]||ap[2]) + ', ' + countryName(ap[6]);
+          showDashBox('depart', ap);
+        }
+      }
+    }
   }
   if (view === 'roster') {
     setTimeout(() => {
@@ -2718,10 +2741,8 @@ function initLbMapEu() {
   if (!el || lbMapEu) return;
   // Europe bounds: roughly Portugal/Ireland to Greece
   lbMapEu = L.map('lb-map-eu', {
-    center: [48, 15], zoom: 4, minZoom: 3, maxZoom: 7,
-    zoomControl: false, dragging: false, scrollWheelZoom: false,
-    doubleClickZoom: false, boxZoom: false, keyboard: false,
-    maxBounds: [[-10, -30], [75, 50]]  // soft bounds for Europe
+    center: [48, 15], zoom: 4, minZoom: 2, maxZoom: 12,
+    zoomControl: true, dragging: true, scrollWheelZoom: true
   });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
@@ -2863,6 +2884,14 @@ window.addEventListener('load', async () => {
   // Start on logbook
   switchView('logbook');
   initLbMap();
+  // Pre-fill depart for next time user opens Next Destination
+  if (logbookFlights.length > 0) {
+    const last = logbookFlights[logbookFlights.length - 1];
+    if (last.arr_icao) {
+      const ap = schedByCode[last.arr_icao];
+      if (ap) { departAirport = ap; }
+    }
+  }
 });
 
 window.addEventListener('resize', () => {
@@ -3006,8 +3035,13 @@ function apEdSelectAp(icao) {
     // Check if this airport has an override (EDITED) or is itself an override result (NEW)
     var hasOverride = apOverrides[ap[0]] !== undefined;
     var overrideRec = hasOverride ? apOverrides[ap[0]] : null;
-    var overridden = overrideRec && overrideRec[f.key] !== undefined && String(overrideRec[f.key]).trim() !== '';
-    var badge = overridden ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.15);padding:1px 5px;border-radius:3px;font-weight:700;">EDITED</span>' : '';
+    // Show EDITED badge on a field if this specific field was overridden
+    var overridden = overrideRec && overrideRec[f.key] !== undefined && String(overrideRec[f.key]).trim() !== '' && String(overrideRec[f.key]) !== String(ap[f.idx]);
+    // Also show a subtle marker if airport has ANY override (even if this field unchanged)
+    var anyOverride = hasOverride;
+    var badge = overridden
+      ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.2);padding:1px 5px;border-radius:3px;font-weight:700;">EDITED</span>'
+      : (anyOverride ? ' <span style="font-size:9px;color:rgba(210,153,34,.5);padding:1px 3px;border-radius:3px;">·</span>' : '');
     leftHtml  += '<div style="' + lS + '">' + f.label + badge + '</div>'
               + '<input readonly value="' + v.replace(/"/g,'&quot;') + '" style="' + rO + '">';
     rightHtml += '<div style="' + lS + '">' + f.label + '</div>'
