@@ -1946,16 +1946,57 @@ const AIRLINE_LOGOS = {
   // Add entries here only for special overrides or Wikipedia URLs
 };
 
+// Cache: null=unchecked, true=exists, false=missing
+const _logoExists = {};
+
 function airlineLogoHtml(icao) {
   const code = (icao || '').toUpperCase().trim();
   if (!code) return '';
-  const name = AIRLINE_NAMES[code] || code;
-  // ONLY use GitHub-hosted logos — no external CDNs
   const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
-  const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;border-radius:3px;padding:2px 4px;overflow:hidden;';
-  return `<div style="${wrapStyle}"><img src="${ghUrl}" alt="${name}" title="${name}" style="max-width:100%;max-height:28px;object-fit:contain;"
-    onerror="this.parentNode.style.background='#1a1e28';this.parentNode.style.border='1px dashed #4a9eda';this.parentNode.innerHTML='<div onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;cursor:pointer;gap:2px;\'><span style=\'font-size:15px;color:#4a9eda;line-height:1;\'>✚</span><span style=\'font-size:8px;color:#aaa;letter-spacing:.04em;\'>${code}</span></div>'">
-  </div>`;
+
+  function uploadBtn() {
+    return '<div onclick="triggerLogoUpload(\'' + code + '\')" title="Logo hochladen für ' + code + '" '
+      + 'style="display:flex;flex-direction:column;align-items:center;justify-content:center;'
+      + 'width:100%;height:100%;min-height:32px;cursor:pointer;background:#1a1e28;'
+      + 'border:1.5px dashed #4a9eda;border-radius:4px;gap:2px;">'
+      + '<span style="font-size:18px;color:#4a9eda;line-height:1;">✚</span>'
+      + '<span style="font-size:9px;color:#aaa;">' + code + '</span>'
+      + '</div>';
+  }
+
+  function logoImg() {
+    return '<img src="' + ghUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
+  }
+
+  const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;'
+    + 'width:100%;height:100%;border-radius:3px;overflow:hidden;';
+
+  if (_logoExists[code] === true) {
+    // Known to exist — show logo immediately
+    return '<div style="' + wrapStyle + 'background:#fff;padding:2px 4px;" data-lgw="' + code + '">' + logoImg() + '</div>';
+  }
+  // Show upload button; fire fetch to check — if found, swap all matching elements
+  if (_logoExists[code] !== false) {
+    // Not yet checked — show button, then fetch
+    setTimeout(function() {
+      if (_logoExists[code] !== undefined) return; // already resolved
+      fetch(ghUrl, { method: 'HEAD', cache: 'no-cache' })
+        .then(function(r) {
+          const ct = r.headers.get('content-type') || '';
+          _logoExists[code] = r.ok && ct.indexOf('image/') === 0;
+          if (_logoExists[code]) {
+            document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
+              el.style.background = '#fff';
+              el.style.padding = '2px 4px';
+              el.style.border = '';
+              el.innerHTML = logoImg();
+            });
+          }
+        })
+        .catch(function() { _logoExists[code] = false; });
+    }, 0);
+  }
+  return '<div style="' + wrapStyle + '" data-lgw="' + code + '">' + uploadBtn() + '</div>';
 }
 
 // Try to fetch airline logo from Wikipedia for unknown airlines
@@ -3037,8 +3078,16 @@ async function uploadLogoToGitHub(icaoCode, file) {
       });
       
       if (resp.ok) {
-        // Update AIRLINE_LOGOS in memory immediately
-        AIRLINE_LOGOS[icaoCode.toUpperCase()] = 'https://zugflyer.github.io/msfs-randomizer/logos/' + icaoCode.toUpperCase() + '.png';
+        // Mark as exists and swap all upload buttons to logo images immediately
+        const code = icaoCode.toUpperCase();
+        _logoExists[code] = true;
+        const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png?t=' + Date.now();
+        document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
+          el.style.background = '#fff';
+          el.style.padding = '2px 4px';
+          el.style.border = '';
+          el.innerHTML = '<img src="' + ghUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
+        });
         resolve(true);
       } else {
         const err = await resp.json();
