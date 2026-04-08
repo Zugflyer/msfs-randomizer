@@ -2118,7 +2118,7 @@ function legSchedUpdateRow(idx) {
     leg.schedArrTime = ''; leg.schedArrDay = ''; leg.schedDepUTC = ''; leg.schedArrUTC = '';
   }
   const arrEl = document.getElementById('ls-arr-' + idx);
-  if (arrEl) arrEl.textContent = leg.schedArrTime || '–';
+  if (arrEl) arrEl.textContent = leg.schedArrTime || '';
   const arrDayEl = document.getElementById('ls-arrday-' + idx);
   if (arrDayEl) arrDayEl.textContent = leg.schedArrDay ? 'D' + leg.schedArrDay : '';
   const arrUtcEl = document.getElementById('ls-arrutc-' + idx);
@@ -2166,21 +2166,24 @@ function renderLegs() {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:5px 8px;flex-wrap:nowrap;overflow-x:auto;';
 
-    // ── Logo cell ──
+    // ── Shared box style ──
+    const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid #4a9eda;border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
+
+    // ── Logo ──
     const logoCell = document.createElement('div');
-    logoCell.style.cssText = cellStyle + 'width:80px;min-width:80px;align-items:center;justify-content:center;background:#fff;padding:3px;';
+    logoCell.style.cssText = 'display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
     logoCell.id = 'logo-' + i;
-    logoCell.innerHTML = leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:#aaa;text-align:center;">Logo</span>';
+    logoCell.innerHTML = leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
 
     // ── AL + EQP ──
     const alCell = document.createElement('div');
-    alCell.style.cssText = cellStyle + 'width:130px;min-width:130px;gap:4px;';
-    alCell.innerHTML = inp('al-'+i,'Airline','60px',i*10+1,leg.airline)
-      + inp('ac-'+i,'EQP','60px',i*10+2,leg.aircraft);
+    alCell.style.cssText = bS + 'width:120px;min-width:120px;gap:5px;';
+    alCell.innerHTML = inp('al-'+i,'Airline','106px',i*10+1,leg.airline)
+      + inp('ac-'+i,'EQP','106px',i*10+2,leg.aircraft);
 
     // ── Departure airport ──
     const depCell = document.createElement('div');
-    depCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;border-radius:4px;padding:4px 8px;min-height:52px;box-sizing:border-box;flex-shrink:0;min-width:130px;width:130px;border:none;';
+    depCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
     if (leg.dep) {
       depCell.innerHTML = apBox(leg.dep);
       depCell.style.cursor = 'pointer'; depCell.title = 'Click to change';
@@ -2189,34 +2192,34 @@ function renderLegs() {
       const w = document.createElement('div'); w.style.position = 'relative';
       const inp2 = document.createElement('input');
       inp2.placeholder = 'ICAO or city…';
-      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid '+BLUE+';border-radius:4px;color:#fff;font-size:12px;outline:none;padding:4px 6px;';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid #4a9eda;border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
       w.appendChild(inp2); depCell.appendChild(w);
       buildSuggestBox(inp2, ap => { legs[i].dep = ap; if (i > 0) legs[i-1].arr = ap; updateRosterLines(); renderLegs(); });
     }
 
-    // ── Day + Dep local + UTC ──
+    // ── Day + DepTime + UTC ──
     const depTimeCell = document.createElement('div');
-    depTimeCell.style.cssText = cellStyle + 'width:116px;min-width:116px;gap:2px;align-items:center;';
-    depTimeCell.innerHTML = `<div style="display:flex;gap:3px;">`
-      + inp('ls-day-'+i,'Day','36px',i*10+3,leg.schedDepDay||1)
-      + inp('ls-dep-'+i,'00:00','72px',i*10+4,leg.schedDepTime||'')
-      + `</div>`
-      + `<div id="ls-deputc-${i}" style="font-size:9px;color:${BLUE};text-align:center;width:100%;margin-top:2px;">${leg.schedDepUTC||''}</div>`;
+    depTimeCell.style.cssText = bS + 'width:106px;min-width:106px;gap:3px;align-items:center;';
+    depTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
+      + inp('ls-day-'+i,'D','30px',i*10+3,leg.schedDepDay||1)
+      + inp('ls-dep-'+i,'00:00','70px',i*10+4,leg.schedDepTime||'')
+      + '</div>'
+      + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
 
-    // ── Block time (arrow + time, no label) ──
+    // ── Arrow + Block (no extra hyphen) ──
     const btCell = document.createElement('div');
-    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;padding:0 4px;min-height:52px;gap:1px;';
-    btCell.title = 'Click to refresh';
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;padding:0 5px;min-height:54px;gap:2px;';
+    btCell.title = 'Click to refresh block time';
     btCell.onclick = () => fetchBlockTime(i);
-    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
-    const btColor = leg.blockTimeReal ? '#3fb950' : '#888';
+    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '');
+    const btColor = leg.blockTimeReal ? '#3fb950' : '#777';
     const btWeight = leg.blockTimeReal ? '700' : '400';
-    btCell.innerHTML = `<div style="font-size:16px;color:#555;">→</div>`
-      + `<div id="bt-${i}" style="font-size:12px;font-family:monospace;color:${btColor};font-weight:${btWeight};">${btDisplay}</div>`;
+    btCell.innerHTML = '<div style="font-size:20px;color:#555;line-height:1;">→</div>'
+      + '<div id="bt-'+i+'" style="font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';">'+btDisplay+'</div>';
 
-    // ── Arrival airport (no border) ──
+    // ── Arrival airport ──
     const arrCell = document.createElement('div');
-    arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;border-radius:4px;padding:4px 8px;min-height:52px;box-sizing:border-box;flex-shrink:0;min-width:130px;width:130px;border:none;';
+    arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
     if (leg.arr) {
       arrCell.innerHTML = apBox(leg.arr);
       arrCell.style.cursor = 'pointer'; arrCell.title = 'Click to change';
@@ -2225,46 +2228,44 @@ function renderLegs() {
       const w = document.createElement('div'); w.style.position = 'relative';
       const inp2 = document.createElement('input');
       inp2.placeholder = 'ICAO or city…';
-      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid '+BLUE+';border-radius:4px;color:#fff;font-size:12px;outline:none;padding:4px 6px;';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid #4a9eda;border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
       w.appendChild(inp2); arrCell.appendChild(w);
       buildSuggestBox(inp2, ap => { legs[i].arr = ap; if (i < legs.length-1) legs[i+1].dep = ap; updateRosterLines(); renderLegs(); fetchBlockTime(i); });
     }
 
-    // ── Arr time + day + UTC (mirror of dep) ──
+    // ── ArrTime + Day + UTC ──
     const arrTimeCell = document.createElement('div');
-    arrTimeCell.style.cssText = cellStyle + 'width:116px;min-width:116px;gap:2px;align-items:center;';
-    arrTimeCell.innerHTML = `<div style="display:flex;gap:3px;align-items:center;">`
-      + `<div id="ls-arr-${i}" style="font-size:15px;font-family:monospace;font-weight:700;color:${BLUE};min-width:44px;text-align:center;border:1px solid ${BLUE};border-radius:4px;padding:3px 6px;">${leg.schedArrTime||'–'}</div>`
-      + `<div id="ls-arrday-${i}" style="font-size:12px;font-family:monospace;color:${BLUE};border:1px solid ${BLUE};border-radius:4px;padding:3px 5px;min-width:28px;text-align:center;">${leg.schedArrDay?'D'+leg.schedArrDay:''}</div>`
-      + `</div>`
-      + `<div id="ls-arrutc-${i}" style="font-size:9px;color:${BLUE};text-align:center;width:100%;margin-top:2px;">${leg.schedArrUTC||''}</div>`;
+    arrTimeCell.style.cssText = bS + 'width:106px;min-width:106px;gap:3px;align-items:center;';
+    const arrDayStyle = 'width:30px;min-width:30px;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;text-align:center;padding:4px 2px;line-height:1.2;';
+    const arrTimeStyle = 'flex:1;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:14px;font-family:monospace;font-weight:700;text-align:center;padding:3px 2px;line-height:1.2;';
+    arrTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
+      + '<div id="ls-arrday-'+i+'" style="'+arrDayStyle+'">' + (leg.schedArrDay ? 'D'+leg.schedArrDay : '') + '</div>'
+      + '<div id="ls-arr-'+i+'" style="'+arrTimeStyle+'">' + (leg.schedArrTime || '') + '</div>'
+      + '</div>'
+      + '<div id="ls-arrutc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedArrUTC||'') + '</div>';
 
-    // ── TA + Gate (larger) ──
+    // ── TA + Gate ──
     const taGateCell = document.createElement('div');
-    taGateCell.style.cssText = cellStyle + 'width:130px;min-width:130px;gap:4px;';
-    taGateCell.innerHTML = `<div style="display:flex;gap:4px;">`
-      + inp('ls-ta-'+i,'MIN','62px',i*10+5,leg.schedTA||'')
-      + inp('ls-gate-'+i,'GATE','62px',i*10+6,leg.schedGate||'')
-      + `</div>`;
+    taGateCell.style.cssText = bS + 'width:138px;min-width:138px;gap:5px;';
+    taGateCell.innerHTML = '<div style="display:flex;gap:5px;width:100%;">'
+      + inp('ls-ta-'+i,'MIN','63px',i*10+5,leg.schedTA||'')
+      + inp('ls-gate-'+i,'GATE','69px',i*10+6,leg.schedGate||'')
+      + '</div>';
 
-    // ── Navigraph Charts button (with logo image) ──
+    // ── Navigraph Charts (real logo) ──
     const navCell = document.createElement('div');
-    navCell.style.cssText = cellStyle + 'width:52px;min-width:52px;align-items:center;justify-content:center;cursor:pointer;padding:4px;background:rgba(74,158,218,.06);';
+    navCell.style.cssText = 'display:flex;align-items:center;justify-content:center;width:52px;min-width:52px;min-height:54px;border:1px solid #4a9eda;border-radius:5px;cursor:pointer;background:rgba(74,158,218,.06);flex-shrink:0;';
     navCell.title = 'Open Navigraph Charts for arrival airport';
     navCell.onclick = () => {
       const icao = legs[i].arr ? legs[i].arr[0] : '';
       if (!icao) return;
       window.open('https://charts.navigraph.com/airport/' + icao + '?chartCategory=ARR&section=Info&informationSection=General&procedureSection=Departures&weatherSection=METAR&networksSection=Gates&ATISSection=Real','_blank');
     };
-    // Navigraph logo (compact version)
-    navCell.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">`
-      + `<svg viewBox="0 0 24 24" fill="none" stroke="${BLUE}" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
-      + `<span style="font-size:7px;color:${BLUE};font-weight:700;letter-spacing:.03em;">CHARTS</span>`
-      + `</div>`;
+    navCell.innerHTML = '<img src="data:image/png;base64,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" style="width:44px;height:auto;object-fit:contain;" alt="Navigraph">';
 
     // ── Delete ──
     const delCell = document.createElement('div');
-    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;';
+    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding-left:2px;';
     if (legs.length > 1) {
       const del = document.createElement('button');
       del.className = 'leg-del'; del.textContent = '✕';
