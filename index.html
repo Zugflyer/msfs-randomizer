@@ -1995,15 +1995,39 @@ function airlineLogoHtml(icao) {
   const name = AIRLINE_NAMES[code] || code;
   const url = AIRLINE_LOGOS[code];
   const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:30px;background:#fff;border-radius:3px;border:1px solid #ccc;padding:2px 4px;overflow:hidden;';
+
+  // Look up IATA code for this ICAO (for Aviasales CDN which uses IATA)
+  // Try AIRLINE_LOGOS map first for known airlines
   if (url) {
     if (url.startsWith('data:')) {
-      // Airhex base64 logo
       return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${code}</span>'"></div>`;
     }
-    // Wikipedia URL
     return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
   }
-  // Unknown airline: show text on white background
+
+  // Fallback: try Aviasales CDN with IATA code (2-letter) derived from ICAO
+  // The Airhex CSV has IATA→ICAO mapping; we use a simple lookup from our airlines CSV data
+  // For now use the ICAO code directly - many CDNs accept both formats
+  // Aviasales uses 2-letter IATA: try to derive from known mappings
+  const iataMap = {
+    'DLH':'LH','AFR':'AF','BAW':'BA','AAL':'AA','KLM':'KL','SWR':'LX','AUA':'OS',
+    'TAP':'TP','IBE':'IB','VLG':'VY','EZY':'U2','RYR':'FR','EIN':'EI','FIN':'AY',
+    'SAS':'SK','NOR':'DY','WZZ':'W6','BEL':'SN','ITY':'AZ','LOT':'LO','THY':'TK',
+    'TRA':'HV','EWG':'EW','UAE':'EK','ETD':'EY','QTR':'QR','MEA':'ME','MSR':'MS',
+    'RAM':'AT','ETH':'ET','SVA':'SV','DAL':'DL','UAL':'UA','ASA':'AS','ACA':'AC',
+    'WJA':'WS','SWA':'WN','JBU':'B6','TAM':'JJ','LAN':'LA','AVA':'AV','AMX':'AM',
+    'GLO':'G3','AZU':'AD','ARG':'AR','SIA':'SQ','CPA':'CX','ANA':'NH','JAL':'JL',
+    'QFA':'QF','THA':'TG','MAS':'MH','GIA':'GA','PAL':'PR','HVN':'VN','CSN':'CZ',
+    'CCA':'CA','KAL':'KE','AAR':'OZ','ANZ':'NZ','VIR':'VS','IRA':'IR','VTA':'TN',
+    'THT':'TH','FDY':'','RRR':'','LNE':'','LPE':'4C','ANE':'5M','CFE':'5O',
+  };
+  const iata2 = iataMap[code] || '';
+  if (iata2) {
+    const aviasalesUrl = `http://pics.avs.io/200/60/${iata2}.png`;
+    return `<div style="${wrapStyle}"><img src="${aviasalesUrl}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
+  }
+
+  // Last resort: text label
   return `<div style="${wrapStyle};min-width:52px;"><span style="font-size:9px;color:#333;text-align:center;line-height:1.2;word-break:break-all;">${name}</span></div>`;
 }
 
@@ -2304,13 +2328,13 @@ async function fetchBlockTime(idx) {
   if (!btEl) return;
   btEl.textContent = '…';
   btEl.style.fontStyle = 'normal';
+  btEl.title = 'Searching…';
 
   const depIata = leg.dep[1] || leg.dep[0];
   const arrIata = leg.arr[1] || leg.arr[0];
-  const depCity = leg.dep[7] || leg.dep[2];
-  const arrCity = leg.arr[7] || leg.arr[2];
 
   try {
+    // Use Claude with web_search to look up nonstop flight duration
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -2320,10 +2344,11 @@ async function fetchBlockTime(idx) {
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 20,
+        max_tokens: 100,
+        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{
           role: 'user',
-          content: `What is the typical nonstop block time for a flight from ${depIata} (${depCity}) to ${arrIata} (${arrCity})? Reply with ONLY the duration in H:MM format such as 2:35 or 10:20. If no nonstop service exists between these airports, reply with only the word NONE.`
+          content: `Search for "flights ${depIata}-${arrIata} nonstop" and find the nonstop flight duration. Reply with ONLY the duration in H:MM format (e.g. 1:05 or 2:35). If no nonstop exists, reply NONE.`
         }]
       })
     });
@@ -2331,14 +2356,14 @@ async function fetchBlockTime(idx) {
       const data = await resp.json();
       const txt = (data.content || []).map(b => b.type === 'text' ? b.text : '').join('').trim();
       const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
-      if (m) {
+      if (m && !txt.toUpperCase().includes('NONE')) {
         leg.blockTime = m[0]; leg.blockTimeReal = true;
         btEl.textContent = m[0]; btEl.style.fontStyle = 'normal';
-        btEl.title = `Block time ${depIata}→${arrIata}`;
+        btEl.title = `Nonstop ${depIata}→${arrIata} (web)`;
         return;
       }
     }
-  } catch(e) { /* estimate below */ }
+  } catch(e) { /* fall through to estimate */ }
 
   // Fallback: great circle estimate in italic
   const R = 6371;
@@ -2352,7 +2377,7 @@ async function fetchBlockTime(idx) {
   leg.blockTime = Math.floor(mins/60)+':'+String(mins%60).padStart(2,'0');
   leg.blockTimeReal = false;
   btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
-  btEl.title = `Estimated ${depIata}→${arrIata}`;
+  btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
 }
 
 function updateFlightConnectionsBtn() {
