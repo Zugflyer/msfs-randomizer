@@ -181,11 +181,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .leg-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:8px;padding:10px 12px 10px 12px;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);position:relative;}
 .leg-col{display:flex;flex-direction:column;gap:3px;flex-shrink:0;}
 .leg-label{font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;}
-.leg-box{background:var(--bg);border:1px solid var(--bdr);border-radius:var(--r);padding:6px 10px;min-width:155px;position:relative;}
-.leg-box.prefilled{border-color:var(--acc);}
-.leg-code{font-size:15px;font-weight:700;color:var(--acc2);font-family:'SF Mono','Courier New',monospace;letter-spacing:.04em;}
-.leg-city{font-size:11px;color:var(--txt2);margin-top:1px;}
-.leg-country{font-size:10px;color:var(--txt3);}
+.leg-box{background:var(--bg);border:1px solid var(--bdr2);border-radius:var(--r);padding:6px 10px;min-width:130px;position:relative;}
+.leg-box.prefilled{border-color:var(--bdr2);}
+.leg-code{font-size:15px;font-weight:700;color:#fff;font-family:'SF Mono','Courier New',monospace;letter-spacing:.04em;}
+.leg-city{font-size:11px;color:#fff;margin-top:1px;}
+.leg-country{font-size:10px;color:#ccc;}
 .leg-input{font-size:13px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);width:100%;min-width:155px;}
 .leg-input:focus{outline:none;border-color:var(--acc);}
 .leg-suggest{position:absolute;top:100%;left:0;min-width:260px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:180px;overflow-y:auto;margin-top:2px;display:none;box-shadow:0 4px 16px rgba(0,0,0,.5);}
@@ -277,7 +277,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .roster-content{display:flex;gap:12px;align-items:flex-start;}
 .roster-legs-col{flex:1;min-width:0;}
 /* ── ap-iata color ── */
-.ap-iata{color:var(--blue);}
+.ap-iata{color:#aac8e8;}
 
 /* ── ROSTER SELECTED AIRPORT TAG ── */
 .selected-tag{display:inline-flex;align-items:center;gap:5px;background:rgba(125,94,232,.15);border:1px solid var(--acc);border-radius:20px;padding:2px 10px;font-size:11px;color:var(--acc2);cursor:pointer;}
@@ -2168,19 +2168,19 @@ function renderLegs() {
 
     // ── Logo cell ──
     const logoCell = document.createElement('div');
-    logoCell.style.cssText = cellStyle + 'width:72px;min-width:72px;align-items:center;justify-content:center;background:#fff;padding:2px;';
+    logoCell.style.cssText = cellStyle + 'width:80px;min-width:80px;align-items:center;justify-content:center;background:#fff;padding:3px;';
     logoCell.id = 'logo-' + i;
     logoCell.innerHTML = leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:#aaa;text-align:center;">Logo</span>';
 
     // ── AL + EQP ──
     const alCell = document.createElement('div');
-    alCell.style.cssText = cellStyle + 'width:126px;min-width:126px;gap:3px;';
+    alCell.style.cssText = cellStyle + 'width:130px;min-width:130px;gap:4px;';
     alCell.innerHTML = inp('al-'+i,'Airline','60px',i*10+1,leg.airline)
       + inp('ac-'+i,'EQP','60px',i*10+2,leg.aircraft);
 
     // ── Departure airport ──
     const depCell = document.createElement('div');
-    depCell.style.cssText = cellStyle + 'min-width:130px;width:130px;';
+    depCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;border-radius:4px;padding:4px 8px;min-height:52px;box-sizing:border-box;flex-shrink:0;min-width:130px;width:130px;border:none;';
     if (leg.dep) {
       depCell.innerHTML = apBox(leg.dep);
       depCell.style.cursor = 'pointer'; depCell.title = 'Click to change';
@@ -2189,39 +2189,34 @@ function renderLegs() {
       const w = document.createElement('div'); w.style.position = 'relative';
       const inp2 = document.createElement('input');
       inp2.placeholder = 'ICAO or city…';
-      inp2.style.cssText = 'width:100%;background:transparent;border:none;color:#fff;font-size:12px;outline:none;';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid '+BLUE+';border-radius:4px;color:#fff;font-size:12px;outline:none;padding:4px 6px;';
       w.appendChild(inp2); depCell.appendChild(w);
       buildSuggestBox(inp2, ap => { legs[i].dep = ap; if (i > 0) legs[i-1].arr = ap; updateRosterLines(); renderLegs(); });
     }
 
-    // ── Day + Dep local ──
+    // ── Day + Dep local + UTC ──
     const depTimeCell = document.createElement('div');
-    depTimeCell.style.cssText = cellStyle + 'width:110px;min-width:110px;gap:3px;';
+    depTimeCell.style.cssText = cellStyle + 'width:116px;min-width:116px;gap:2px;align-items:center;';
     depTimeCell.innerHTML = `<div style="display:flex;gap:3px;">`
       + inp('ls-day-'+i,'Day','36px',i*10+3,leg.schedDepDay||1)
-      + inp('ls-dep-'+i,'00:00','68px',i*10+4,leg.schedDepTime||'')
+      + inp('ls-dep-'+i,'00:00','72px',i*10+4,leg.schedDepTime||'')
       + `</div>`
-      + `<div id="ls-deputc-${i}" style="font-size:9px;color:${BLUE};margin-top:1px;">${leg.schedDepUTC||''}</div>`;
+      + `<div id="ls-deputc-${i}" style="font-size:9px;color:${BLUE};text-align:center;width:100%;margin-top:2px;">${leg.schedDepUTC||''}</div>`;
 
-    // ── Block time (display only) ──
+    // ── Block time (arrow + time, no label) ──
     const btCell = document.createElement('div');
-    btCell.style.cssText = cellStyle + 'width:58px;min-width:58px;align-items:center;cursor:pointer;';
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;padding:0 4px;min-height:52px;gap:1px;';
     btCell.title = 'Click to refresh';
     btCell.onclick = () => fetchBlockTime(i);
     const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
     const btColor = leg.blockTimeReal ? '#3fb950' : '#888';
     const btWeight = leg.blockTimeReal ? '700' : '400';
-    btCell.innerHTML = `<div style="font-size:9px;color:#888;text-align:center;">BLOCK</div>`
-      + `<div id="bt-${i}" style="font-size:13px;font-family:monospace;color:${btColor};font-weight:${btWeight};text-align:center;">${btDisplay}</div>`;
+    btCell.innerHTML = `<div style="font-size:16px;color:#555;">→</div>`
+      + `<div id="bt-${i}" style="font-size:12px;font-family:monospace;color:${btColor};font-weight:${btWeight};">${btDisplay}</div>`;
 
-    // ── Arrow ──
-    const arrowEl = document.createElement('div');
-    arrowEl.style.cssText = 'display:flex;align-items:center;color:#888;font-size:18px;flex-shrink:0;';
-    arrowEl.textContent = '→';
-
-    // ── Arrival airport ──
+    // ── Arrival airport (no border) ──
     const arrCell = document.createElement('div');
-    arrCell.style.cssText = cellStyle + 'min-width:130px;width:130px;';
+    arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;border-radius:4px;padding:4px 8px;min-height:52px;box-sizing:border-box;flex-shrink:0;min-width:130px;width:130px;border:none;';
     if (leg.arr) {
       arrCell.innerHTML = apBox(leg.arr);
       arrCell.style.cursor = 'pointer'; arrCell.title = 'Click to change';
@@ -2230,39 +2225,42 @@ function renderLegs() {
       const w = document.createElement('div'); w.style.position = 'relative';
       const inp2 = document.createElement('input');
       inp2.placeholder = 'ICAO or city…';
-      inp2.style.cssText = 'width:100%;background:transparent;border:none;color:#fff;font-size:12px;outline:none;';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid '+BLUE+';border-radius:4px;color:#fff;font-size:12px;outline:none;padding:4px 6px;';
       w.appendChild(inp2); arrCell.appendChild(w);
       buildSuggestBox(inp2, ap => { legs[i].arr = ap; if (i < legs.length-1) legs[i+1].dep = ap; updateRosterLines(); renderLegs(); fetchBlockTime(i); });
     }
 
-    // ── Arr time + day ──
+    // ── Arr time + day + UTC (mirror of dep) ──
     const arrTimeCell = document.createElement('div');
-    arrTimeCell.style.cssText = cellStyle + 'width:90px;min-width:90px;';
-    arrTimeCell.innerHTML = `<div style="display:flex;gap:5px;align-items:baseline;">`
-      + `<div id="ls-arr-${i}" style="${blueText}font-size:15px;">${leg.schedArrTime||'–'}</div>`
-      + `<div id="ls-arrday-${i}" style="font-size:10px;color:${BLUE};">${leg.schedArrDay?'D'+leg.schedArrDay:''}</div>`
+    arrTimeCell.style.cssText = cellStyle + 'width:116px;min-width:116px;gap:2px;align-items:center;';
+    arrTimeCell.innerHTML = `<div style="display:flex;gap:3px;align-items:center;">`
+      + `<div id="ls-arr-${i}" style="font-size:15px;font-family:monospace;font-weight:700;color:${BLUE};min-width:44px;text-align:center;border:1px solid ${BLUE};border-radius:4px;padding:3px 6px;">${leg.schedArrTime||'–'}</div>`
+      + `<div id="ls-arrday-${i}" style="font-size:12px;font-family:monospace;color:${BLUE};border:1px solid ${BLUE};border-radius:4px;padding:3px 5px;min-width:28px;text-align:center;">${leg.schedArrDay?'D'+leg.schedArrDay:''}</div>`
       + `</div>`
-      + `<div id="ls-arrutc-${i}" style="font-size:9px;color:${BLUE};margin-top:1px;">${leg.schedArrUTC||''}</div>`;
+      + `<div id="ls-arrutc-${i}" style="font-size:9px;color:${BLUE};text-align:center;width:100%;margin-top:2px;">${leg.schedArrUTC||''}</div>`;
 
-    // ── TA + Gate ──
+    // ── TA + Gate (larger) ──
     const taGateCell = document.createElement('div');
-    taGateCell.style.cssText = cellStyle + 'width:114px;min-width:114px;gap:3px;';
-    taGateCell.innerHTML = `<div style="display:flex;gap:3px;">`
-      + inp('ls-ta-'+i,'min','52px',i*10+5,leg.schedTA||'')
-      + inp('ls-gate-'+i,'GATE','56px',i*10+6,leg.schedGate||'')
+    taGateCell.style.cssText = cellStyle + 'width:130px;min-width:130px;gap:4px;';
+    taGateCell.innerHTML = `<div style="display:flex;gap:4px;">`
+      + inp('ls-ta-'+i,'MIN','62px',i*10+5,leg.schedTA||'')
+      + inp('ls-gate-'+i,'GATE','62px',i*10+6,leg.schedGate||'')
       + `</div>`;
 
-    // ── Navigraph Charts button ──
+    // ── Navigraph Charts button (with logo image) ──
     const navCell = document.createElement('div');
-    navCell.style.cssText = cellStyle + 'width:40px;min-width:40px;align-items:center;justify-content:center;cursor:pointer;background:rgba(74,158,218,.08);';
+    navCell.style.cssText = cellStyle + 'width:52px;min-width:52px;align-items:center;justify-content:center;cursor:pointer;padding:4px;background:rgba(74,158,218,.06);';
     navCell.title = 'Open Navigraph Charts for arrival airport';
-    const arrIcao = leg.arr ? leg.arr[0] : '';
     navCell.onclick = () => {
       const icao = legs[i].arr ? legs[i].arr[0] : '';
       if (!icao) return;
       window.open('https://charts.navigraph.com/airport/' + icao + '?chartCategory=ARR&section=Info&informationSection=General&procedureSection=Departures&weatherSection=METAR&networksSection=Gates&ATISSection=Real','_blank');
     };
-    navCell.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="${BLUE}" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+    // Navigraph logo (compact version)
+    navCell.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;">`
+      + `<svg viewBox="0 0 24 24" fill="none" stroke="${BLUE}" stroke-width="1.8" width="22" height="22"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`
+      + `<span style="font-size:7px;color:${BLUE};font-weight:700;letter-spacing:.03em;">CHARTS</span>`
+      + `</div>`;
 
     // ── Delete ──
     const delCell = document.createElement('div');
@@ -2279,7 +2277,6 @@ function renderLegs() {
     row.appendChild(depCell);
     row.appendChild(depTimeCell);
     row.appendChild(btCell);
-    row.appendChild(arrowEl);
     row.appendChild(arrCell);
     row.appendChild(arrTimeCell);
     row.appendChild(taGateCell);
