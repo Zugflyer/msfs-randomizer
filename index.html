@@ -1954,7 +1954,7 @@ function airlineLogoHtml(icao) {
   const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
   const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;border-radius:3px;padding:2px 4px;overflow:hidden;';
   return `<div style="${wrapStyle}"><img src="${ghUrl}" alt="${name}" title="${name}" style="max-width:100%;max-height:28px;object-fit:contain;"
-    onerror="this.parentNode.innerHTML='<span onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'font-size:9px;color:#555;cursor:pointer;padding:2px;\'>${code} ✚</span>'">
+    onerror="this.parentNode.style.background='#1a1e28';this.parentNode.style.border='1px dashed #4a9eda';this.parentNode.innerHTML='<div onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'display:flex;flex-direction:column;align-items:center;justify-content:center;width:100%;height:100%;cursor:pointer;gap:2px;\'><span style=\'font-size:15px;color:#4a9eda;line-height:1;\'>✚</span><span style=\'font-size:8px;color:#aaa;letter-spacing:.04em;\'>${code}</span></div>'">
   </div>`;
 }
 
@@ -2172,9 +2172,9 @@ function renderLegs() {
 
     // ── AL + EQP ──
     const alCell = document.createElement('div');
-    alCell.style.cssText = bS + 'width:120px;min-width:120px;gap:5px;';
-    alCell.innerHTML = inp('al-'+i,'Airline','106px',i*10+1,leg.airline)
-      + inp('ac-'+i,'EQP','106px',i*10+2,leg.aircraft);
+    alCell.style.cssText = bS + 'width:96px;min-width:96px;gap:5px;';
+    alCell.innerHTML = inp('al-'+i,'Airline','82px',i*10+1,leg.airline,'text-align:center;letter-spacing:.04em;')
+      + inp('ac-'+i,'EQP','82px',i*10+2,leg.aircraft,'text-align:center;letter-spacing:.04em;');
 
     // ── Departure airport ──
     const depCell = document.createElement('div');
@@ -2196,8 +2196,8 @@ function renderLegs() {
     const depTimeCell = document.createElement('div');
     depTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
     depTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
-      + inp('ls-day-'+i,'D','34px',i*10+3,leg.schedDepDay||1)
-      + inp('ls-dep-'+i,'00:00','80px',i*10+4,leg.schedDepTime||'')
+      + inp('ls-day-'+i,'D','28px',i*10+3,leg.schedDepDay||1,'text-align:center;')
+      + inp('ls-dep-'+i,'00:00','72px',i*10+4,leg.schedDepTime||'','text-align:center;')
       + '</div>'
       + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
 
@@ -2231,8 +2231,8 @@ function renderLegs() {
     // ── ArrTime + Day + UTC ──
     const arrTimeCell = document.createElement('div');
     arrTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
-    const arrDayStyle = 'width:34px;min-width:34px;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;text-align:center;padding:4px 2px;line-height:1.2;';
-    const arrTimeStyle = 'flex:1;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:14px;font-family:monospace;font-weight:700;text-align:center;padding:3px 2px;line-height:1.2;';
+    const arrDayStyle = 'width:28px;min-width:28px;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;text-align:center;padding:3px 2px;line-height:1.2;';
+    const arrTimeStyle = 'flex:1;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;font-weight:400;text-align:center;padding:3px 2px;line-height:1.2;';
     arrTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
       + '<div id="ls-arrday-'+i+'" style="'+arrDayStyle+'">' + (leg.schedArrDay || '') + '</div>'
       + '<div id="ls-arr-'+i+'" style="'+arrTimeStyle+'">' + (leg.schedArrTime || '') + '</div>'
@@ -2241,10 +2241,10 @@ function renderLegs() {
 
     // ── TA + Gate ──
     const taGateCell = document.createElement('div');
-    taGateCell.style.cssText = bS + 'width:138px;min-width:138px;gap:5px;';
+    taGateCell.style.cssText = bS + 'width:116px;min-width:116px;gap:4px;';
     taGateCell.innerHTML = '<div style="display:flex;gap:5px;width:100%;">'
-      + inp('ls-ta-'+i,'MIN','63px',i*10+5,leg.schedTA||'')
-      + inp('ls-gate-'+i,'GATE','69px',i*10+6,leg.schedGate||'')
+      + inp('ls-ta-'+i,'MIN','44px',i*10+5,leg.schedTA||'','text-align:right;')
+      + inp('ls-gate-'+i,'GATE','52px',i*10+6,leg.schedGate||'')
       + '</div>';
 
     // ── Navigraph Charts (real logo) ──
@@ -2624,10 +2624,11 @@ function drawLogbookLines() {
     const color = f.planned ? '#4a9eda' : '#5a6270';
     const weight = 1.2;
     try {
-      new L.Geodesic([[depCoords, arrCoords]], { color, weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(rosterMap);
+      const line = new L.Geodesic([[depCoords, arrCoords]], { color, weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(rosterMap);
       const r = 3;
-      L.circleMarker(depCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
-      L.circleMarker(arrCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
+      const dm = L.circleMarker(depCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
+      const am = L.circleMarker(arrCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
+      rosterLayers.push(line, dm, am);
     } catch(e) {}
   });
 }
@@ -2635,6 +2636,7 @@ function drawLogbookLines() {
 function updateRosterLines() {
   if (!rosterMap) return;
   clearRosterLayers();
+  drawLogbookLines();
   legs.forEach(leg => {
     if (!leg.dep || !leg.arr) return;
     const dc = [leg.dep[3], leg.dep[4]];
