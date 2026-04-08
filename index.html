@@ -341,7 +341,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       Data
     </button>
   </div>
-  <div id="cloud-status" style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:5px;padding:0 8px;"></div>
+  <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
+    <span id="cloud-status"></span>
+    <button onclick="openApiKeyDialog()" id="apikey-btn" title="Set Anthropic API Key for block time lookup" style="font-size:11px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">🔑</button>
+  </div>
 </div>
 
 <div class="main">
