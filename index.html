@@ -2257,20 +2257,14 @@ function renderLegs() {
 
     // Insert-between button: small "⊕" divider after each row
     const insertDiv = document.createElement('div');
-    insertDiv.style.cssText = 'display:flex;align-items:center;gap:6px;padding:1px 0;opacity:0.4;transition:opacity .15s;';
-    insertDiv.onmouseenter = () => insertDiv.style.opacity = '1';
-    insertDiv.onmouseleave = () => insertDiv.style.opacity = '0.4';
-    const insertLine = document.createElement('div');
-    insertLine.style.cssText = 'flex:1;height:1px;background:var(--bdr2);';
+    insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:3px 0;';
     const insertBtn = document.createElement('button');
-    insertBtn.style.cssText = 'font-size:11px;padding:1px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf);color:var(--acc);cursor:pointer;white-space:nowrap;';
-    insertBtn.textContent = '⊕ insert leg';
+    insertBtn.style.cssText = 'font-size:13px;font-weight:600;padding:4px 20px;border-radius:var(--r);border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;white-space:nowrap;transition:background .15s;';
+    insertBtn.textContent = '⊕ Insert Leg';
+    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.15)';
+    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.08)';
     insertBtn.onclick = () => insertLegAfter(i);
-    const insertLine2 = document.createElement('div');
-    insertLine2.style.cssText = 'flex:1;height:1px;background:var(--bdr2);';
-    insertDiv.appendChild(insertLine);
     insertDiv.appendChild(insertBtn);
-    insertDiv.appendChild(insertLine2);
     container.appendChild(insertDiv);
 
     // Wire airline input after DOM insertion
@@ -2396,12 +2390,14 @@ function openFlightConnections(e) {
 
 // ── Roster actions ──
 function insertLegAfter(idx) {
-  // New leg: dep = arr of leg at idx, arr = dep of next leg (if exists)
+  // New leg: dep = arr of previous leg, arr = empty (user fills)
+  // Next leg's dep also cleared so user can chain properly
   const depAp = legs[idx]?.arr || null;
-  const arrAp = legs[idx + 1]?.dep || null;
   const airline = legs[idx]?.airline || '';
   const aircraft = legs[idx]?.aircraft || '';
-  legs.splice(idx + 1, 0, { dep: depAp, arr: arrAp, airline, aircraft });
+  // Clear dep of the leg that follows (it will be linked after user sets arr)
+  if (legs[idx + 1]) legs[idx + 1].dep = null;
+  legs.splice(idx + 1, 0, { dep: depAp, arr: null, airline, aircraft });
   renderLegs();
 }
 
@@ -2937,15 +2933,20 @@ const AP_ED_FIELDS = [
 ];
 
 // Apply a single override record onto the live DB array
-function applyOneOverride(rec) {
-  var existing = schedByCode[rec.icao];
+function applyOneOverride(originalIcao, rec) {
+  // Look up by the ORIGINAL icao (before any rename)
+  var existing = schedByCode[originalIcao];
   if (!existing) return;
   AP_ED_FIELDS.forEach(function(f) {
     if (rec[f.key] !== undefined && rec[f.key] !== null && rec[f.key] !== '') {
       existing[f.idx] = (f.idx===3||f.idx===4||f.idx===8) ? parseFloat(rec[f.key]) : rec[f.key];
     }
   });
-  // Re-index in case IATA changed
+  // If ICAO changed, re-index under new key
+  if (rec.icao && rec.icao !== originalIcao) {
+    schedByCode[rec.icao] = existing;
+    // keep original key too so OLD badge works
+  }
   if (existing[1]) schedByIata[existing[1]] = existing;
 }
 
@@ -2955,8 +2956,8 @@ async function loadApOverrides() {
     var res = await sb.from('categories').select('items').eq('name','__ap_overrides__').single();
     if (res.data && Array.isArray(res.data.items)) {
       res.data.items.forEach(function(rec) {
-        apOverrides[rec.icao] = rec;
-        applyOneOverride(rec);
+        apOverrides[rec._origIcao || rec.icao] = rec;
+        applyOneOverride(rec._origIcao || rec.icao, rec);
       });
       if (res.data.items.length > 0)
         console.log('Loaded ' + res.data.items.length + ' airport override(s) from Supabase');
@@ -3115,9 +3116,11 @@ async function apEdSave() {
     return;
   }
 
-  // Apply to live DB immediately
-  apOverrides[ap[0]] = rec;
-  applyOneOverride(rec);
+  // Apply to live DB immediately - key is always original ICAO
+  var origIcao = ap[0];
+  rec._origIcao = origIcao;  // store for reload
+  apOverrides[origIcao] = rec;
+  applyOneOverride(origIcao, rec);
 
   // Persist to Supabase
   try {
