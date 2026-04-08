@@ -291,11 +291,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .logbook-page{display:flex;flex-direction:column;flex:1;overflow:hidden;}
 .logbook-toolbar{flex:0 0 auto;padding:10px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
 .logbook-body{flex:1;overflow-y:auto;padding:0 14px 14px;}
-.lb-tbl{border-collapse:collapse;font-size:12px;}
-.lb-tbl thead th{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;padding:7px 10px;border-bottom:1px solid var(--bdr);text-align:left;position:sticky;top:0;background:var(--bg);white-space:nowrap;}
-.lb-tbl tbody td{padding:6px 10px;border-bottom:1px solid var(--bdr);color:var(--txt);}
+.lb-tbl{border-collapse:collapse;font-size:14px;}
+.lb-tbl thead th{font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;padding:8px 12px;border-bottom:1px solid var(--bdr);text-align:left;position:sticky;top:0;background:var(--bg);white-space:nowrap;}
+.lb-tbl tbody td{padding:8px 12px;border-bottom:1px solid var(--bdr);color:var(--txt);}
 .lb-tbl tbody tr:hover td{background:var(--surf);}
-.lb-mono{font-family:'SF Mono','Courier New',monospace;font-size:11px;color:#58a6ff;font-weight:600;}
+.lb-mono{font-family:'SF Mono','Courier New',monospace;font-size:13px;color:#58a6ff;font-weight:600;}
 .lb-muted{color:var(--txt2);}
 /* ── Calc ── */
 .calc-ap{display:flex;flex-direction:column;gap:1px;}
@@ -329,11 +329,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
       Legs
-    </button>
-    <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-calc" onclick="switchView('calc')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      Schedule
     </button>
     <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
@@ -574,7 +569,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <th style="width:10px;background:transparent;border:none;"></th>
               <th style="width:60px;">Airline</th>
               <th style="width:74px;">Aircraft</th>
-              <th style="width:54px;">Logo</th>
+              <th style="width:70px;">Logo</th>
               <th style="width:24px;"></th>
             </tr></thead>
             <tbody id="lb-body"></tbody>
@@ -2120,7 +2115,7 @@ function legSchedUpdateRow(idx) {
   const arrEl = document.getElementById('ls-arr-' + idx);
   if (arrEl) arrEl.textContent = leg.schedArrTime || '';
   const arrDayEl = document.getElementById('ls-arrday-' + idx);
-  if (arrDayEl) arrDayEl.textContent = leg.schedArrDay ? 'D' + leg.schedArrDay : '';
+  if (arrDayEl) arrDayEl.textContent = leg.schedArrDay || '';
   const arrUtcEl = document.getElementById('ls-arrutc-' + idx);
   if (arrUtcEl) arrUtcEl.textContent = leg.schedArrUTC || '';
   const depUtcEl = document.getElementById('ls-deputc-' + idx);
@@ -2199,10 +2194,10 @@ function renderLegs() {
 
     // ── Day + DepTime + UTC ──
     const depTimeCell = document.createElement('div');
-    depTimeCell.style.cssText = bS + 'width:106px;min-width:106px;gap:3px;align-items:center;';
+    depTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
     depTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
-      + inp('ls-day-'+i,'D','30px',i*10+3,leg.schedDepDay||1)
-      + inp('ls-dep-'+i,'00:00','70px',i*10+4,leg.schedDepTime||'')
+      + inp('ls-day-'+i,'D','34px',i*10+3,leg.schedDepDay||1)
+      + inp('ls-dep-'+i,'00:00','80px',i*10+4,leg.schedDepTime||'')
       + '</div>'
       + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
 
@@ -2235,11 +2230,11 @@ function renderLegs() {
 
     // ── ArrTime + Day + UTC ──
     const arrTimeCell = document.createElement('div');
-    arrTimeCell.style.cssText = bS + 'width:106px;min-width:106px;gap:3px;align-items:center;';
-    const arrDayStyle = 'width:30px;min-width:30px;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;text-align:center;padding:4px 2px;line-height:1.2;';
+    arrTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
+    const arrDayStyle = 'width:34px;min-width:34px;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:12px;font-family:monospace;text-align:center;padding:4px 2px;line-height:1.2;';
     const arrTimeStyle = 'flex:1;border:1px solid #4a9eda;border-radius:4px;background:transparent;color:#4a9eda;font-size:14px;font-family:monospace;font-weight:700;text-align:center;padding:3px 2px;line-height:1.2;';
     arrTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
-      + '<div id="ls-arrday-'+i+'" style="'+arrDayStyle+'">' + (leg.schedArrDay ? 'D'+leg.schedArrDay : '') + '</div>'
+      + '<div id="ls-arrday-'+i+'" style="'+arrDayStyle+'">' + (leg.schedArrDay || '') + '</div>'
       + '<div id="ls-arr-'+i+'" style="'+arrTimeStyle+'">' + (leg.schedArrTime || '') + '</div>'
       + '</div>'
       + '<div id="ls-arrutc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedArrUTC||'') + '</div>';
@@ -2285,15 +2280,18 @@ function renderLegs() {
     row.appendChild(delCell);
     container.appendChild(row);
 
-    // Insert button between rows
+    // Insert / Add button between rows
     const insertDiv = document.createElement('div');
     insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 0;';
     const insertBtn = document.createElement('button');
-    insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#ccc;cursor:pointer;';
-    insertBtn.textContent = '⊕ Insert Leg';
+    const isLastLeg = (i === legs.length - 1);
+    const btnLabel = isLastLeg ? '⊕ Add Leg' : '⊕ Insert Leg';
+    const btnColor = isLastLeg ? 'rgba(88,166,255,.7)' : '#ccc';
+    insertBtn.style.cssText = `font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:${btnColor};cursor:pointer;`;
+    insertBtn.textContent = btnLabel;
     insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.12)';
     insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.05)';
-    insertBtn.onclick = () => insertLegAfter(i);
+    insertBtn.onclick = () => isLastLeg ? addLegAtEnd() : insertLegAfter(i);
     insertDiv.appendChild(insertBtn);
     container.appendChild(insertDiv);
 
@@ -2323,8 +2321,9 @@ function renderLegs() {
 
   // Initial calc + block time fetch
   legs.forEach((leg, i) => {
+    leg._fetchingBT = false;  // reset so fetch can run after re-render
     legSchedUpdateRow(i);
-    if (leg.dep && leg.arr && !leg.blockTimeReal) setTimeout(() => fetchBlockTime(i), i * 1800);
+    if (leg.dep && leg.arr && !leg.blockTimeReal) setTimeout(() => fetchBlockTime(i), i * 2000 + 300);
   });
 
   updateRosterLines();
@@ -2429,6 +2428,7 @@ async function fetchBlockTime(idx) {
         btEl.textContent = m[0]; btEl.style.fontStyle = 'normal';
         btEl.title = `Nonstop ${depIata}→${arrIata} (web)`;
         leg._fetchingBT = false;
+        legSchedUpdateRow(idx);
         return;
       }
     }
@@ -2448,6 +2448,7 @@ async function fetchBlockTime(idx) {
   leg._fetchingBT = false;
   btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
   btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
+  legSchedUpdateRow(idx);
 }
 
 function updateFlightConnectionsBtn() {
@@ -2485,22 +2486,22 @@ function openFlightConnections(e) {
 
 // ── Roster actions ──
 function insertLegAfter(idx) {
-  // New leg: dep = arr of previous leg, arr = empty (user fills)
-  // Next leg's dep also cleared so user can chain properly
+  // Insert between existing legs: dep = arr of current, arr = empty, clear next dep
   const depAp = legs[idx]?.arr || null;
   const airline = legs[idx]?.airline || '';
   const aircraft = legs[idx]?.aircraft || '';
-  // Clear dep of the leg that follows (it will be linked after user sets arr)
   if (legs[idx + 1]) legs[idx + 1].dep = null;
   legs.splice(idx + 1, 0, { dep: depAp, arr: null, airline, aircraft });
   renderLegs();
 }
 
-function addLeg() {
+function addLegAtEnd() {
+  // Append after last leg: dep = arr of last leg, arr = empty
   const last = legs[legs.length - 1];
-  const savedArr = last.arr;
-  last.arr = null;
-  legs.push({ dep: null, arr: savedArr, airline: '', aircraft: '' });
+  const depAp = last?.arr || null;
+  const airline = last?.airline || '';
+  const aircraft = last?.aircraft || '';
+  legs.push({ dep: depAp, arr: null, airline, aircraft });
   renderLegs();
 }
 
@@ -2932,7 +2933,7 @@ function drawLbMap() {
     try {
       var planeIcon = L.divIcon({
         className: '',
-        html: '<div style="font-size:18px;transform:rotate(45deg);filter:drop-shadow(0 0 3px rgba(0,0,0,.8));">✈</div>',
+        html: '<div style="font-size:30px;transform:rotate(45deg);filter:drop-shadow(0 0 4px rgba(0,0,0,.9));">✈</div>',
         iconSize: [22, 22],
         iconAnchor: [11, 11]
       });
