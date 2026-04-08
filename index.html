@@ -3018,6 +3018,22 @@ function drawLbMapEu() {
   if (!lbMapEu) return;
   lbMapEuLayers.forEach(function(l) { try { lbMapEu.removeLayer(l); } catch(e) {} });
   lbMapEuLayers = [];
+
+  // Add plane icon for last flown position (visible if in Europe, otherwise just on world map)
+  var flownEu = logbookFlights.filter(function(f) { return !f.planned && f.arr_lat; });
+  var lastFlownEu = flownEu.length > 0 ? flownEu[flownEu.length - 1] : null;
+  if (lastFlownEu) {
+    try {
+      var planeIconEu = L.divIcon({
+        className: '',
+        html: '<div style="font-size:26px;transform:rotate(45deg);filter:drop-shadow(0 0 4px rgba(0,0,0,.9));">✈</div>',
+        iconSize: [20, 20], iconAnchor: [10, 10]
+      });
+      var pm = L.marker([lastFlownEu.arr_lat, lastFlownEu.arr_lon], { icon: planeIconEu }).addTo(lbMapEu);
+      pm.bindTooltip('<b>' + (lastFlownEu.arr_icao||'') + '</b> ' + (lastFlownEu.arr||''), { direction: 'top' });
+      lbMapEuLayers.push(pm);
+    } catch(e) {}
+  }
   logbookFlights.forEach(function(f) {
     if (!f.dep_lat || !f.arr_lat) return;
     const dc = [f.dep_lat, f.dep_lon];
