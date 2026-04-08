@@ -335,16 +335,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
     </button>
-    <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-etops" onclick="switchView('etops')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-      ETOPS
-    </button>
-    <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-gates" onclick="switchView('gates')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      Gates
-    </button>
+
   </div>
   <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
     <span id="cloud-status"></span>
@@ -477,65 +468,92 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div class="table-area" id="cat-table-area"></div>
     </div>
 
-    <!-- ═══ ETOPS TABLE ═══ -->
-    <div id="view-etops" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
-      <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">ETOPS Reference</span>
-        <div style="flex:1;"></div>
-        <button onclick="etopsAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
-        <select id="etops-sort" onchange="renderEtopsTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
-          <option value="type">Sort: Aircraft Type</option>
-          <option value="etops">Sort: ETOPS (min)</option>
-          <option value="dist">Sort: Distance (NM)</option>
-        </select>
-      </div>
-      <div style="overflow:auto;flex:1;padding:10px 14px;">
-        <table id="etops-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
-      </div>
-    </div>
-
-    <!-- ═══ GATE SIZES TABLE ═══ -->
-    <div id="view-gates" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
-      <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">Gate Sizes Reference</span>
-        <div style="flex:1;"></div>
-        <button onclick="gatesAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
-        <select id="gates-sort" onchange="renderGatesTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
-          <option value="mfr">Sort: Manufacturer</option>
-          <option value="type">Sort: Aircraft Type</option>
-          <option value="gates">Sort: Gate Size</option>
-        </select>
-      </div>
-      <div style="overflow:auto;flex:1;padding:10px 14px;">
-        <table id="gates-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
-      </div>
-    </div>
-
     <!-- DATA / IMPORT -->
     <div id="view-data" style="display:none;flex:1;overflow:hidden;">
-      <div class="import-panel">
-        <div class="imp-card">
-          <h3>Import CSV from Excel</h3>
-          <p>Export a table from Excel as CSV (UTF-8). Format: Col A = ICAO | B = IATA | C = City | D = Airport name | E = Region/Difficulty.<br>Select target category first.</p>
-          <div style="margin-bottom:8px;">
-            <label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px;">Target category:</label>
-            <select id="csv-target" style="font-size:12px;padding:5px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);"></select>
-          </div>
-          <input type="file" id="csv-file" accept=".csv,.txt" style="font-size:12px;color:var(--txt2);">
-          <br><button class="imp-btn" style="margin-top:8px;" onclick="importCSV()">Import</button>
-          <div id="csv-msg" class="msg-ok"></div>
+      <div style="display:flex;flex-direction:column;height:100%;overflow:hidden;">
+        <!-- Top row: Airport Base Data + ETOPS + Gates buttons -->
+        <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <button onclick="showDataSection('airport')" id="ds-btn-airport"
+            style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
+            Airport Base Data
+          </button>
+          <button onclick="showDataSection('etops')" id="ds-btn-etops"
+            style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            ETOPS
+          </button>
+          <button onclick="showDataSection('gates')" id="ds-btn-gates"
+            style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+            Gate Sizes
+          </button>
+          <button onclick="openApEditor()" id="ds-btn-apeditor"
+            style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit Airport
+          </button>
         </div>
-        <div class="imp-card">
-          <h3>Export / Import JSON</h3>
-          <p>Save all categories and entries as JSON to reload later.</p>
-          <div style="display:flex;gap:6px;flex-wrap:wrap;">
-            <button class="imp-btn" onclick="exportJSON()">Export JSON</button>
-            <button class="imp-btn" onclick="document.getElementById('json-import-area').style.display='block'">Import JSON</button>
+
+        <!-- Airport section (import/export) -->
+        <div id="ds-airport" style="flex:1;overflow:auto;">
+          <div class="import-panel">
+            <div class="imp-card">
+              <h3>Import CSV from Excel</h3>
+              <p>Export a table from Excel as CSV (UTF-8). Format: Col A = ICAO | B = IATA | C = City | D = Airport name | E = Region/Difficulty.<br>Select target category first.</p>
+              <div style="margin-bottom:8px;">
+                <label style="font-size:11px;color:var(--txt2);display:block;margin-bottom:3px;">Target category:</label>
+                <select id="csv-target" style="font-size:12px;padding:5px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);"></select>
+              </div>
+              <input type="file" id="csv-file" accept=".csv,.txt" style="font-size:12px;color:var(--txt2);">
+              <br><button class="imp-btn" style="margin-top:8px;" onclick="importCSV()">Import</button>
+              <div id="csv-msg" class="msg-ok"></div>
+            </div>
+            <div class="imp-card">
+              <h3>Export / Import JSON</h3>
+              <p>Save all categories and entries as JSON to reload later.</p>
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button class="imp-btn" onclick="exportJSON()">Export JSON</button>
+                <button class="imp-btn" onclick="document.getElementById('json-import-area').style.display='block'">Import JSON</button>
+              </div>
+              <div id="json-import-area" style="display:none;">
+                <textarea class="json-area" id="json-input" rows="7"></textarea>
+                <button class="imp-btn" style="margin-top:5px;" onclick="importJSON()">Load</button>
+                <div id="json-msg" class="msg-ok"></div>
+              </div>
+            </div>
           </div>
-          <div id="json-import-area" style="display:none;">
-            <textarea class="json-area" id="json-input" rows="7"></textarea>
-            <button class="imp-btn" style="margin-top:5px;" onclick="importJSON()">Load</button>
-            <div id="json-msg" class="msg-ok"></div>
+        </div>
+
+        <!-- ETOPS section -->
+        <div id="ds-etops" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+          <div style="padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <div style="flex:1;"></div>
+            <button onclick="etopsAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+            <select id="etops-sort" onchange="renderEtopsTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+              <option value="type">Sort: Aircraft Type</option>
+              <option value="etops">Sort: ETOPS (min)</option>
+              <option value="dist">Sort: Distance (NM)</option>
+            </select>
+          </div>
+          <div style="overflow:auto;flex:1;padding:10px 14px;">
+            <table id="etops-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
+          </div>
+        </div>
+
+        <!-- Gates section -->
+        <div id="ds-gates" style="display:none;flex:1;overflow:hidden;flex-direction:column;">
+          <div style="padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+            <div style="flex:1;"></div>
+            <button onclick="gatesAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+            <select id="gates-sort" onchange="renderGatesTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+              <option value="mfr">Sort: Manufacturer</option>
+              <option value="type">Sort: Aircraft Type</option>
+              <option value="gates">Sort: Gate Size</option>
+            </select>
+          </div>
+          <div style="overflow:auto;flex:1;padding:10px 14px;">
+            <table id="gates-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
           </div>
         </div>
       </div>
@@ -1906,7 +1924,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','etops','gates'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -1922,8 +1940,6 @@ function switchView(view) {
 
   // View-specific init
   if (view === 'categories') renderCatView();
-  if (view === 'etops') renderEtopsTable();
-  if (view === 'gates') renderGatesTable();
   if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
   if (view === 'dashboard') {
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
@@ -3661,6 +3677,19 @@ function renderCalc() {
 
 
 
+
+function showDataSection(section) {
+  ['airport','etops','gates'].forEach(s => {
+    const el = document.getElementById('ds-' + s);
+    if (el) { el.style.display = s === section ? (s === 'airport' ? 'block' : 'flex') : 'none'; }
+    const btn = document.getElementById('ds-btn-' + s);
+    if (btn) btn.style.background = s === section ? 'var(--acc)' : 'var(--surf2)';
+    if (btn) btn.style.color = s === section ? '#fff' : 'var(--txt)';
+    if (btn) btn.style.border = s === section ? '1px solid var(--acc)' : '1px solid var(--bdr2)';
+  });
+  if (section === 'etops') renderEtopsTable();
+  if (section === 'gates') renderGatesTable();
+}
 
 // ═══ ETOPS DATA ═══
 let etopsData = [
