@@ -438,6 +438,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
           Airport Base Data
         </button>
+        <button onclick="catShowEtops()" id="cat-btn-etops" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          ETOPS
+        </button>
+        <button onclick="catShowGates()" id="cat-btn-gates" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+          Gate Sizes
+        </button>
       </div>
       <div class="cat-tabs-row" id="cat-tabs"></div>
       <div class="filter-bar" id="cat-filter-bar" style="display:none;">
@@ -466,6 +474,40 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-add" onclick="showAddCatItem()" style="background:transparent;color:var(--txt3);border-color:var(--bdr);">✕</button>
       </div>
       <div class="table-area" id="cat-table-area"></div>
+
+      <!-- ETOPS section (hidden by default) -->
+      <div id="cat-etops-section" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+        <div style="padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span style="font-size:11px;color:var(--txt3);">ETOPS Reference — click any cell to edit</span>
+          <div style="flex:1;"></div>
+          <button onclick="etopsAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+          <select id="etops-sort" onchange="renderEtopsTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+            <option value="type">Sort: Aircraft Type</option>
+            <option value="etops">Sort: ETOPS (min)</option>
+            <option value="dist">Sort: Distance (NM)</option>
+          </select>
+        </div>
+        <div style="overflow:auto;flex:1;padding:10px 14px;">
+          <table id="etops-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
+        </div>
+      </div>
+
+      <!-- Gates section (hidden by default) -->
+      <div id="cat-gates-section" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+        <div style="padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span style="font-size:11px;color:var(--txt3);">Gate Sizes Reference — click any cell to edit</span>
+          <div style="flex:1;"></div>
+          <button onclick="gatesAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+          <select id="gates-sort" onchange="renderGatesTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+            <option value="mfr">Sort: Manufacturer</option>
+            <option value="type">Sort: Aircraft Type</option>
+            <option value="gates">Sort: Gate Size</option>
+          </select>
+        </div>
+        <div style="overflow:auto;flex:1;padding:10px 14px;">
+          <table id="gates-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
+        </div>
+      </div>
     </div>
 
     <!-- DATA / IMPORT -->
@@ -3677,6 +3719,50 @@ function renderCalc() {
 
 
 
+
+function catShowEtops() {
+  // Hide normal cat content, show etops
+  ['cat-tabs','cat-filter-bar','cat-add-row','cat-table-area'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  const es = document.getElementById('cat-etops-section');
+  const gs = document.getElementById('cat-gates-section');
+  if (es) { es.style.display = 'flex'; }
+  if (gs) { gs.style.display = 'none'; }
+  // Highlight button
+  const be = document.getElementById('cat-btn-etops');
+  const bg = document.getElementById('cat-btn-gates');
+  if (be) { be.style.background = 'var(--acc)'; be.style.color = '#fff'; be.style.borderColor = 'var(--acc)'; }
+  if (bg) { bg.style.background = 'var(--surf2)'; bg.style.color = 'var(--txt)'; bg.style.borderColor = 'var(--bdr2)'; }
+  renderEtopsTable();
+}
+
+function catShowGates() {
+  // Hide normal cat content, show gates
+  ['cat-tabs','cat-filter-bar','cat-add-row','cat-table-area'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  const es = document.getElementById('cat-etops-section');
+  const gs = document.getElementById('cat-gates-section');
+  if (es) { es.style.display = 'none'; }
+  if (gs) { gs.style.display = 'flex'; }
+  const be = document.getElementById('cat-btn-etops');
+  const bg = document.getElementById('cat-btn-gates');
+  if (be) { be.style.background = 'var(--surf2)'; be.style.color = 'var(--txt)'; be.style.borderColor = 'var(--bdr2)'; }
+  if (bg) { bg.style.background = 'var(--acc)'; bg.style.color = '#fff'; bg.style.borderColor = 'var(--acc)'; }
+  renderGatesTable();
+}
+
+function catShowCategories() {
+  // Restore normal cat content
+  const tabs = document.getElementById('cat-tabs'); if (tabs) tabs.style.display = '';
+  const es = document.getElementById('cat-etops-section'); if (es) es.style.display = 'none';
+  const gs = document.getElementById('cat-gates-section'); if (gs) gs.style.display = 'none';
+  const be = document.getElementById('cat-btn-etops');
+  const bg = document.getElementById('cat-btn-gates');
+  if (be) { be.style.background = 'var(--surf2)'; be.style.color = 'var(--txt)'; be.style.borderColor = 'var(--bdr2)'; }
+  if (bg) { bg.style.background = 'var(--surf2)'; bg.style.color = 'var(--txt)'; bg.style.borderColor = 'var(--bdr2)'; }
+}
 
 function showDataSection(section) {
   ['airport','etops','gates'].forEach(s => {
