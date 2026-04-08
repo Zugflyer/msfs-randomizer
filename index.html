@@ -2122,162 +2122,288 @@ function buildSuggestBox(inputEl, onSelect) {
   }, true);
 }
 
+// CSS injected once for time inputs
+(function() {
+  if (!document.getElementById('leg-sched-style')) {
+    const s = document.createElement('style');
+    s.id = 'leg-sched-style';
+    s.textContent = `
+      .leg-row { display:flex; align-items:flex-start; gap:6px; padding:8px 10px; border-bottom:1px solid var(--bdr); flex-wrap:wrap; }
+      .ls-sep { color:var(--txt3); font-size:16px; align-self:center; padding-top:14px; flex-shrink:0; }
+      .ls-block { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
+      .ls-label { font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--txt3); white-space:nowrap; }
+      .ls-val { font-size:12px; color:var(--txt2); font-family:monospace; padding-top:2px; }
+      .ls-inp { font-size:12px; font-family:monospace; background:var(--surf2); border:1px solid var(--bdr2); border-radius:4px; color:var(--txt); padding:3px 6px; width:54px; text-align:center; outline:none; }
+      .ls-inp:focus { border-color:var(--acc); }
+      .ls-inp-wide { width:76px; }
+      .ls-arr-time { font-size:13px; font-weight:700; color:var(--blue); font-family:monospace; padding-top:2px; min-width:44px; }
+      .ls-arr-day  { font-size:10px; color:var(--txt3); font-family:monospace; padding-top:1px; }
+    `;
+    document.head.appendChild(s);
+  }
+})();
+
+function legSchedUpdateRow(idx) {
+  const leg = legs[idx];
+  if (!leg) return;
+
+  // Read dep time input → format
+  const depEl = document.getElementById('ls-dep-' + idx);
+  const dayEl = document.getElementById('ls-day-' + idx);
+  if (!depEl) return;
+
+  const parsed = parseTime(depEl.value);
+  if (parsed && parsed.h >= 0 && parsed.h < 24 && parsed.m >= 0 && parsed.m < 60) {
+    leg.schedDepTime = fmtTime(parsed.h, parsed.m);
+    if (document.activeElement !== depEl) depEl.value = leg.schedDepTime;
+  } else if (!depEl.value) {
+    leg.schedDepTime = '';
+  }
+
+  const dayVal = parseInt(dayEl ? dayEl.value : '') || 1;
+  leg.schedDepDay = (dayVal >= 1 && dayVal <= 7) ? dayVal : 1;
+
+  // Calculate arrival
+  if (leg.schedDepTime && leg.blockTime && leg.dep && leg.arr) {
+    const [dh, dm] = leg.schedDepTime.split(':').map(Number);
+    const depUtcMins = dh*60 + dm - Math.round(getUtcOffset(leg.dep)*60);
+    const bparts = leg.blockTime.split(':');
+    const blockMins = parseInt(bparts[0])*60 + parseInt(bparts[1]);
+    const arrUtcMins = depUtcMins + blockMins;
+    const arrUtcOffset = Math.round(getUtcOffset(leg.arr)*60);
+    const arrLocalMins = arrUtcMins + arrUtcOffset;
+    const dayDelta = Math.floor((arrLocalMins + (leg.schedDepDay-1)*24*60) / (24*60)) - (leg.schedDepDay-1);
+    const arrMod = ((arrLocalMins % (24*60)) + 24*60) % (24*60);
+    leg.schedArrTime = fmtTime(Math.floor(arrMod/60), arrMod%60);
+    leg.schedArrDay  = ((leg.schedDepDay - 1 + dayDelta) % 7 + 7) % 7 + 1;
+
+    // Show UTC offsets
+    const depUTC = getUtcOffset(leg.dep);
+    const arrUTC = getUtcOffset(leg.arr);
+    const depSign = depUTC >= 0 ? '+' : '';
+    const arrSign = arrUTC >= 0 ? '+' : '';
+    leg.schedDepUTC = 'UTC' + depSign + depUTC;
+    leg.schedArrUTC = 'UTC' + arrSign + arrUTC;
+  } else {
+    leg.schedArrTime = ''; leg.schedArrDay = ''; leg.schedDepUTC = ''; leg.schedArrUTC = '';
+  }
+
+  // Update arrival display
+  const arrTimeEl = document.getElementById('ls-arr-' + idx);
+  const arrDayEl  = document.getElementById('ls-arrday-' + idx);
+  const arrUtcEl  = document.getElementById('ls-arrutc-' + idx);
+  const depUtcEl  = document.getElementById('ls-deputc-' + idx);
+  if (arrTimeEl) arrTimeEl.textContent = leg.schedArrTime || '–';
+  if (arrDayEl)  arrDayEl.textContent  = leg.schedArrDay  ? 'Day ' + leg.schedArrDay : '';
+  if (arrUtcEl)  arrUtcEl.textContent  = leg.schedArrUTC  || '';
+  if (depUtcEl)  depUtcEl.textContent  = leg.schedDepUTC  || '';
+
+  // Cascade TA → next dep
+  const taEl = document.getElementById('ls-ta-' + idx);
+  const ta = parseInt(taEl ? taEl.value : '') || 0;
+  leg.schedTA = ta;
+  const nextLeg = legs[idx + 1];
+  if (nextLeg && leg.schedArrTime && ta > 0 && !nextLeg._schedDepOverride) {
+    const [ah, am] = leg.schedArrTime.split(':').map(Number);
+    const res = addMinutes(ah, am, '0:' + ta);
+    if (res) {
+      nextLeg.schedDepTime = fmtTime(res.h, res.m);
+      nextLeg.schedDepDay  = ((leg.schedArrDay - 1 + res.dayOffset) % 7 + 7) % 7 + 1;
+      const nDepEl = document.getElementById('ls-dep-' + (idx+1));
+      const nDayEl = document.getElementById('ls-day-' + (idx+1));
+      if (nDepEl) { nDepEl.value = nextLeg.schedDepTime; }
+      if (nDayEl) { nDayEl.value = nextLeg.schedDepDay; }
+      legSchedUpdateRow(idx + 1);
+    }
+  }
+}
+
 function renderLegs() {
   const container = document.getElementById('legs-container');
   if (!container) return;
   container.innerHTML = '';
 
+  const iSt = 'font-size:12px;font-family:monospace;background:var(--surf2);border:1px solid var(--bdr2);border-radius:4px;color:var(--txt);padding:3px 6px;outline:none;';
+
   legs.forEach((leg, i) => {
-    const isFirst = (i === 0);
-    const isLast = (i === legs.length - 1);
     const row = document.createElement('div');
     row.className = 'leg-row';
 
-    // ── Departure ──
+    // ── Logo ──
+    const logoCol = document.createElement('div');
+    logoCol.className = 'ls-block';
+    logoCol.style.cssText = 'justify-content:center;min-width:58px;';
+    logoCol.innerHTML = '<div class="ls-label">Airline</div>'
+      + '<div id="logo-' + i + '" style="min-height:32px;display:flex;align-items:center;">'
+      + (leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:var(--txt3);">–</span>')
+      + '</div>';
+
+    // ── Airline + Aircraft inputs ──
+    const alacCol = document.createElement('div');
+    alacCol.className = 'ls-block';
+    alacCol.innerHTML = '<div class="ls-label">AL &nbsp; EQP</div>'
+      + '<div style="display:flex;gap:4px;">'
+      + '<input id="al-' + i + '" style="' + iSt + 'width:52px;text-transform:uppercase;" placeholder="DLH" value="' + (leg.airline||'') + '">'
+      + '<input id="ac-' + i + '" style="' + iSt + 'width:60px;text-transform:uppercase;" placeholder="A388" value="' + (leg.aircraft||'') + '">'
+      + '</div>';
+
+    // ── Departure airport ──
     const depCol = document.createElement('div');
-    depCol.className = 'leg-col';
-    depCol.innerHTML = '<div class="leg-label">Departure</div>';
+    depCol.className = 'ls-block';
+    depCol.innerHTML = '<div class="ls-label">Departure</div>';
     if (leg.dep) {
-      // Always show apBox when airport is set — click to change
-      const boxWrap = document.createElement('div');
-      boxWrap.style.position = 'relative';
-      boxWrap.innerHTML = apBox(leg.dep);
-      boxWrap.style.cursor = 'pointer';
-      boxWrap.title = 'Click to change';
-      boxWrap.onclick = () => {
-        legs[i].dep = null;
-        renderLegs();
-      };
-      depCol.appendChild(boxWrap);
+      const bw = document.createElement('div');
+      bw.innerHTML = apBox(leg.dep);
+      bw.style.cursor = 'pointer'; bw.title = 'Click to change';
+      bw.onclick = () => { legs[i].dep = null; renderLegs(); };
+      depCol.appendChild(bw);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
       const inp = document.createElement('input');
-      inp.className = 'leg-input';
-      inp.placeholder = 'Type ICAO or city…';
-      wrap.appendChild(inp);
-      depCol.appendChild(wrap);
+      inp.className = 'leg-input'; inp.placeholder = 'ICAO or city…';
+      wrap.appendChild(inp); depCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
         legs[i].dep = ap;
         if (i > 0) legs[i-1].arr = ap;
-        updateRosterLines();
-        renderLegs();
+        updateRosterLines(); renderLegs();
       });
     }
 
-    // ── Destination ──
+    // ── Dep time + day ──
+    const depTimeCol = document.createElement('div');
+    depTimeCol.className = 'ls-block';
+    const depTimeVal = leg.schedDepTime || '00:00';
+    const depDayVal  = leg.schedDepDay  || 1;
+    depTimeCol.innerHTML = '<div class="ls-label">Day &nbsp; Dep local</div>'
+      + '<div style="display:flex;gap:4px;align-items:center;">'
+      + '<input id="ls-day-' + i + '" style="' + iSt + 'width:34px;text-align:center;" value="' + depDayVal + '" tabindex="' + (i*10+1) + '">'
+      + '<input id="ls-dep-' + i + '" style="' + iSt + 'width:54px;text-align:center;" value="' + depTimeVal + '" tabindex="' + (i*10+2) + '">'
+      + '</div>'
+      + '<div id="ls-deputc-' + i + '" class="ls-arr-day">' + (leg.schedDepUTC||'') + '</div>';
+
+    // ── Arrow + block time ──
+    const btCol = document.createElement('div');
+    btCol.className = 'ls-block';
+    btCol.style.alignItems = 'center';
+    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
+    const btStyle = leg.blockTimeReal ? 'font-weight:700;color:var(--green);' : 'font-style:italic;color:var(--txt3);';
+    btCol.innerHTML = '<div class="ls-label" style="text-align:center;">Block</div>'
+      + '<div style="text-align:center;">'
+      + '<div style="font-size:11px;color:var(--txt3);">→</div>'
+      + '<div class="blocktime-val" id="bt-' + i + '" style="font-size:12px;font-family:monospace;' + btStyle + 'cursor:pointer;" title="Click to refresh" onclick="fetchBlockTime(' + i + ')">' + btDisplay + '</div>'
+      + '</div>';
+
+    // ── Arrival airport ──
     const arrCol = document.createElement('div');
-    arrCol.className = 'leg-col';
-    arrCol.innerHTML = '<div class="leg-label">Destination</div>';
+    arrCol.className = 'ls-block';
+    arrCol.innerHTML = '<div class="ls-label">Destination</div>';
     if (leg.arr) {
-      // Always show apBox when airport is set — click to change
-      const boxWrap = document.createElement('div');
-      boxWrap.style.position = 'relative';
-      boxWrap.innerHTML = apBox(leg.arr);
-      boxWrap.style.cursor = 'pointer';
-      boxWrap.title = 'Click to change';
-      boxWrap.onclick = () => {
-        legs[i].arr = null;
-        renderLegs();
-      };
-      arrCol.appendChild(boxWrap);
+      const bw = document.createElement('div');
+      bw.innerHTML = apBox(leg.arr);
+      bw.style.cursor = 'pointer'; bw.title = 'Click to change';
+      bw.onclick = () => { legs[i].arr = null; renderLegs(); };
+      arrCol.appendChild(bw);
     } else {
       const wrap = document.createElement('div');
       wrap.style.position = 'relative';
       const inp = document.createElement('input');
-      inp.className = 'leg-input';
-      inp.placeholder = 'Type ICAO or city…';
-      wrap.appendChild(inp);
-      arrCol.appendChild(wrap);
+      inp.className = 'leg-input'; inp.placeholder = 'ICAO or city…';
+      wrap.appendChild(inp); arrCol.appendChild(wrap);
       buildSuggestBox(inp, ap => {
         legs[i].arr = ap;
         if (i < legs.length - 1) legs[i+1].dep = ap;
-        updateRosterLines();
-        renderLegs();
-        fetchBlockTime(i);
+        updateRosterLines(); renderLegs(); fetchBlockTime(i);
       });
     }
 
-    // ── Airline ──
-    const alCol = document.createElement('div');
-    alCol.className = 'leg-col';
-    alCol.style.gap = '3px';
-    alCol.innerHTML = `
-      <div class="leg-label">Airline ICAO</div>
-      <input class="leg-sm-input" id="al-${i}" placeholder="e.g. DLH"
-        value="${leg.airline || ''}" style="width:76px;text-transform:uppercase;">
-      <div id="logo-${i}" style="min-height:28px;margin-top:2px;">
-        ${leg.airline ? airlineLogoHtml(leg.airline) : ''}
-      </div>`;
+    // ── Arr time display ──
+    const arrTimeCol = document.createElement('div');
+    arrTimeCol.className = 'ls-block';
+    arrTimeCol.innerHTML = '<div class="ls-label">Arr local &nbsp; Day</div>'
+      + '<div style="display:flex;gap:6px;align-items:baseline;">'
+      + '<div id="ls-arr-' + i + '" class="ls-arr-time">' + (leg.schedArrTime || '–') + '</div>'
+      + '<div id="ls-arrday-' + i + '" class="ls-arr-day">' + (leg.schedArrDay ? 'Day '+leg.schedArrDay : '') + '</div>'
+      + '</div>'
+      + '<div id="ls-arrutc-' + i + '" class="ls-arr-day">' + (leg.schedArrUTC||'') + '</div>';
 
-    // ── Aircraft ──
-    const acCol = document.createElement('div');
-    acCol.className = 'leg-col';
-    acCol.style.gap = '3px';
-    acCol.innerHTML = `
-      <div class="leg-label">Aircraft</div>
-      <input class="leg-sm-input" placeholder="e.g. A388"
-        value="${leg.aircraft || ''}" style="width:76px;text-transform:uppercase;">`;
+    // ── TA + Gate ──
+    const taGateCol = document.createElement('div');
+    taGateCol.className = 'ls-block';
+    taGateCol.innerHTML = '<div class="ls-label">TA min &nbsp; Gate</div>'
+      + '<div style="display:flex;gap:4px;">'
+      + '<input id="ls-ta-' + i + '" style="' + iSt + 'width:46px;text-align:center;" placeholder="min" value="' + (leg.schedTA||'') + '" tabindex="' + (i*10+3) + '">'
+      + '<input id="ls-gate-' + i + '" style="' + iSt + 'width:50px;text-transform:uppercase;" placeholder="Gate" value="' + (leg.schedGate||'') + '" tabindex="' + (i*10+4) + '">'
+      + '</div>';
 
-    // ── Block Time ──
-    const btCol = document.createElement('div');
-    btCol.className = 'leg-col blocktime-box';
-    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
-    btCol.innerHTML = `
-      <div class="leg-label">Block Time</div>
-      <div class="blocktime-val" id="bt-${i}" title="Click to refresh"
-        onclick="fetchBlockTime(${i})">${btDisplay}</div>`;
-
-    const arrow = document.createElement('div');
-    arrow.className = 'leg-arrow';
-    arrow.textContent = '→';
-
-    row.appendChild(depCol);
-    row.appendChild(arrow);
-    row.appendChild(arrCol);
-    row.appendChild(alCol);
-    row.appendChild(acCol);
-    row.appendChild(btCol);
-
+    // ── Delete button ──
+    const delCol = document.createElement('div');
+    delCol.className = 'ls-block';
+    delCol.style.justifyContent = 'center';
+    delCol.innerHTML = '<div class="ls-label">&nbsp;</div>';
     if (legs.length > 1) {
       const del = document.createElement('button');
-      del.className = 'leg-del';
-      del.textContent = '✕';
+      del.className = 'leg-del'; del.textContent = '✕';
       del.onclick = () => deleteLeg(i);
-      row.appendChild(del);
+      delCol.appendChild(del);
     }
+
+    row.appendChild(logoCol);
+    row.appendChild(alacCol);
+    row.appendChild(depCol);
+    row.appendChild(depTimeCol);
+    row.appendChild(btCol);
+    row.appendChild(arrCol);
+    row.appendChild(arrTimeCol);
+    row.appendChild(taGateCol);
+    row.appendChild(delCol);
 
     container.appendChild(row);
 
-    // Insert-between button: small "⊕" divider after each row
+    // Insert button between rows
     const insertDiv = document.createElement('div');
-    insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:3px 0;';
+    insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 0;';
     const insertBtn = document.createElement('button');
-    insertBtn.style.cssText = 'font-size:13px;font-weight:600;padding:4px 20px;border-radius:var(--r);border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;white-space:nowrap;transition:background .15s;';
+    insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 16px;border-radius:var(--r);border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;white-space:nowrap;';
     insertBtn.textContent = '⊕ Insert Leg';
-    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.15)';
-    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.08)';
+    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.13)';
+    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.06)';
     insertBtn.onclick = () => insertLegAfter(i);
     insertDiv.appendChild(insertBtn);
     container.appendChild(insertDiv);
 
-    // Wire airline input after DOM insertion
+    // Wire inputs after DOM insertion
     const alInput = document.getElementById('al-'+i);
-    if (alInput) {
-      alInput.addEventListener('input', () => {
-        const code = alInput.value.toUpperCase().trim();
-        legs[i].airline = code;
-        const logoDiv = document.getElementById('logo-'+i);
-        if (logoDiv) logoDiv.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '';
+    if (alInput) alInput.addEventListener('input', () => {
+      const code = alInput.value.toUpperCase().trim();
+      legs[i].airline = code;
+      const logoDiv = document.getElementById('logo-'+i);
+      if (logoDiv) logoDiv.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '<span style="font-size:9px;color:var(--txt3);">–</span>';
+    });
+    const acInput = document.getElementById('ac-'+i);
+    if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
+
+    const depTimeInput = document.getElementById('ls-dep-'+i);
+    if (depTimeInput) {
+      depTimeInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legSchedUpdateRow(i); });
+      depTimeInput.addEventListener('blur', () => {
+        const p = parseTime(depTimeInput.value);
+        if (p) depTimeInput.value = fmtTime(p.h, p.m);
       });
     }
-    // Wire aircraft input
-    const acInput = acCol.querySelector('input');
-    if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
+    const dayInput = document.getElementById('ls-day-'+i);
+    if (dayInput) dayInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legSchedUpdateRow(i); });
+
+    const taInput = document.getElementById('ls-ta-'+i);
+    if (taInput) taInput.addEventListener('input', () => legSchedUpdateRow(i));
+
+    const gateInput = document.getElementById('ls-gate-'+i);
+    if (gateInput) gateInput.addEventListener('input', () => { legs[i].schedGate = gateInput.value; });
   });
 
-  // Fetch block times for any completed legs (staggered to avoid rate limits)
+  // Run initial calculations and fetch block times
   legs.forEach((leg, i) => {
+    legSchedUpdateRow(i);
     if (leg.dep && leg.arr && !leg.blockTimeReal) {
       setTimeout(() => fetchBlockTime(i), i * 1800);
     }
@@ -2631,10 +2757,7 @@ function renderLogbook() {
 
   tbody.innerHTML = flights.map((f, i) => {
     const realIdx = logbookFlights.indexOf(f);
-    const logoUrl = f.airline ? AIRLINE_LOGOS[f.airline.toUpperCase()] : null;
-    const logoHtml = logoUrl
-      ? `<img src="${logoUrl}" style="max-width:60px;max-height:34px;object-fit:contain;background:#fff;border-radius:4px;padding:3px;border:1px solid var(--bdr);" alt="${f.airline}" onerror="this.style.display='none'">`
-      : `<span style="font-size:10px;color:var(--txt3);">${f.airline||''}</span>`;
+    const logoHtml = f.airline ? airlineLogoHtml(f.airline.toUpperCase()) : '<span></span>';
 
     // Planned flights: blue tinted row
     const rowStyle = f.planned
@@ -3462,10 +3585,7 @@ function renderCalc() {
 
   const rows = calcRows.map(function(row, i) {
     // Logo
-    const logoUrl = row.airline ? AIRLINE_LOGOS[row.airline.toUpperCase()] : null;
-    const logoHtml = logoUrl
-      ? '<img src="' + logoUrl + '" style="max-width:48px;max-height:28px;object-fit:contain;background:#fff;border-radius:3px;padding:2px;" alt="' + row.airline + '">'
-      : (row.airline ? '<span style="font-size:10px;color:var(--txt2);">' + row.airline + '</span>' : '');
+    const logoHtml = row.airline ? airlineLogoHtml(row.airline.toUpperCase()) : '';
 
     // Airport display
     function apDisp(ap) {
