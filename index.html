@@ -2345,6 +2345,39 @@ function renderLegs() {
 
 
 // ── Block time: search web for real flight duration, fall back to calculation ──
+function openApiKeyDialog() {
+  var modal = document.getElementById('apikey-modal');
+  if (modal) modal.style.display = 'flex';
+  var inp = document.getElementById('apikey-input');
+  if (inp) {
+    inp.value = localStorage.getItem('anthropic_api_key') || '';
+    setTimeout(function() { inp.focus(); }, 100);
+  }
+  var st = document.getElementById('apikey-status');
+  if (st) st.textContent = '';
+}
+function closeApiKeyDialog() {
+  var modal = document.getElementById('apikey-modal');
+  if (modal) modal.style.display = 'none';
+}
+function saveApiKey() {
+  var inp = document.getElementById('apikey-input');
+  var key = (inp ? inp.value : '').trim();
+  var st = document.getElementById('apikey-status');
+  if (!key.startsWith('sk-ant-') && key !== '') {
+    if (st) { st.style.color='#f85149'; st.textContent='⚠ Key should start with sk-ant-'; }
+    return;
+  }
+  localStorage.setItem('anthropic_api_key', key);
+  if (st) { st.style.color='#3fb950'; st.textContent='✓ Saved — block times will be looked up via web search'; }
+  var btn = document.getElementById('apikey-btn');
+  if (btn) btn.style.color = '#3fb950';
+  setTimeout(closeApiKeyDialog, 1500);
+}
+function getApiKey() {
+  return localStorage.getItem('anthropic_api_key') || '';
+}
+
 async function fetchBlockTime(idx) {
   const leg = legs[idx];
   if (!leg || !leg.dep || !leg.arr) return;
@@ -2958,6 +2991,11 @@ window.addEventListener('load', async () => {
   renderLegs();
   initDashFCLogo();
   await loadApOverrides();
+  // API key modal backdrop
+  var akm = document.getElementById('apikey-modal');
+  if (akm) akm.addEventListener('click', function(e) { if (e.target===this) closeApiKeyDialog(); });
+  // Highlight key button if key exists
+  if (getApiKey()) { var b=document.getElementById('apikey-btn'); if(b) b.style.color='#3fb950'; }
   // Start on logbook
   switchView('logbook');
   initLbMap();
