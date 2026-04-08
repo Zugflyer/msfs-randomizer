@@ -308,6 +308,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .calc-arr.next-day{color:#d29922;background:rgba(210,153,34,.1);border-color:rgba(210,153,34,.3);}
 .calc-block{font-size:11px;font-family:'SF Mono','Courier New',monospace;color:var(--orange);padding:2px 6px;}
 .calc-ta-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:'SF Mono','Courier New',monospace;width:58px;text-align:center;}
+#calc-table td{vertical-align:middle;}
 .calc-gate-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:58px;text-align:center;}
 </style>
 </head>
@@ -321,15 +322,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       Logbook
     </button>
-    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-primary" id="t-dashboard" onclick="switchView('dashboard')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      Next Flight
+      Next Destination
     </button>
     <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-      Roster
+      Legs
     </button>
+    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-calc" onclick="switchView('calc')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
       Schedule
@@ -559,9 +560,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
         <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
       </div>
-      <!-- Table + Map side by side -->
-      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
-        <div class="logbook-body" style="overflow:auto;padding:8px 14px;flex:1;min-width:0;">
+      <!-- Table (top, ~half height) + Map (bottom, ~half height) -->
+      <div style="display:flex;flex-direction:column;flex:1;overflow:hidden;min-height:0;">
+        <div class="logbook-body" style="overflow:auto;padding:8px 14px;flex:0 0 auto;max-height:55%;">
           <table class="lb-tbl">
             <thead><tr>
               <th style="width:28px;">#</th>
@@ -577,8 +578,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <tbody id="lb-body"></tbody>
           </table>
         </div>
-        <!-- Logbook map -->
-        <div id="lb-map" style="width:420px;flex-shrink:0;background:#0e1117;border-left:1px solid var(--bdr);"></div>
+        <!-- Logbook map fills remaining space -->
+        <div id="lb-map" style="flex:1;min-height:200px;background:#0e1117;border-top:1px solid var(--bdr);"></div>
       </div>
     </div>
 
@@ -1830,7 +1831,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2876,15 +2877,16 @@ function apEdSearchInput(val) {
 }
 
 function apEdKeydown(e) {
-  if (e.key === 'Enter') { apEdDoSearch(); return; }
-  if (e.key === 'Tab') {
-    var sug = document.getElementById('ap-ed-suggestions');
-    if (!sug || sug.style.display === 'none') return;
-    var first = sug.querySelector('[onmousedown]');
-    if (!first) return;
-    e.preventDefault();
-    var m = (first.getAttribute('onmousedown')||'').match(/"([A-Z0-9]{3,6})"/);
-    if (m) apEdSelectAp(m[1]);
+  var sug = document.getElementById('ap-ed-suggestions');
+  var items = sug ? sug.querySelectorAll('[onmousedown]') : [];
+  if (e.key === 'Tab' || e.key === 'Enter') {
+    // If only one result or Tab pressed, select first
+    if (items.length === 1 || (e.key === 'Tab' && items.length > 0)) {
+      e.preventDefault();
+      var m = (items[0].getAttribute('onmousedown')||'').match(/"([A-Z0-9]{3,6})"/);
+      if (m) { apEdSelectAp(m[1]); return; }
+    }
+    if (e.key === 'Enter') apEdDoSearch();
   }
 }
 
@@ -2912,15 +2914,25 @@ function apEdSelectAp(icao) {
   var leftHtml = '', rightHtml = '';
   AP_ED_FIELDS.forEach(function(f) {
     var v = (ap[f.idx] !== null && ap[f.idx] !== undefined) ? String(ap[f.idx]) : '';
-    var overridden = apOverrides[ap[0]] && apOverrides[ap[0]][f.key] !== undefined;
-    var badge = overridden ? ' <span style="font-size:9px;color:var(--acc);background:rgba(139,92,246,.15);padding:1px 5px;border-radius:3px;">edited</span>' : '';
+    // Check if this airport has an override (EDITED) or is itself an override result (NEW)
+    var hasOverride = apOverrides[ap[0]] !== undefined;
+    var isNew = !hasOverride && Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; });
+    var overridden = hasOverride && apOverrides[ap[0]][f.key] !== undefined && apOverrides[ap[0]][f.key] !== '';
+    var badge = overridden ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.15);padding:1px 5px;border-radius:3px;">EDITED</span>' : '';
     leftHtml  += '<div style="' + lS + '">' + f.label + badge + '</div>'
               + '<input readonly value="' + v.replace(/"/g,'&quot;') + '" style="' + rO + '">';
     rightHtml += '<div style="' + lS + '">' + f.label + '</div>'
               + '<input id="ap-ed-new-' + f.key + '" placeholder="' + v.replace(/"/g,'&quot;') + '" style="' + rE + '">';
   });
 
-  document.getElementById('ap-ed-left').innerHTML  = leftHtml;
+  // Add overall status banner
+  var statusBanner = '';
+  if (Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; })) {
+    statusBanner = '<div style="background:rgba(63,185,80,.12);border:1px solid rgba(63,185,80,.3);border-radius:4px;padding:5px 10px;margin-bottom:10px;font-size:11px;color:#3fb950;font-weight:600;">NEW — created by a previous edit</div>';
+  } else if (apOverrides[ap[0]]) {
+    statusBanner = '<div style="background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:4px;padding:5px 10px;margin-bottom:10px;font-size:11px;color:#d29922;font-weight:600;">EDITED — this airport has saved overrides</div>';
+  }
+  document.getElementById('ap-ed-left').innerHTML  = statusBanner + leftHtml;
   document.getElementById('ap-ed-right').innerHTML = rightHtml;
   document.getElementById('ap-ed-save-btn').style.display = 'block';
 }
@@ -3195,9 +3207,10 @@ function renderCalc() {
     var blockStyle = row.blockTimeReal ? '' : 'font-style:italic;';
     var depUtc = getUtcOffset(row.dep);
     var arrUtc = getUtcOffset(row.arr);
-    var tzLabel = depUtc !== arrUtc
-      ? '<div style="font-size:8px;color:var(--txt3);margin-top:1px;">→UTC' + (arrUtc >= 0 ? '+' : '') + arrUtc + '</div>'
-      : '';
+    // Always show arrival timezone
+  var tzLabel = '<div style="font-size:8px;color:var(--txt3);margin-top:1px;">' 
+    + (depUtc !== arrUtc ? '→' : '') 
+    + 'UTC' + (arrUtc >= 0 ? '+' : '') + arrUtc + '</div>';
 
     return '<tr style="border-bottom:1px solid var(--bdr);">'
       + '<td style="padding:3px 6px;">' + logoHtml + '</td>'
@@ -3216,8 +3229,8 @@ function renderCalc() {
       +   '<input id="calc-arr-' + i + '" style="' + oSt + 'width:58px;margin-left:3px;" readonly value="' + (row.arrTime||'') + '">'
       +   tzLabel
       + '</td>'
-      + '<td style="padding:3px 6px;"><input id="calc-ta-' + i + '" style="' + iSt + 'width:48px;" placeholder="min" value="' + (row.taMin||'') + '" oninput="calcTaChange(' + i + ')"></td>'
-      + '<td style="padding:3px 6px;"><input style="' + iSt + 'width:54px;text-transform:uppercase;" placeholder="Gate" value="' + (row.gate||'') + '" oninput="this.value=this.value.toUpperCase();calcRows[' + i + '].gate=this.value;"></td>'
+      + '<td style="padding:3px 6px;vertical-align:middle;"><input id="calc-ta-' + i + '" style="' + iSt + 'width:48px;" placeholder="min" value="' + (row.taMin||'') + '" oninput="calcTaChange(' + i + ')"></td>'
+      + '<td style="padding:3px 6px;vertical-align:middle;"><input style="' + iSt + 'width:54px;text-transform:uppercase;" placeholder="Gate" value="' + (row.gate||'') + '" oninput="this.value=this.value.toUpperCase();calcRows[' + i + '].gate=this.value;"></td>'
       + '<td style="padding:3px 6px;">'
       +   '<button onclick="openNavigraphCharts()" style="display:flex;align-items:center;justify-content:center;width:38px;height:32px;padding:2px;border-radius:4px;border:1px solid var(--bdr);background:var(--surf2);cursor:pointer;">'
       +   '<img src="' + CHARTS_LOGO + '" style="width:28px;height:28px;object-fit:contain;border-radius:3px;" alt="Charts">'
