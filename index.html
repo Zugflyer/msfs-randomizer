@@ -335,6 +335,16 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
     </button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-etops" onclick="switchView('etops')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      ETOPS
+    </button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-gates" onclick="switchView('gates')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+      Gates
+    </button>
   </div>
   <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
     <span id="cloud-status"></span>
@@ -433,9 +443,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <!-- CATEGORIES -->
     <div id="view-categories" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
       <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <button onclick="openApiKeyDialog()" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;display:flex;align-items:center;gap:6px;">
-          🔑 API Key
-        </button>
         <button onclick="openApEditor()" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;display:flex;align-items:center;gap:6px;">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.22 4.22l2.12 2.12M17.66 17.66l2.12 2.12M2 12h3M19 12h3M4.22 19.78l2.12-2.12M17.66 6.34l2.12-2.12"/></svg>
           Airport Base Data
@@ -468,6 +475,40 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-add" onclick="showAddCatItem()" style="background:transparent;color:var(--txt3);border-color:var(--bdr);">✕</button>
       </div>
       <div class="table-area" id="cat-table-area"></div>
+    </div>
+
+    <!-- ═══ ETOPS TABLE ═══ -->
+    <div id="view-etops" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
+      <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">ETOPS Reference</span>
+        <div style="flex:1;"></div>
+        <button onclick="etopsAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+        <select id="etops-sort" onchange="renderEtopsTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+          <option value="type">Sort: Aircraft Type</option>
+          <option value="etops">Sort: ETOPS (min)</option>
+          <option value="dist">Sort: Distance (NM)</option>
+        </select>
+      </div>
+      <div style="overflow:auto;flex:1;padding:10px 14px;">
+        <table id="etops-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
+      </div>
+    </div>
+
+    <!-- ═══ GATE SIZES TABLE ═══ -->
+    <div id="view-gates" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
+      <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">Gate Sizes Reference</span>
+        <div style="flex:1;"></div>
+        <button onclick="gatesAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
+        <select id="gates-sort" onchange="renderGatesTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
+          <option value="mfr">Sort: Manufacturer</option>
+          <option value="type">Sort: Aircraft Type</option>
+          <option value="gates">Sort: Gate Size</option>
+        </select>
+      </div>
+      <div style="overflow:auto;flex:1;padding:10px 14px;">
+        <table id="gates-table" style="border-collapse:collapse;font-size:13px;width:100%;"></table>
+      </div>
     </div>
 
     <!-- DATA / IMPORT -->
@@ -1865,7 +1906,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','etops','gates'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -1881,6 +1922,8 @@ function switchView(view) {
 
   // View-specific init
   if (view === 'categories') renderCatView();
+  if (view === 'etops') renderEtopsTable();
+  if (view === 'gates') renderGatesTable();
   if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
   if (view === 'dashboard') {
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
@@ -3617,6 +3660,122 @@ function renderCalc() {
 
 
 
+
+
+// ═══ ETOPS DATA ═══
+let etopsData = [
+  {type:'Airbus A220', etops:180, dist:1260},
+  {type:'Airbus A319/A320/A321', etops:180, dist:1260},
+  {type:'Airbus A320neo family', etops:180, dist:1260},
+  {type:'Airbus A330 (early)', etops:180, dist:1260},
+  {type:'Airbus A330 (later ops)', etops:240, dist:1680},
+  {type:'Airbus A330neo', etops:330, dist:2310},
+  {type:'Airbus A350', etops:370, dist:2590},
+  {type:'Boeing 737 NG', etops:180, dist:1260},
+  {type:'Boeing 737 MAX', etops:180, dist:1260},
+  {type:'Boeing 757', etops:180, dist:1260},
+  {type:'Boeing 767', etops:180, dist:1260},
+  {type:'Boeing 777', etops:330, dist:2310},
+  {type:'Boeing 787', etops:330, dist:2310}
+];
+
+function renderEtopsTable() {
+  const tbl = document.getElementById('etops-table');
+  if (!tbl) return;
+  const sortKey = document.getElementById('etops-sort')?.value || 'type';
+  const sorted = [...etopsData].sort((a,b) => {
+    if (sortKey === 'etops') return a.etops - b.etops;
+    if (sortKey === 'dist') return a.dist - b.dist;
+    return a.type.localeCompare(b.type);
+  });
+  const thS = 'padding:8px 14px;font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--bdr2);text-align:left;cursor:pointer;white-space:nowrap;';
+  const tdS = 'padding:8px 14px;border-bottom:1px solid var(--bdr);color:var(--txt);';
+  const tdN = 'padding:8px 14px;border-bottom:1px solid var(--bdr);color:var(--blue);font-family:monospace;font-weight:600;text-align:right;';
+  tbl.innerHTML = '<thead><tr>'
+    + '<th style="'+thS+'">Aircraft Type</th>'
+    + '<th style="'+thS+'text-align:right;">ETOPS (min)</th>'
+    + '<th style="'+thS+'text-align:right;">Diversion Distance (NM @420kt)</th>'
+    + '<th style="width:40px;border-bottom:2px solid var(--bdr2);"></th>'
+    + '</tr></thead><tbody>'
+    + sorted.map((r,i) => {
+        const ri = etopsData.indexOf(r);
+        return '<tr>'
+          + '<td style="'+tdS+'"><input value="'+r.type+'" onchange="etopsData['+ri+'].type=this.value" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
+          + '<td style="'+tdN+'"><input type="number" value="'+r.etops+'" onchange="etopsData['+ri+'].etops=+this.value" style="background:transparent;border:none;color:var(--blue);font-size:13px;width:80px;text-align:right;outline:none;font-family:monospace;font-weight:600;" /></td>'
+          + '<td style="'+tdN+'"><input type="number" value="'+r.dist+'" onchange="etopsData['+ri+'].dist=+this.value" style="background:transparent;border:none;color:var(--blue);font-size:13px;width:80px;text-align:right;outline:none;font-family:monospace;font-weight:600;" /></td>'
+          + '<td style="padding:4px;border-bottom:1px solid var(--bdr);text-align:center;"><button onclick="etopsData.splice('+ri+',1);renderEtopsTable()" style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:13px;padding:2px 6px;">✕</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody>';
+}
+
+function etopsAddRow() {
+  etopsData.push({type:'New Aircraft', etops:180, dist:1260});
+  renderEtopsTable();
+}
+
+// ═══ GATE SIZES DATA ═══
+let gatesData = [
+  {mfr:'Airbus', type:'A380', gates:35},
+  {mfr:'Boeing', type:'747', gates:30},
+  {mfr:'Airbus', type:'A330-A350', gates:27},
+  {mfr:'Boeing', type:'777', gates:27},
+  {mfr:'Boeing', type:'787', gates:26},
+  {mfr:'McDo', type:'DC10', gates:23},
+  {mfr:'McDo', type:'MD11', gates:23},
+  {mfr:'Boeing', type:'767', gates:21},
+  {mfr:'Airbus', type:'A300', gates:20},
+  {mfr:'Boeing', type:'757', gates:18},
+  {mfr:'Airbus', type:'A32S', gates:16},
+  {mfr:'Boeing', type:'717-737', gates:16},
+  {mfr:'Airbus', type:'A220', gates:15},
+  {mfr:'Embraer', type:'E-Jets', gates:15},
+  {mfr:'Avro', type:'Avro', gates:13},
+  {mfr:'Embraer', type:'E145', gates:12},
+  {mfr:'Canadair', type:'CRJ', gates:12},
+  {mfr:'Dash', type:'DH8', gates:11},
+  {mfr:'ATR', type:'ATR', gates:11},
+  {mfr:'Saab', type:'S200', gates:11},
+  {mfr:'Saab', type:'SF34', gates:10},
+  {mfr:'Beech', type:'B190', gates:8},
+  {mfr:'Cessna', type:'C208', gates:7},
+  {mfr:'Britten', type:'BNI', gates:7}
+];
+
+function renderGatesTable() {
+  const tbl = document.getElementById('gates-table');
+  if (!tbl) return;
+  const sortKey = document.getElementById('gates-sort')?.value || 'mfr';
+  const sorted = [...gatesData].sort((a,b) => {
+    if (sortKey === 'gates') return b.gates - a.gates;
+    if (sortKey === 'type') return a.type.localeCompare(b.type);
+    return a.mfr.localeCompare(b.mfr) || a.type.localeCompare(b.type);
+  });
+  const thS = 'padding:8px 14px;font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;border-bottom:2px solid var(--bdr2);text-align:left;cursor:pointer;white-space:nowrap;';
+  const tdS = 'padding:8px 14px;border-bottom:1px solid var(--bdr);color:var(--txt);';
+  const tdN = 'padding:8px 14px;border-bottom:1px solid var(--bdr);color:var(--blue);font-family:monospace;font-weight:600;text-align:right;';
+  tbl.innerHTML = '<thead><tr>'
+    + '<th style="'+thS+'">Manufacturer</th>'
+    + '<th style="'+thS+'">Aircraft Type</th>'
+    + '<th style="'+thS+'text-align:right;">Gate Size</th>'
+    + '<th style="width:40px;border-bottom:2px solid var(--bdr2);"></th>'
+    + '</tr></thead><tbody>'
+    + sorted.map((r,i) => {
+        const ri = gatesData.indexOf(r);
+        return '<tr>'
+          + '<td style="'+tdS+'"><input value="'+r.mfr+'" onchange="gatesData['+ri+'].mfr=this.value" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
+          + '<td style="'+tdS+'"><input value="'+r.type+'" onchange="gatesData['+ri+'].type=this.value" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
+          + '<td style="'+tdN+'"><input type="number" value="'+r.gates+'" onchange="gatesData['+ri+'].gates=+this.value" style="background:transparent;border:none;color:var(--blue);font-size:13px;width:60px;text-align:right;outline:none;font-family:monospace;font-weight:600;" /></td>'
+          + '<td style="padding:4px;border-bottom:1px solid var(--bdr);text-align:center;"><button onclick="gatesData.splice('+ri+',1);renderGatesTable()" style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:13px;padding:2px 6px;">✕</button></td>'
+          + '</tr>';
+      }).join('')
+    + '</tbody>';
+}
+
+function gatesAddRow() {
+  gatesData.push({mfr:'New', type:'Type', gates:0});
+  renderGatesTable();
+}
 
 </script>
 </body>
