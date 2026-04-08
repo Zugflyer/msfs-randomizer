@@ -2391,15 +2391,23 @@ async function fetchBlockTime(idx) {
 
   const depIata = leg.dep[1] || leg.dep[0];
   const arrIata = leg.arr[1] || leg.arr[0];
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    btEl.textContent = '–';
+    btEl.style.fontStyle = 'normal';
+    btEl.title = 'Add API key (🔑) to look up real block times';
+    leg._fetchingBT = false;
+    return;
+  }
 
   try {
-    // Use Claude with web_search to look up nonstop flight duration
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'anthropic-version': '2023-06-01',
         'anthropic-dangerous-direct-browser-access': 'true',
+        'x-api-key': apiKey,
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-5-20251001',
