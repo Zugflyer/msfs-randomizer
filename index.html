@@ -511,16 +511,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div class="roster-top">
         <div class="sec-label-sm">Flight Planner</div>
         <div class="roster-content">
-          <div class="roster-legs-col" style="max-width:680px;">
+          <div class="roster-legs-col" style="max-width:100%;">
             <div class="legs-frame" id="legs-container"></div>
-            <div class="roster-actions">
-              <button class="btn-addleg" onclick="addLeg()">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                Add Leg
-              </button>
-              <button class="btn-saveroster" onclick="saveRoster()">✓ Save Roster</button>
-              <button class="btn-addleg" onclick="clearRoster()" style="color:var(--red);border-color:#3a1a1a;">Clear</button>
-            </div>
           </div>
           <div class="ext-panel">
             <div style="font-size:9px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:2px;">External Links</div>
@@ -530,6 +522,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <a class="ext-btn" href="https://www.expertflyer.com/" target="_blank" title="Open ExpertFlyer">
               <img src="data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1BST0ZJTEUAAQEAAAHIAAAAAAQwAABtbnRyUkdCIFhZWiAH4AABAAEAAAAAAABhY3NwAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAA9tYAAQAAAADTLQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAlkZXNjAAAA8AAAACRyWFlaAAABFAAAABRnWFlaAAABKAAAABRiWFlaAAABPAAAABR3dHB0AAABUAAAABRyVFJDAAABZAAAAChnVFJDAAABZAAAAChiVFJDAAABZAAAAChjcHJ0AAABjAAAADxtbHVjAAAAAAAAAAEAAAAMZW5VUwAAAAgAAAAcAHMAUgBHAEJYWVogAAAAAAAAb6IAADj1AAADkFhZWiAAAAAAAABimQAAt4UAABjaWFlaIAAAAAAAACSgAAAPhAAAts9YWVogAAAAAAAA9tYAAQAAAADTLXBhcmEAAAAAAAQAAAACZmYAAPKnAAANWQAAE9AAAApbAAAAAAAAAABtbHVjAAAAAAAAAAEAAAAMZW5VUwAAACAAAAAcAEcAbwBvAGcAbABlACAASQBuAGMALgAgADIAMAAxADb/2wBDAAUDBAQEAwUEBAQFBQUGBwwIBwcHBw8LCwkMEQ8SEhEPERETFhwXExQaFRERGCEYGh0dHx8fExciJCIeJBweHx7/2wBDAQUFBQcGBw4ICA4eFBEUHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh7/wAARCACKAdgDASIAAhEBAxEB/8QAHQABAAIDAQEBAQAAAAAAAAAAAAIHBQYIBAMBCf/EAEIQAAIBAwMDAgQDBAYHCQAAAAABAgMEBQYREgchURMxFCJBYQgygRUWI3FCRGJyc4IXNzhDkbK0GCU1UlNjdaGz/8QAGwEBAAIDAQEAAAAAAAAAAAAAAAECAwQHBQb/xAAuEQEAAQIFAwMDBAIDAAAAAAAAAQIRAwUSE1EEITEGQWEicYEyUpGhFLHB4fD/2gAMAwEAAhEDEQA/AOoOK8DivBIHp7dHENTVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeBxXgkBt0cQap5R4rwOK8EgNujiDVPKPFeASA26OINU8gALqgAAAAAAAAAAAAADC6s1Vp/S1l8XnspQs4NbwhJ71Kn92C7y/RHp03mLLUGCs81j5Sla3dNVKfLbkl4ezezXs0Zp6fFjCjGmmdMza9u1/uXjwyIAMIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAfkpRjFylJRilu23skiR+grbWnWjROnYVKVve/ti+j2VCz+aO/3qflS7fRt/YobW3WfWupJVKNvfPDWMn2oWTcJbf2qn5n99mk/B9LlnpPMev8Aq06Keau38R5n/Xyx1YtNLpDXXUzSOjuVLKZH1rxf1O1SqVv1W6Uf8zRRev8Ar5qHMepaabpfsWzfb1t1K4mv5+0P07ryU5KUpycpScpN7tt7tsyGn8Hl8/fxsMLjri+uZf0KMN9l5b9or7vZHQsv9I5bl9O7jfXMe9XiPx4/m7BVi1VdofOCymfzMIcrnI5K9qqKc5upUqzb2W7fdv8AmdyaIwn7uaRxeDdb1pWVtClOp9JSS+Zr7b77fYrvor0eoaQrwzucq0rzM8f4MId6druu+z/pS77b+y77eS3T4z1fn2FmFdPT9NN8Oj35n4+Ij/3hmwqJp7yAA+KZQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAhXq06FCpXrTUKdOLnOT9kkt2yYi/aBW3WDq1jtDSeMtbZ3+anTU40pbxpUovfaU5fX2/Kv+KOcdb9StYav50srlJQs5PdWdsvTor7NLvJf3mzCavzFXUGqMlmq3aV5czqpcVHjFv5Vt9lsvd+3uzO6F6Z6u1jxq4vH+jZv+uXTdOj+j2bl/lTO1ZZkmXZL01ON1FtcR3qq9p+L+Pi3dqVV1VzaGmmwaS0XqjVdVQwWGubqG7Tr8eFGO3unUltFP7b7/Yuey6c9MunfC817qCjkr5JThaSi1H9KUd5TW/1fbykZjSPWe2z3ULEaW0/g4WeGqynT51NozaVOTjxhH5YLdLt3/Qr1fqPHxcKuvLsGa6aYmZrq7U9ov2vaav6Iw4ifql5tAfh8xtn6d5q+8/aFdd/g7eTjRj9pS7Sl+nH9S6MRi8biLKNlirC2sbaL3VK3pKEd37vZfX7nsByjMc36zMatXUVzPx7R9o8NmmmKfAADzVgAAAUP1j1x1Ax/Vyw0fo+/tqPxtrSlSp1qFOS9STnvvKSey2ij1Y23/EVHI2zvb7CytVWg6yUaO7huuS7R39txdbSu4A0rrNX1fY6Kr5XRl2qV/Yv1qtF0I1fWopPkkmn8y7NbfRNd90ER3bqCo+n3WbFZTpde6jzla3o5PE03G8toyUHWns/T4J/+ptsl9Hv9EfX8O+d1zq3EXOpdUZCEsfWlKlY28LWFNT2l81Tku+yacUn4fuLp0zC1wDn3qdr3qPR60z0RpC+taaqxpK3p1aFNrd0lOTcpJ/cIiLuggc65jqP1Z6cZbGVNf2WNv8VdylGTtuCqSSa5cXFraUU17rZp7b7910Nb1qdxQp16M1OlUipwkvaSa3TBMWfQGidd9R5bSnTW+zeEuI0L2jVoxhOVOM1tKoovtJNezKw0nlfxC6m09aZ3F5HEOzu4ylSdSnQjJpSce649u6YumKbxd0UDV+mcNZU9Nta6rWtXLevNp26jx9PZcV8qS333NoCAHM2mdbdatX6izWO0zk8fOGNrSjP16FGG0ecox7uPd/KzZunXVTV1t1Legeo1jaUL2vJRoV6HGPCbhyjF7ScZRkttmu6k9n/ZXToleYBXPVOn1YqZm1/cC4x9GwVv/H+IVNt1eT9uSb222CIi6xgcv6Z1t1z1FqzKaYxuTxsshi5VI3SnQoxgnCp6ctnx7/MX504jq6GmKcdbVLapmFVnylQ48XDf5fypLcXTNNmyAAKgBy707111x158d+7+Uxs/gfT9b1rejDbny47fL3/JIXWiLuogVr0to9XaeoK719dY6rjPhZKkrdU+Xrc4bP5Yp7ceZZQRMWAU9ba61JP8TNzoiV3SeEhSUo0fRjyT+FjU/Ntv+Zt+5cIJiwCM05RaUnFtbJr3X37lK9OuoOqrXrJkunut7qlcylyWPrxt4093FOcX8qS2nT3ff2aS+rBEXXYCkeqnUHVUuq+I0DoW8o0Lqo1G8qSt4VlFy2lu922lCCcmtk/f37F2QTjFJycmls2/d/fsCYskCuPxEarzWjtAwy2BuIW93K+p0XOdKM1xcZt9pJr6I0XC3H4i8vhrLLWeRwztr23p3FFyhRTcJxUo7rj2ezQumKbxd0CDA6BjqWGkrKOr6lCpm16nxUqPHg/4kuG3FJfk4mXyFSdKwuKtN7ThSlKL8NJhV9wcv9PNbdc9d0r2rgMnjZws5QjVdahRh3lvtt8vf8rN56PdUdR5PWt3oPXWNo2uboqbp1KMdk3FcpQmk3H8vdSj2aX33a600zC5wAFQAAAAAAAAAADxZ3Hwy2Ev8VVq1KNO8tqlvKpTe0oKcXFtfdbntKd/E9ra+05gLLC4i5qW17k5SlVrU5bSp0Y7JpP3Tk5LuvpGXk9DK+ixut6ujAwZtVM+eLd7/hFUxEXlga+D6M9MHKplbh6izNKXa3nKNacJL6OnHaEPo/4m78Gnay676sy6la4ONHA2XeMfQXOs47bbOb7L/KoteSp5SlOTlKTlJvdtvdtmQ0/g8vn7+NhhcdcX1zL+hRhvsvLftFfd7I7JhZB02FO/11c4tUe9fiPtHiIak1zPans8VzXr3VxO4ua1SvWqPlOpUk5Sk/Lb7tl2fhS0hXu9R1dX3VKpC1sISpWkmmlVqzTjJp/VRi5J/eS8H20d0CqUI/tPXuVt7CxprlKhQrpSXf8Ap1GuMV/Lfff3TNp1V1u0jpSyp4XR1hDJ/DRVOn6X8O1pJfRS23l+i2fk8rOc3qzHBq6HKqZxJq7TVH6Yj3i/jvHbiy1FGmdVS6wcydN+outtcdXsJSvL107OFSpUnaWkXChGKpy3clvu/wDM33a/kdNnNs3yjFyrEpwsaYmqYv29u8x/w2Kaoq7wAA8lYAAHMPXiOcn+I7CR01UpU8w7Sh8JKptxU+VT35Jrb3N80pb9fI6kx71BfYeWJVeLvFCNLk6e/wAyW0d99jFdYNEa/v8Aq9j9ZaQx1rcKxtqSpyr14Ri6kZTbTi5JtbSRkcfkvxC/H2/xmA078N6sfW41Ib8N1y2/i++25DJ7LmANN6w0tXXeirnG6Ms6Ve/vt7erUnWjT9GjKLU5Rba+b2S8bt/QlSHIXUz92X1NyywfxMdPfHR9R0dn3/3jpp7Lbf1OCf0+x27pf9j/ALuY96fjQjiZW8JWaox2h6bW8dl/Lz389yuND9ILGz6N3GkczCEchk4uteVo/P6Nf/duP0+RcV2ezal32ZL8PuD17pLH3OmtU2UJ42jJzsLqndQqKHf5obb8uLfzLt23e+25EL1TEwtc5V6q3+Yxf4pFfafxyyWTpRou3tWm1Ubt9muzT9m37/Q6qKXy2gdT1/xJ2mtaVnSlhafDlW9eCktqDg/l33/N9iZRRNmp6lwHVnq7lcVjtS4C305iLWpKdSsortulvLZycpPbsktlu3u/qujcfa0bGwt7K2jxoW9KNKnHxGKSS/4I+4CszdV34pv9TGU/xrf/APWJWnSyh10noHFy0teYunhnCfwsayo81H1Jb77xb99/cuHrvpzLar6a32EwlvGve1qtGUISqRgto1FJ95NL2RXGkbL8QGl9OWeBxmBwLtLOLjTdWtCU9nJye79RfVsj3Xp8Lk0DHUsNJWUdX1KFTNr1PipUePB/xJcNuKS/JxM8az04raxr6flU1xa2dtlPXklTtWnD09lxfaT778vqbMSpLkLpXnta4HVmsbjR2naGabrSldqq3/ChGpUaaSkm2+/Zb+xtXRaxyHVXqTW6lagvbSCxNWFOjY0E94yUd4dnvtBbt77tuSfskbl0F0LqTSWrNWX2btKVG3yNVStpwrRnzSqVH7J7rtJe5j9AdPdW6E6zZG/w9jQqaSyM5xmoV4R9KnL5obQb33hJ8fr8u/khkmY7rxABLE546C/7RPUP/GvP+rOhynuk+hdSYDrFrDUmUtKVLHZOrcytaka0ZOancc47xT3Xy+S4RC1XkAAVDjn8O/8ApH/79/0f/s3+r/G/Gbf+76fHf/Pv+h2MUv8Ahj0DqfQ/7w/vHZ0rb434b0OFeFTlw9Xl+Vvb88RK9M2iW/8ATT99f2FX/fv4H9p/FS9L4Tbh6PGG2+315c//AKNpACjniz/21r3/AAV/0MDoc5/1rorqZbdc8jrvSGKsLiE404287mvBRa+HhTlvFyT91I2vRl91vqansoaow2Do4eUmrqpQnF1Iri9mtqj+u30IheYutUov8U+nLu3pYrqNg96WRw1aEa84Lv6fLenN/wB2b2/lP7F6GpdYcJkdSdNczhMTSjVvbqlCNKEpqKbVSMn3fZdkyZRTNpVn+F7T95lLzL9UM61VvstWqU7VtPaK571ZLf6OSUFt7KMl9S+TS+iGAyel+l+IwWZoxo31t63qwjNTS5V6k13XZ9pI3QQVTeVOfi9/1UUv/k6P/JUNX0db/iClpDDPC32HjjHYUHZqcaPJUfTjwT3jvvx29yxPxEaUzWsdAwxOBt4XF3G+p1nCdWMFxUZp95NL6o03Bf8AaGw2EsMRaYHTzt7G2p21JzqwcuEIqMd36nd7JEe60eFz6Xjl4acx8c/UpVMqreHxkqe3F1dvm22SW2/g9OV/8Lu/8Gf/ACsxuhampK2lbOpq23trfNPn8TTt2nTj88uG2zf9Dj9ffcymQpzq2FxSprec6UoxXltMlT3cddEtW600hp/UOS03p61ymPpulUv61Zv+AoqWz2Uk9tm/o/YsP8POJvta6/yPVrLXVmqirVKNO0pOUpwqOmo7vk/liqb2Xd77v2S77H+HDp7ntJYbUNhqvH0KdPIypxjTVaNVVIKM1JPi32+bY8nRvQOsunvUbK0KdrG40pfSlGNb4mHKKi26U3BvfdJuL7fXf6IiGSZjvZeIAJYgAAAAAAAAAADmfr1pnWer+rVS1xmCv7i1t7ajRt6/DjQ4uPOT5tKK+aUl3e/y/oukb66t7Gxr3t3VjRtrenKrWqS9oQit5N/ZJM5z6jfiBv7mrWsNGUFaWybir+vDerP7wg+0V433e30T7H1fpLD67/Lqxekw4qmIterxTf3/AOo7seLptaXrwvRTS+mMbHM9SNQ0lCL3dvSq+nSf9ly/PN/aPF/zPllOt2ndNWE8P060xRo0Y7qNxWj6cG//ADcF80395ST8lHZfK5PMXbu8tkLq+uH71LirKpL+W7fseSMZTkoxi5Sb2SS3bZ0aj09PUzrzLFnFn9v6aI/EefvLX3LfpizM6s1VqDVV78XnspXvJp7whJ7U6f8Adgu0f0Rh6VOdWrGlShKdSbUYxit3Jv2SX1ZYehOjustUThVqWUsRYPZu5vYODaf1hD80u3s+y+50L066TaW0ZUpXtGlO/wApBdry494trZ8IrtH6+X9zHmPqbLcpw9rCtVVHimnxH3nxH+/hNOHVV3lh/wAPPTito/E1cvmKMYZm/go8Pd29Hs+D/tNpN/yS+hbABx/MOvxuv6irqMafqn+viPs2qaYpi0AANJIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAK2/EpVv6fSTJKxjJxnUpRuXFveNLmt/b6b8U/s2chW1CvdXELe2o1K9ao+MKdOLlKT8JLu2f0Dr0qVelKjXpQq05raUJxTTX3TMVgNL6cwDlLC4PH2E5JKU6NCMZyS8y23f/Hyfaen/AFVRlHR1YE4WqqZvHe3mI8/wxV4eqbubdEdA9T5mlC6zlengraXdQnD1K7X9xNKP6vdeC99BdM9JaNjCpjseq98l3vbnadXf7P2j/lS/U3MHl5n6mzDMb04ldqf2x2j8+8/mVqcOmkAB8+uAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD//2Q==" alt="ExpertFlyer" style="max-height:28px;max-width:130px;object-fit:contain;">
             </a>
+            <div style="margin-top:10px;display:flex;flex-direction:column;gap:6px;">
+              <button class="btn-saveroster" onclick="saveRoster()" style="width:100%;">✓ Save Roster</button>
+              <button onclick="clearRoster()" style="width:100%;font-size:12px;padding:6px 10px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;">Clear</button>
+            </div>
           </div>
         </div>
       </div>
@@ -1959,45 +1955,11 @@ function airlineLogoHtml(icao) {
   const code = (icao || '').toUpperCase().trim();
   if (!code) return '';
   const name = AIRLINE_NAMES[code] || code;
-  const url = AIRLINE_LOGOS[code];
-  const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;min-width:52px;height:30px;background:#fff;border-radius:3px;border:1px solid #ccc;padding:2px 4px;overflow:hidden;';
-
-  // Look up IATA code for this ICAO (for Aviasales CDN which uses IATA)
-  // Try AIRLINE_LOGOS map first for known airlines
-  if (url) {
-    if (url.startsWith('data:')) {
-      return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${code}</span>'"></div>`;
-    }
-    return `<div style="${wrapStyle}"><img src="${url}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
-  }
-
-  // Fallback: try Aviasales CDN with IATA code (2-letter) derived from ICAO
-  // The Airhex CSV has IATA→ICAO mapping; we use a simple lookup from our airlines CSV data
-  // For now use the ICAO code directly - many CDNs accept both formats
-  // Aviasales uses 2-letter IATA: try to derive from known mappings
-  const iataMap = {
-    'DLH':'LH','AFR':'AF','BAW':'BA','AAL':'AA','KLM':'KL','SWR':'LX','AUA':'OS',
-    'TAP':'TP','IBE':'IB','VLG':'VY','EZY':'U2','RYR':'FR','EIN':'EI','FIN':'AY',
-    'SAS':'SK','NOR':'DY','WZZ':'W6','BEL':'SN','ITY':'AZ','LOT':'LO','THY':'TK',
-    'TRA':'HV','EWG':'EW','UAE':'EK','ETD':'EY','QTR':'QR','MEA':'ME','MSR':'MS',
-    'RAM':'AT','ETH':'ET','SVA':'SV','DAL':'DL','UAL':'UA','ASA':'AS','ACA':'AC',
-    'WJA':'WS','SWA':'WN','JBU':'B6','TAM':'JJ','LAN':'LA','AVA':'AV','AMX':'AM',
-    'GLO':'G3','AZU':'AD','ARG':'AR','SIA':'SQ','CPA':'CX','ANA':'NH','JAL':'JL',
-    'QFA':'QF','THA':'TG','MAS':'MH','GIA':'GA','PAL':'PR','HVN':'VN','CSN':'CZ',
-    'CCA':'CA','KAL':'KE','AAR':'OZ','ANZ':'NZ','VIR':'VS','IRA':'IR','VTA':'TN',
-    'THT':'TH','FDY':'','RRR':'','LNE':'','LPE':'4C','ANE':'5M','CFE':'5O',
-  };
-  const iata2 = iataMap[code] || '';
-  if (iata2) {
-    const aviasalesUrl = `http://pics.avs.io/200/60/${iata2}.png`;
-    return `<div style="${wrapStyle}"><img src="${aviasalesUrl}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;" onerror="this.parentNode.innerHTML='<span style=font-size:9px;color:#333>${name}</span>'"></div>`;
-  }
-
-  // Try GitHub-hosted logo
+  // ONLY use GitHub-hosted logos — no external CDNs
   const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
-  return `<div style="${wrapStyle}" id="logo-wrap-${code}">
-    <img src="${ghUrl}" alt="${name}" title="${name}" style="max-width:52px;max-height:26px;object-fit:contain;"
-      onerror="this.parentNode.innerHTML='<span onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'font-size:9px;color:#666;cursor:pointer;text-align:center;padding:2px;\'>${name} ✚</span>'">
+  const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%;background:#fff;border-radius:3px;padding:2px 4px;overflow:hidden;';
+  return `<div style="${wrapStyle}"><img src="${ghUrl}" alt="${name}" title="${name}" style="max-width:100%;max-height:28px;object-fit:contain;"
+    onerror="this.parentNode.innerHTML='<span onclick=\'triggerLogoUpload(\'${code}\')\' title=\'Click to upload logo for ${code}\' style=\'font-size:9px;color:#555;cursor:pointer;padding:2px;\'>${code} ✚</span>'">
   </div>`;
 }
 
@@ -2122,36 +2084,13 @@ function buildSuggestBox(inputEl, onSelect) {
   }, true);
 }
 
-// CSS injected once for time inputs
-(function() {
-  if (!document.getElementById('leg-sched-style')) {
-    const s = document.createElement('style');
-    s.id = 'leg-sched-style';
-    s.textContent = `
-      .leg-row { display:flex; align-items:flex-start; gap:6px; padding:8px 10px; border-bottom:1px solid var(--bdr); flex-wrap:wrap; }
-      .ls-sep { color:var(--txt3); font-size:16px; align-self:center; padding-top:14px; flex-shrink:0; }
-      .ls-block { display:flex; flex-direction:column; gap:2px; flex-shrink:0; }
-      .ls-label { font-size:9px; text-transform:uppercase; letter-spacing:.06em; color:var(--txt3); white-space:nowrap; }
-      .ls-val { font-size:12px; color:var(--txt2); font-family:monospace; padding-top:2px; }
-      .ls-inp { font-size:12px; font-family:monospace; background:var(--surf2); border:1px solid var(--bdr2); border-radius:4px; color:var(--txt); padding:3px 6px; width:54px; text-align:center; outline:none; }
-      .ls-inp:focus { border-color:var(--acc); }
-      .ls-inp-wide { width:76px; }
-      .ls-arr-time { font-size:13px; font-weight:700; color:var(--blue); font-family:monospace; padding-top:2px; min-width:44px; }
-      .ls-arr-day  { font-size:10px; color:var(--txt3); font-family:monospace; padding-top:1px; }
-    `;
-    document.head.appendChild(s);
-  }
-})();
-
+// ── Integrated Legs + Schedule renderer ──
 function legSchedUpdateRow(idx) {
   const leg = legs[idx];
   if (!leg) return;
-
-  // Read dep time input → format
   const depEl = document.getElementById('ls-dep-' + idx);
   const dayEl = document.getElementById('ls-day-' + idx);
   if (!depEl) return;
-
   const parsed = parseTime(depEl.value);
   if (parsed && parsed.h >= 0 && parsed.h < 24 && parsed.m >= 0 && parsed.m < 60) {
     leg.schedDepTime = fmtTime(parsed.h, parsed.m);
@@ -2159,48 +2098,34 @@ function legSchedUpdateRow(idx) {
   } else if (!depEl.value) {
     leg.schedDepTime = '';
   }
-
   const dayVal = parseInt(dayEl ? dayEl.value : '') || 1;
   leg.schedDepDay = (dayVal >= 1 && dayVal <= 7) ? dayVal : 1;
-
-  // Calculate arrival
   if (leg.schedDepTime && leg.blockTime && leg.dep && leg.arr) {
     const [dh, dm] = leg.schedDepTime.split(':').map(Number);
     const depUtcMins = dh*60 + dm - Math.round(getUtcOffset(leg.dep)*60);
     const bparts = leg.blockTime.split(':');
     const blockMins = parseInt(bparts[0])*60 + parseInt(bparts[1]);
     const arrUtcMins = depUtcMins + blockMins;
-    const arrUtcOffset = Math.round(getUtcOffset(leg.arr)*60);
-    const arrLocalMins = arrUtcMins + arrUtcOffset;
+    const arrLocalMins = arrUtcMins + Math.round(getUtcOffset(leg.arr)*60);
     const dayDelta = Math.floor((arrLocalMins + (leg.schedDepDay-1)*24*60) / (24*60)) - (leg.schedDepDay-1);
     const arrMod = ((arrLocalMins % (24*60)) + 24*60) % (24*60);
     leg.schedArrTime = fmtTime(Math.floor(arrMod/60), arrMod%60);
     leg.schedArrDay  = ((leg.schedDepDay - 1 + dayDelta) % 7 + 7) % 7 + 1;
-
-    // Show UTC offsets
-    const depUTC = getUtcOffset(leg.dep);
-    const arrUTC = getUtcOffset(leg.arr);
-    const depSign = depUTC >= 0 ? '+' : '';
-    const arrSign = arrUTC >= 0 ? '+' : '';
-    leg.schedDepUTC = 'UTC' + depSign + depUTC;
-    leg.schedArrUTC = 'UTC' + arrSign + arrUTC;
+    const depUTC = getUtcOffset(leg.dep), arrUTC = getUtcOffset(leg.arr);
+    leg.schedDepUTC = 'UTC' + (depUTC >= 0 ? '+' : '') + depUTC;
+    leg.schedArrUTC = 'UTC' + (arrUTC >= 0 ? '+' : '') + arrUTC;
   } else {
     leg.schedArrTime = ''; leg.schedArrDay = ''; leg.schedDepUTC = ''; leg.schedArrUTC = '';
   }
-
-  // Update arrival display
-  const arrTimeEl = document.getElementById('ls-arr-' + idx);
-  const arrDayEl  = document.getElementById('ls-arrday-' + idx);
-  const arrUtcEl  = document.getElementById('ls-arrutc-' + idx);
-  const depUtcEl  = document.getElementById('ls-deputc-' + idx);
-  if (arrTimeEl) arrTimeEl.textContent = leg.schedArrTime || '–';
-  if (arrDayEl)  arrDayEl.textContent  = leg.schedArrDay  ? 'Day ' + leg.schedArrDay : '';
-  if (arrUtcEl)  arrUtcEl.textContent  = leg.schedArrUTC  || '';
-  if (depUtcEl)  depUtcEl.textContent  = leg.schedDepUTC  || '';
-
-  // Cascade TA → next dep
-  const taEl = document.getElementById('ls-ta-' + idx);
-  const ta = parseInt(taEl ? taEl.value : '') || 0;
+  const arrEl = document.getElementById('ls-arr-' + idx);
+  if (arrEl) arrEl.textContent = leg.schedArrTime || '–';
+  const arrDayEl = document.getElementById('ls-arrday-' + idx);
+  if (arrDayEl) arrDayEl.textContent = leg.schedArrDay ? 'D' + leg.schedArrDay : '';
+  const arrUtcEl = document.getElementById('ls-arrutc-' + idx);
+  if (arrUtcEl) arrUtcEl.textContent = leg.schedArrUTC || '';
+  const depUtcEl = document.getElementById('ls-deputc-' + idx);
+  if (depUtcEl) depUtcEl.textContent = leg.schedDepUTC || '';
+  const ta = parseInt(document.getElementById('ls-ta-' + idx)?.value || '') || 0;
   leg.schedTA = ta;
   const nextLeg = legs[idx + 1];
   if (nextLeg && leg.schedArrTime && ta > 0 && !nextLeg._schedDepOverride) {
@@ -2211,8 +2136,8 @@ function legSchedUpdateRow(idx) {
       nextLeg.schedDepDay  = ((leg.schedArrDay - 1 + res.dayOffset) % 7 + 7) % 7 + 1;
       const nDepEl = document.getElementById('ls-dep-' + (idx+1));
       const nDayEl = document.getElementById('ls-day-' + (idx+1));
-      if (nDepEl) { nDepEl.value = nextLeg.schedDepTime; }
-      if (nDayEl) { nDayEl.value = nextLeg.schedDepDay; }
+      if (nDepEl) nDepEl.value = nextLeg.schedDepTime;
+      if (nDayEl) nDayEl.value = nextLeg.schedDepDay;
       legSchedUpdateRow(idx + 1);
     }
   }
@@ -2223,190 +2148,185 @@ function renderLegs() {
   if (!container) return;
   container.innerHTML = '';
 
-  const iSt = 'font-size:12px;font-family:monospace;background:var(--surf2);border:1px solid var(--bdr2);border-radius:4px;color:var(--txt);padding:3px 6px;outline:none;';
+  // Shared styles
+  const BLUE = '#4a9eda';
+  const inp = (id, ph, w, tabIdx, val, extra) =>
+    `<input id="${id}" placeholder="${ph}" value="${val||''}" tabindex="${tabIdx}"
+      style="width:${w};background:transparent;border:1px solid ${BLUE};border-radius:4px;
+      color:#fff;font-size:12px;font-family:monospace;padding:3px 6px;outline:none;
+      text-transform:uppercase;box-sizing:border-box;${extra||''}"
+      onfocus="this.style.borderColor='#88c8f0'" onblur="this.style.borderColor='${BLUE}'" >`;
+
+  const cellStyle = `display:flex;flex-direction:column;justify-content:center;border:1px solid ${BLUE};
+    border-radius:4px;padding:4px 6px;min-height:52px;box-sizing:border-box;flex-shrink:0;`;
+
+  const blueText = `color:${BLUE};font-size:13px;font-family:monospace;font-weight:700;`;
 
   legs.forEach((leg, i) => {
     const row = document.createElement('div');
-    row.className = 'leg-row';
+    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:5px 8px;flex-wrap:nowrap;overflow-x:auto;';
 
-    // ── Logo ──
-    const logoCol = document.createElement('div');
-    logoCol.className = 'ls-block';
-    logoCol.style.cssText = 'justify-content:center;min-width:58px;';
-    logoCol.innerHTML = '<div class="ls-label">Airline</div>'
-      + '<div id="logo-' + i + '" style="min-height:32px;display:flex;align-items:center;">'
-      + (leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:var(--txt3);">–</span>')
-      + '</div>';
+    // ── Logo cell ──
+    const logoCell = document.createElement('div');
+    logoCell.style.cssText = cellStyle + 'width:72px;min-width:72px;align-items:center;justify-content:center;background:#fff;padding:2px;';
+    logoCell.id = 'logo-' + i;
+    logoCell.innerHTML = leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:#aaa;text-align:center;">Logo</span>';
 
-    // ── Airline + Aircraft inputs ──
-    const alacCol = document.createElement('div');
-    alacCol.className = 'ls-block';
-    alacCol.innerHTML = '<div class="ls-label">AL &nbsp; EQP</div>'
-      + '<div style="display:flex;gap:4px;">'
-      + '<input id="al-' + i + '" style="' + iSt + 'width:52px;text-transform:uppercase;" placeholder="DLH" value="' + (leg.airline||'') + '">'
-      + '<input id="ac-' + i + '" style="' + iSt + 'width:60px;text-transform:uppercase;" placeholder="A388" value="' + (leg.aircraft||'') + '">'
-      + '</div>';
+    // ── AL + EQP ──
+    const alCell = document.createElement('div');
+    alCell.style.cssText = cellStyle + 'width:126px;min-width:126px;gap:3px;';
+    alCell.innerHTML = inp('al-'+i,'Airline','60px',i*10+1,leg.airline)
+      + inp('ac-'+i,'EQP','60px',i*10+2,leg.aircraft);
 
     // ── Departure airport ──
-    const depCol = document.createElement('div');
-    depCol.className = 'ls-block';
-    depCol.innerHTML = '<div class="ls-label">Departure</div>';
+    const depCell = document.createElement('div');
+    depCell.style.cssText = cellStyle + 'min-width:130px;width:130px;';
     if (leg.dep) {
-      const bw = document.createElement('div');
-      bw.innerHTML = apBox(leg.dep);
-      bw.style.cursor = 'pointer'; bw.title = 'Click to change';
-      bw.onclick = () => { legs[i].dep = null; renderLegs(); };
-      depCol.appendChild(bw);
+      depCell.innerHTML = apBox(leg.dep);
+      depCell.style.cursor = 'pointer'; depCell.title = 'Click to change';
+      depCell.onclick = () => { legs[i].dep = null; renderLegs(); };
     } else {
-      const wrap = document.createElement('div');
-      wrap.style.position = 'relative';
-      const inp = document.createElement('input');
-      inp.className = 'leg-input'; inp.placeholder = 'ICAO or city…';
-      wrap.appendChild(inp); depCol.appendChild(wrap);
-      buildSuggestBox(inp, ap => {
-        legs[i].dep = ap;
-        if (i > 0) legs[i-1].arr = ap;
-        updateRosterLines(); renderLegs();
-      });
+      const w = document.createElement('div'); w.style.position = 'relative';
+      const inp2 = document.createElement('input');
+      inp2.placeholder = 'ICAO or city…';
+      inp2.style.cssText = 'width:100%;background:transparent;border:none;color:#fff;font-size:12px;outline:none;';
+      w.appendChild(inp2); depCell.appendChild(w);
+      buildSuggestBox(inp2, ap => { legs[i].dep = ap; if (i > 0) legs[i-1].arr = ap; updateRosterLines(); renderLegs(); });
     }
 
-    // ── Dep time + day ──
-    const depTimeCol = document.createElement('div');
-    depTimeCol.className = 'ls-block';
-    const depTimeVal = leg.schedDepTime || '00:00';
-    const depDayVal  = leg.schedDepDay  || 1;
-    depTimeCol.innerHTML = '<div class="ls-label">Day &nbsp; Dep local</div>'
-      + '<div style="display:flex;gap:4px;align-items:center;">'
-      + '<input id="ls-day-' + i + '" style="' + iSt + 'width:34px;text-align:center;" value="' + depDayVal + '" tabindex="' + (i*10+1) + '">'
-      + '<input id="ls-dep-' + i + '" style="' + iSt + 'width:54px;text-align:center;" value="' + depTimeVal + '" tabindex="' + (i*10+2) + '">'
-      + '</div>'
-      + '<div id="ls-deputc-' + i + '" class="ls-arr-day">' + (leg.schedDepUTC||'') + '</div>';
+    // ── Day + Dep local ──
+    const depTimeCell = document.createElement('div');
+    depTimeCell.style.cssText = cellStyle + 'width:110px;min-width:110px;gap:3px;';
+    depTimeCell.innerHTML = `<div style="display:flex;gap:3px;">`
+      + inp('ls-day-'+i,'Day','36px',i*10+3,leg.schedDepDay||1)
+      + inp('ls-dep-'+i,'00:00','68px',i*10+4,leg.schedDepTime||'')
+      + `</div>`
+      + `<div id="ls-deputc-${i}" style="font-size:9px;color:${BLUE};margin-top:1px;">${leg.schedDepUTC||''}</div>`;
 
-    // ── Arrow + block time ──
-    const btCol = document.createElement('div');
-    btCol.className = 'ls-block';
-    btCol.style.alignItems = 'center';
+    // ── Block time (display only) ──
+    const btCell = document.createElement('div');
+    btCell.style.cssText = cellStyle + 'width:58px;min-width:58px;align-items:center;cursor:pointer;';
+    btCell.title = 'Click to refresh';
+    btCell.onclick = () => fetchBlockTime(i);
     const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '–');
-    const btStyle = leg.blockTimeReal ? 'font-weight:700;color:var(--green);' : 'font-style:italic;color:var(--txt3);';
-    btCol.innerHTML = '<div class="ls-label" style="text-align:center;">Block</div>'
-      + '<div style="text-align:center;">'
-      + '<div style="font-size:11px;color:var(--txt3);">→</div>'
-      + '<div class="blocktime-val" id="bt-' + i + '" style="font-size:12px;font-family:monospace;' + btStyle + 'cursor:pointer;" title="Click to refresh" onclick="fetchBlockTime(' + i + ')">' + btDisplay + '</div>'
-      + '</div>';
+    const btColor = leg.blockTimeReal ? '#3fb950' : '#888';
+    const btWeight = leg.blockTimeReal ? '700' : '400';
+    btCell.innerHTML = `<div style="font-size:9px;color:#888;text-align:center;">BLOCK</div>`
+      + `<div id="bt-${i}" style="font-size:13px;font-family:monospace;color:${btColor};font-weight:${btWeight};text-align:center;">${btDisplay}</div>`;
+
+    // ── Arrow ──
+    const arrowEl = document.createElement('div');
+    arrowEl.style.cssText = 'display:flex;align-items:center;color:#888;font-size:18px;flex-shrink:0;';
+    arrowEl.textContent = '→';
 
     // ── Arrival airport ──
-    const arrCol = document.createElement('div');
-    arrCol.className = 'ls-block';
-    arrCol.innerHTML = '<div class="ls-label">Destination</div>';
+    const arrCell = document.createElement('div');
+    arrCell.style.cssText = cellStyle + 'min-width:130px;width:130px;';
     if (leg.arr) {
-      const bw = document.createElement('div');
-      bw.innerHTML = apBox(leg.arr);
-      bw.style.cursor = 'pointer'; bw.title = 'Click to change';
-      bw.onclick = () => { legs[i].arr = null; renderLegs(); };
-      arrCol.appendChild(bw);
+      arrCell.innerHTML = apBox(leg.arr);
+      arrCell.style.cursor = 'pointer'; arrCell.title = 'Click to change';
+      arrCell.onclick = () => { legs[i].arr = null; renderLegs(); };
     } else {
-      const wrap = document.createElement('div');
-      wrap.style.position = 'relative';
-      const inp = document.createElement('input');
-      inp.className = 'leg-input'; inp.placeholder = 'ICAO or city…';
-      wrap.appendChild(inp); arrCol.appendChild(wrap);
-      buildSuggestBox(inp, ap => {
-        legs[i].arr = ap;
-        if (i < legs.length - 1) legs[i+1].dep = ap;
-        updateRosterLines(); renderLegs(); fetchBlockTime(i);
-      });
+      const w = document.createElement('div'); w.style.position = 'relative';
+      const inp2 = document.createElement('input');
+      inp2.placeholder = 'ICAO or city…';
+      inp2.style.cssText = 'width:100%;background:transparent;border:none;color:#fff;font-size:12px;outline:none;';
+      w.appendChild(inp2); arrCell.appendChild(w);
+      buildSuggestBox(inp2, ap => { legs[i].arr = ap; if (i < legs.length-1) legs[i+1].dep = ap; updateRosterLines(); renderLegs(); fetchBlockTime(i); });
     }
 
-    // ── Arr time display ──
-    const arrTimeCol = document.createElement('div');
-    arrTimeCol.className = 'ls-block';
-    arrTimeCol.innerHTML = '<div class="ls-label">Arr local &nbsp; Day</div>'
-      + '<div style="display:flex;gap:6px;align-items:baseline;">'
-      + '<div id="ls-arr-' + i + '" class="ls-arr-time">' + (leg.schedArrTime || '–') + '</div>'
-      + '<div id="ls-arrday-' + i + '" class="ls-arr-day">' + (leg.schedArrDay ? 'Day '+leg.schedArrDay : '') + '</div>'
-      + '</div>'
-      + '<div id="ls-arrutc-' + i + '" class="ls-arr-day">' + (leg.schedArrUTC||'') + '</div>';
+    // ── Arr time + day ──
+    const arrTimeCell = document.createElement('div');
+    arrTimeCell.style.cssText = cellStyle + 'width:90px;min-width:90px;';
+    arrTimeCell.innerHTML = `<div style="display:flex;gap:5px;align-items:baseline;">`
+      + `<div id="ls-arr-${i}" style="${blueText}font-size:15px;">${leg.schedArrTime||'–'}</div>`
+      + `<div id="ls-arrday-${i}" style="font-size:10px;color:${BLUE};">${leg.schedArrDay?'D'+leg.schedArrDay:''}</div>`
+      + `</div>`
+      + `<div id="ls-arrutc-${i}" style="font-size:9px;color:${BLUE};margin-top:1px;">${leg.schedArrUTC||''}</div>`;
 
     // ── TA + Gate ──
-    const taGateCol = document.createElement('div');
-    taGateCol.className = 'ls-block';
-    taGateCol.innerHTML = '<div class="ls-label">TA min &nbsp; Gate</div>'
-      + '<div style="display:flex;gap:4px;">'
-      + '<input id="ls-ta-' + i + '" style="' + iSt + 'width:46px;text-align:center;" placeholder="min" value="' + (leg.schedTA||'') + '" tabindex="' + (i*10+3) + '">'
-      + '<input id="ls-gate-' + i + '" style="' + iSt + 'width:50px;text-transform:uppercase;" placeholder="Gate" value="' + (leg.schedGate||'') + '" tabindex="' + (i*10+4) + '">'
-      + '</div>';
+    const taGateCell = document.createElement('div');
+    taGateCell.style.cssText = cellStyle + 'width:114px;min-width:114px;gap:3px;';
+    taGateCell.innerHTML = `<div style="display:flex;gap:3px;">`
+      + inp('ls-ta-'+i,'min','52px',i*10+5,leg.schedTA||'')
+      + inp('ls-gate-'+i,'GATE','56px',i*10+6,leg.schedGate||'')
+      + `</div>`;
 
-    // ── Delete button ──
-    const delCol = document.createElement('div');
-    delCol.className = 'ls-block';
-    delCol.style.justifyContent = 'center';
-    delCol.innerHTML = '<div class="ls-label">&nbsp;</div>';
+    // ── Navigraph Charts button ──
+    const navCell = document.createElement('div');
+    navCell.style.cssText = cellStyle + 'width:40px;min-width:40px;align-items:center;justify-content:center;cursor:pointer;background:rgba(74,158,218,.08);';
+    navCell.title = 'Open Navigraph Charts for arrival airport';
+    const arrIcao = leg.arr ? leg.arr[0] : '';
+    navCell.onclick = () => {
+      const icao = legs[i].arr ? legs[i].arr[0] : '';
+      if (!icao) return;
+      window.open('https://charts.navigraph.com/airport/' + icao + '?chartCategory=ARR&section=Info&informationSection=General&procedureSection=Departures&weatherSection=METAR&networksSection=Gates&ATISSection=Real','_blank');
+    };
+    navCell.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="${BLUE}" stroke-width="2" width="20" height="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>`;
+
+    // ── Delete ──
+    const delCell = document.createElement('div');
+    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;';
     if (legs.length > 1) {
       const del = document.createElement('button');
       del.className = 'leg-del'; del.textContent = '✕';
       del.onclick = () => deleteLeg(i);
-      delCol.appendChild(del);
+      delCell.appendChild(del);
     }
 
-    row.appendChild(logoCol);
-    row.appendChild(alacCol);
-    row.appendChild(depCol);
-    row.appendChild(depTimeCol);
-    row.appendChild(btCol);
-    row.appendChild(arrCol);
-    row.appendChild(arrTimeCol);
-    row.appendChild(taGateCol);
-    row.appendChild(delCol);
-
+    row.appendChild(logoCell);
+    row.appendChild(alCell);
+    row.appendChild(depCell);
+    row.appendChild(depTimeCell);
+    row.appendChild(btCell);
+    row.appendChild(arrowEl);
+    row.appendChild(arrCell);
+    row.appendChild(arrTimeCell);
+    row.appendChild(taGateCell);
+    row.appendChild(navCell);
+    row.appendChild(delCell);
     container.appendChild(row);
 
     // Insert button between rows
     const insertDiv = document.createElement('div');
     insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 0;';
     const insertBtn = document.createElement('button');
-    insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 16px;border-radius:var(--r);border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;white-space:nowrap;';
+    insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#ccc;cursor:pointer;';
     insertBtn.textContent = '⊕ Insert Leg';
-    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.13)';
-    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.06)';
+    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.12)';
+    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.05)';
     insertBtn.onclick = () => insertLegAfter(i);
     insertDiv.appendChild(insertBtn);
     container.appendChild(insertDiv);
 
-    // Wire inputs after DOM insertion
+    // Wire inputs
     const alInput = document.getElementById('al-'+i);
     if (alInput) alInput.addEventListener('input', () => {
       const code = alInput.value.toUpperCase().trim();
-      legs[i].airline = code;
-      const logoDiv = document.getElementById('logo-'+i);
-      if (logoDiv) logoDiv.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '<span style="font-size:9px;color:var(--txt3);">–</span>';
+      legs[i].airline = code; alInput.value = code;
+      const ld = document.getElementById('logo-'+i);
+      if (ld) ld.innerHTML = code.length >= 2 ? airlineLogoHtml(code) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
     });
     const acInput = document.getElementById('ac-'+i);
-    if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value; });
+    if (acInput) acInput.addEventListener('input', () => { legs[i].aircraft = acInput.value.toUpperCase(); acInput.value = legs[i].aircraft; });
 
     const depTimeInput = document.getElementById('ls-dep-'+i);
     if (depTimeInput) {
       depTimeInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legSchedUpdateRow(i); });
-      depTimeInput.addEventListener('blur', () => {
-        const p = parseTime(depTimeInput.value);
-        if (p) depTimeInput.value = fmtTime(p.h, p.m);
-      });
+      depTimeInput.addEventListener('blur', () => { const p = parseTime(depTimeInput.value); if (p) depTimeInput.value = fmtTime(p.h, p.m); });
     }
     const dayInput = document.getElementById('ls-day-'+i);
     if (dayInput) dayInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legSchedUpdateRow(i); });
-
     const taInput = document.getElementById('ls-ta-'+i);
     if (taInput) taInput.addEventListener('input', () => legSchedUpdateRow(i));
-
     const gateInput = document.getElementById('ls-gate-'+i);
-    if (gateInput) gateInput.addEventListener('input', () => { legs[i].schedGate = gateInput.value; });
+    if (gateInput) gateInput.addEventListener('input', () => { legs[i].schedGate = gateInput.value.toUpperCase(); gateInput.value = legs[i].schedGate; });
   });
 
-  // Run initial calculations and fetch block times
+  // Initial calc + block time fetch
   legs.forEach((leg, i) => {
     legSchedUpdateRow(i);
-    if (leg.dep && leg.arr && !leg.blockTimeReal) {
-      setTimeout(() => fetchBlockTime(i), i * 1800);
-    }
+    if (leg.dep && leg.arr && !leg.blockTimeReal) setTimeout(() => fetchBlockTime(i), i * 1800);
   });
 
   updateRosterLines();
