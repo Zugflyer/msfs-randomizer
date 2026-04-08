@@ -1828,6 +1828,20 @@ function switchToMain(target) {
   });
 }
 
+
+function prefillDepartFromLogbook() {
+  if (!logbookFlights.length) return;
+  const last = logbookFlights[logbookFlights.length - 1];
+  const icao = last.arr_icao || '';
+  if (!icao) return;
+  const ap = schedByCode[icao];
+  if (!ap) return;
+  departAirport = ap;
+  const inp = document.getElementById('depart-input');
+  if (inp) inp.style.visibility = 'hidden';
+  showDashBox('depart', ap);
+}
+
 function switchView(view) {
   currentView = view;
   // Show/hide all views
@@ -1850,20 +1864,8 @@ function switchView(view) {
   if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
   if (view === 'dashboard') {
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
-    // Pre-fill departure from last logbook entry if depart not already set
-    if (!departAirport && logbookFlights.length > 0) {
-      const last = logbookFlights[logbookFlights.length - 1];
-      const lastIcao = last.arr_icao || '';
-      if (lastIcao) {
-        const ap = schedByCode[lastIcao];
-        if (ap) {
-          departAirport = ap;
-          const inp = document.getElementById('depart-input');
-          if (inp) inp.value = ap[0] + (ap[1]?' / '+ap[1]:'') + ' — ' + (ap[7]||ap[2]) + ', ' + countryName(ap[6]);
-          showDashBox('depart', ap);
-        }
-      }
-    }
+    // Always sync departure to last logbook arrival
+    prefillDepartFromLogbook();
   }
   if (view === 'roster') {
     setTimeout(() => {
@@ -2253,6 +2255,24 @@ function renderLegs() {
 
     container.appendChild(row);
 
+    // Insert-between button: small "⊕" divider after each row
+    const insertDiv = document.createElement('div');
+    insertDiv.style.cssText = 'display:flex;align-items:center;gap:6px;padding:1px 0;opacity:0.4;transition:opacity .15s;';
+    insertDiv.onmouseenter = () => insertDiv.style.opacity = '1';
+    insertDiv.onmouseleave = () => insertDiv.style.opacity = '0.4';
+    const insertLine = document.createElement('div');
+    insertLine.style.cssText = 'flex:1;height:1px;background:var(--bdr2);';
+    const insertBtn = document.createElement('button');
+    insertBtn.style.cssText = 'font-size:11px;padding:1px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf);color:var(--acc);cursor:pointer;white-space:nowrap;';
+    insertBtn.textContent = '⊕ insert leg';
+    insertBtn.onclick = () => insertLegAfter(i);
+    const insertLine2 = document.createElement('div');
+    insertLine2.style.cssText = 'flex:1;height:1px;background:var(--bdr2);';
+    insertDiv.appendChild(insertLine);
+    insertDiv.appendChild(insertBtn);
+    insertDiv.appendChild(insertLine2);
+    container.appendChild(insertDiv);
+
     // Wire airline input after DOM insertion
     const alInput = document.getElementById('al-'+i);
     if (alInput) {
@@ -2375,6 +2395,16 @@ function openFlightConnections(e) {
 }
 
 // ── Roster actions ──
+function insertLegAfter(idx) {
+  // New leg: dep = arr of leg at idx, arr = dep of next leg (if exists)
+  const depAp = legs[idx]?.arr || null;
+  const arrAp = legs[idx + 1]?.dep || null;
+  const airline = legs[idx]?.airline || '';
+  const aircraft = legs[idx]?.aircraft || '';
+  legs.splice(idx + 1, 0, { dep: depAp, arr: arrAp, airline, aircraft });
+  renderLegs();
+}
+
 function addLeg() {
   const last = legs[legs.length - 1];
   const savedArr = last.arr;
@@ -2755,15 +2785,8 @@ function drawLbMapEu() {
   if (!lbMapEu) return;
   lbMapEuLayers.forEach(function(l) { try { lbMapEu.removeLayer(l); } catch(e) {} });
   lbMapEuLayers = [];
-  // Only draw legs where BOTH endpoints are in European bounds
-  const euBounds = { latMin:30, latMax:72, lonMin:-15, lonMax:40 };
   logbookFlights.forEach(function(f) {
     if (!f.dep_lat || !f.arr_lat) return;
-    const inEu = f.dep_lat >= euBounds.latMin && f.dep_lat <= euBounds.latMax &&
-                 f.dep_lon >= euBounds.lonMin && f.dep_lon <= euBounds.lonMax &&
-                 f.arr_lat >= euBounds.latMin && f.arr_lat <= euBounds.latMax &&
-                 f.arr_lon >= euBounds.lonMin && f.arr_lon <= euBounds.lonMax;
-    if (!inEu) return;
     const dc = [f.dep_lat, f.dep_lon];
     const ac = [f.arr_lat, f.arr_lon];
     const color = f.planned ? '#4a9eda' : '#8b949e';
@@ -2884,14 +2907,8 @@ window.addEventListener('load', async () => {
   // Start on logbook
   switchView('logbook');
   initLbMap();
-  // Pre-fill depart for next time user opens Next Destination
-  if (logbookFlights.length > 0) {
-    const last = logbookFlights[logbookFlights.length - 1];
-    if (last.arr_icao) {
-      const ap = schedByCode[last.arr_icao];
-      if (ap) { departAirport = ap; }
-    }
-  }
+  // Pre-fill departure from last logbook arrival
+  prefillDepartFromLogbook();
 });
 
 window.addEventListener('resize', () => {
@@ -3033,32 +3050,37 @@ function apEdSelectAp(icao) {
   AP_ED_FIELDS.forEach(function(f) {
     var v = (ap[f.idx] !== null && ap[f.idx] !== undefined) ? String(ap[f.idx]) : '';
     // Check if this airport has an override (EDITED) or is itself an override result (NEW)
-    var hasOverride = apOverrides[ap[0]] !== undefined;
-    var overrideRec = hasOverride ? apOverrides[ap[0]] : null;
-    // Show EDITED badge on a field if this specific field was overridden
-    var overridden = overrideRec && overrideRec[f.key] !== undefined && String(overrideRec[f.key]).trim() !== '' && String(overrideRec[f.key]) !== String(ap[f.idx]);
-    // Also show a subtle marker if airport has ANY override (even if this field unchanged)
-    var anyOverride = hasOverride;
+    // For OLD airports: show EDITED on fields that were changed
+    // For NEW airports: find the original record and compare, show EDITED where changed
+    var overrideRec = apOverrides[ap[0]] || null;  // direct: this is an OLD airport
+    if (!overrideRec) {
+      // Check if this is a NEW airport (find its origin override)
+      var originRec = Object.values(apOverrides).find(function(r){ return r.icao === ap[0]; }) || null;
+      overrideRec = originRec;
+    }
+    var overridden = overrideRec && overrideRec[f.key] !== undefined && String(overrideRec[f.key]).trim() !== '';
     var badge = overridden
       ? ' <span style="font-size:9px;color:#d29922;background:rgba(210,153,34,.2);padding:1px 5px;border-radius:3px;font-weight:700;">EDITED</span>'
-      : (anyOverride ? ' <span style="font-size:9px;color:rgba(210,153,34,.5);padding:1px 3px;border-radius:3px;">·</span>' : '');
+      : '';
     leftHtml  += '<div style="' + lS + '">' + f.label + badge + '</div>'
               + '<input readonly value="' + v.replace(/"/g,'&quot;') + '" style="' + rO + '">';
     rightHtml += '<div style="' + lS + '">' + f.label + '</div>'
               + '<input id="ap-ed-new-' + f.key + '" placeholder="' + v.replace(/"/g,'&quot;') + '" style="' + rE + '">';
   });
 
-  // Show badge next to "Current Data" header
+  // Determine status: OLD (was changed), NEW (result of edit), or normal
+  var isOldAp = apOverrides[ap[0]] !== undefined;  // this ICAO was edited
+  var isNewAp = !isOldAp && Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; });
   var badge = document.getElementById('ap-ed-new-badge');
   if (badge) {
-    var isNewAp = Object.values(apOverrides).some(function(r){ return r.icao === ap[0]; });
-    var isEdited = apOverrides[ap[0]] !== undefined;
-    if (isNewAp) {
-      badge.textContent = 'NEW'; badge.style.color='#3fb950';
-      badge.style.background='rgba(63,185,80,.15)'; badge.style.display='';
-    } else if (isEdited) {
-      badge.textContent = 'EDITED'; badge.style.color='#d29922';
-      badge.style.background='rgba(210,153,34,.15)'; badge.style.display='';
+    if (isOldAp) {
+      badge.textContent = 'OLD — this airport was edited'; badge.style.color='#f85149';
+      badge.style.background='rgba(248,81,73,.15)'; badge.style.border='1px solid rgba(248,81,73,.3)';
+      badge.style.padding='2px 8px'; badge.style.borderRadius='4px'; badge.style.display='';
+    } else if (isNewAp) {
+      badge.textContent = 'NEW — created by a previous edit'; badge.style.color='#3fb950';
+      badge.style.background='rgba(63,185,80,.15)'; badge.style.border='1px solid rgba(63,185,80,.3)';
+      badge.style.padding='2px 8px'; badge.style.borderRadius='4px'; badge.style.display='';
     } else {
       badge.style.display = 'none';
     }
