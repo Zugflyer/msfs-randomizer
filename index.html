@@ -317,9 +317,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 <!-- TOP NAV -->
 <div class="topnav">
   <div class="topnav-tabs">
-    <button class="topnav-tab topnav-primary active" id="t-dashboard" onclick="switchView('dashboard')">
+    <button class="topnav-tab topnav-secondary active" id="t-logbook" onclick="switchView('logbook')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+      Logbook
+    </button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-primary" id="t-dashboard" onclick="switchView('dashboard')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-      Dashboard
+      Next Flight
     </button>
     <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
@@ -330,10 +335,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       Schedule
     </button>
     <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-logbook" onclick="switchView('logbook')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
-      Logbook
-    </button>
     <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
@@ -531,7 +532,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
 
     <!-- ═══ LOGBOOK ═══ -->
-    <div id="view-logbook" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="logbook-page">
+    <div id="view-logbook" style="display:flex;flex:1;flex-direction:column;overflow:hidden;" class="logbook-page">
       <div class="logbook-toolbar">
         <span class="filter-label">Filter:</span>
         <input class="filter-input" id="lb-filter-input" placeholder="ICAO, city, airline..." oninput="applyLogbookFilter()" style="max-width:180px;">
@@ -558,21 +559,26 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
         <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
       </div>
-      <div class="logbook-body" style="overflow-x:auto;padding:8px 14px;">
-        <table class="lb-tbl">
-          <thead><tr>
-            <th style="width:28px;">#</th>
-            <th>Departure</th>
-            <th style="width:10px;background:transparent;border:none;"></th>
-            <th>Arrival</th>
-            <th style="width:10px;background:transparent;border:none;"></th>
-            <th style="width:60px;">Airline</th>
-            <th style="width:74px;">Aircraft</th>
-            <th style="width:54px;">Logo</th>
-            <th style="width:24px;"></th>
-          </tr></thead>
-          <tbody id="lb-body"></tbody>
-        </table>
+      <!-- Table + Map side by side -->
+      <div style="display:flex;flex:1;overflow:hidden;min-height:0;">
+        <div class="logbook-body" style="overflow:auto;padding:8px 14px;flex:1;min-width:0;">
+          <table class="lb-tbl">
+            <thead><tr>
+              <th style="width:28px;">#</th>
+              <th>Departure</th>
+              <th style="width:10px;background:transparent;border:none;"></th>
+              <th>Arrival</th>
+              <th style="width:10px;background:transparent;border:none;"></th>
+              <th style="width:60px;">Airline</th>
+              <th style="width:74px;">Aircraft</th>
+              <th style="width:54px;">Logo</th>
+              <th style="width:24px;"></th>
+            </tr></thead>
+            <tbody id="lb-body"></tbody>
+          </table>
+        </div>
+        <!-- Logbook map -->
+        <div id="lb-map" style="width:420px;flex-shrink:0;background:#0e1117;border-left:1px solid var(--bdr);"></div>
       </div>
     </div>
 
@@ -625,10 +631,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
     <!-- Search bar -->
     <div style="padding:12px 20px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:flex;gap:8px;align-items:center;">
-      <input id="ap-ed-search" placeholder="Enter ICAO, IATA or city name…" 
+      <input id="ap-ed-search" placeholder="ICAO, IATA or city…" autocomplete="off"
         style="flex:1;font-size:13px;padding:7px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);"
-        oninput="apEdSearchInput(this.value)" onkeydown="if(event.key==='Enter')apEdDoSearch()"
-        onblur="setTimeout(function(){document.getElementById('ap-ed-suggestions').style.display='none';},200)">
+        oninput="apEdSearchInput(this.value)"
+        onkeydown="apEdKeydown(event)"
+        onblur="setTimeout(function(){var s=document.getElementById('ap-ed-suggestions');if(s)s.style.display='none';},250)">
       <button onclick="apEdDoSearch()" style="font-size:13px;padding:7px 18px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Search</button>
     </div>
     <!-- Search suggestions -->
@@ -922,7 +929,7 @@ async function pushDefaultsToCloud() {
 let lastResults = [];
 let activeContFilter = [];
 let activeCatId = 'difficult';
-let currentView = 'dashboard';
+let currentView = 'logbook';
 let leafletMap = null;
 let pinMarkers = [];
 let svgW = 900, svgH = 500;
@@ -1828,7 +1835,7 @@ function switchView(view) {
 
   // View-specific init
   if (view === 'categories') renderCatView();
-  if (view === 'logbook') { renderLogbook(); if (rosterMap) { clearRosterLayers(); drawLogbookLines(); } }
+  if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
   if (view === 'dashboard' && leafletMap) {
     setTimeout(() => leafletMap.invalidateSize(), 100);
   }
@@ -2570,6 +2577,8 @@ function renderLogbook() {
   if (cnt) cnt.textContent = logbookFilterText
     ? `${flights.length} of ${logbookFlights.length}`
     : `${flown} flown${planned>0?' · '+planned+' planned':''}`;
+  // Redraw logbook map
+  if (lbMap) drawLbMap();
 }
 
 function deleteLogbookFlight(i) {
@@ -2694,6 +2703,68 @@ function importLogbookXlsx(input) {
 document.getElementById('view-dashboard').style.display = 'flex';
 renderResults();
 
+
+// ── Logbook dedicated map ──
+let lbMap = null;
+let lbMapLayers = [];
+
+function initLbMap() {
+  const el = document.getElementById('lb-map');
+  if (!el || lbMap) return;
+  lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
+  drawLbMap();
+  setTimeout(function() { if (lbMap) lbMap.invalidateSize(); }, 200);
+}
+
+function drawLbMap() {
+  if (!lbMap) return;
+  // Clear old layers
+  lbMapLayers.forEach(function(l) { try { lbMap.removeLayer(l); } catch(e) {} });
+  lbMapLayers = [];
+
+  // Find last flown arrival (for plane icon)
+  var flown = logbookFlights.filter(function(f) { return !f.planned && f.arr_lat; });
+  var lastFlown = flown.length > 0 ? flown[flown.length - 1] : null;
+
+  logbookFlights.forEach(function(f) {
+    if (!f.dep_lat || !f.arr_lat) return;
+    var dc = [f.dep_lat, f.dep_lon];
+    var ac = [f.arr_lat, f.arr_lon];
+    var color = f.planned ? '#4a9eda' : '#8b949e';
+    var weight = 1.2;
+    try {
+      var line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(lbMap);
+      lbMapLayers.push(line);
+      // Small dots at endpoints
+      var r = 2.5;
+      var dm = L.circleMarker(dc, { radius: r, color: color, fillColor: color, fillOpacity: 0.7, weight: 0 }).addTo(lbMap);
+      var am = L.circleMarker(ac, { radius: r, color: color, fillColor: color, fillOpacity: 0.7, weight: 0 }).addTo(lbMap);
+      lbMapLayers.push(dm, am);
+    } catch(e) {}
+  });
+
+  // Plane icon on last flown arrival
+  if (lastFlown) {
+    try {
+      var planeIcon = L.divIcon({
+        className: '',
+        html: '<div style="font-size:18px;transform:rotate(45deg);filter:drop-shadow(0 0 3px rgba(0,0,0,.8));">✈</div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11]
+      });
+      var planeMarker = L.marker([lastFlown.arr_lat, lastFlown.arr_lon], { icon: planeIcon }).addTo(lbMap);
+      planeMarker.bindTooltip('<b>' + (lastFlown.arr_icao||'') + '</b> ' + (lastFlown.arr||''), { direction: 'top' });
+      lbMapLayers.push(planeMarker);
+    } catch(e) {}
+  }
+
+  setTimeout(function() { if (lbMap) lbMap.invalidateSize(); }, 100);
+}
+
 window.addEventListener('load', async () => {
   try { initMap(); } catch(e) { console.error('Map init:', e); }
   await loadAllFromCloud();
@@ -2703,12 +2774,16 @@ window.addEventListener('load', async () => {
   renderLegs();
   initDashFCLogo();
   await loadApOverrides();
+  // Start on logbook
+  switchView('logbook');
+  initLbMap();
 });
 
 window.addEventListener('resize', () => {
   if (leafletMap) leafletMap.invalidateSize();
   if (rosterMap) rosterMap.invalidateSize();
   if (calcMap) calcMap.invalidateSize();
+  if (lbMap) lbMap.invalidateSize();
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -2800,6 +2875,19 @@ function apEdSearchInput(val) {
   sug.style.display = 'block';
 }
 
+function apEdKeydown(e) {
+  if (e.key === 'Enter') { apEdDoSearch(); return; }
+  if (e.key === 'Tab') {
+    var sug = document.getElementById('ap-ed-suggestions');
+    if (!sug || sug.style.display === 'none') return;
+    var first = sug.querySelector('[onmousedown]');
+    if (!first) return;
+    e.preventDefault();
+    var m = (first.getAttribute('onmousedown')||'').match(/"([A-Z0-9]{3,6})"/);
+    if (m) apEdSelectAp(m[1]);
+  }
+}
+
 function apEdDoSearch() {
   var val = document.getElementById('ap-ed-search').value.trim().toUpperCase();
   var ap = schedByCode[val] || schedByIata[val];
@@ -2810,9 +2898,12 @@ function apEdDoSearch() {
 function apEdSelectAp(icao) {
   var ap = schedByCode[icao]; if (!ap) return;
   apEdCurrentAp = ap;
-  document.getElementById('ap-ed-search').value = ap[0] + (ap[1] ? ' / '+ap[1] : '') + '  —  ' + (ap[7]||ap[2]);
-  document.getElementById('ap-ed-suggestions').style.display = 'none';
-  document.getElementById('ap-ed-result').style.display = 'none';
+  var searchEl = document.getElementById('ap-ed-search');
+  if (searchEl) searchEl.value = ap[0] + (ap[1] ? ' / '+ap[1] : '') + '  —  ' + (ap[7]||ap[2]) + ', ' + (ap[6]||'');
+  var sugEl = document.getElementById('ap-ed-suggestions');
+  if (sugEl) sugEl.style.display = 'none';
+  var resEl = document.getElementById('ap-ed-result');
+  if (resEl) resEl.style.display = 'none';
 
   var rO = 'width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--bdr);background:var(--surf);color:var(--txt2);font-family:monospace;margin-bottom:10px;box-sizing:border-box;';
   var rE = 'width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;margin-bottom:10px;box-sizing:border-box;';
