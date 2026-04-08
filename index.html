@@ -2308,8 +2308,8 @@ function renderLegs() {
 
   // Fetch block times for any completed legs (staggered to avoid rate limits)
   legs.forEach((leg, i) => {
-    if (leg.dep && leg.arr && !leg.blockTime) {
-      setTimeout(() => fetchBlockTime(i), i * 1500); // stagger by 1.5s each
+    if (leg.dep && leg.arr && !leg.blockTimeReal) {
+      setTimeout(() => fetchBlockTime(i), i * 1800);
     }
   });
 
@@ -2324,9 +2324,11 @@ function renderLegs() {
 async function fetchBlockTime(idx) {
   const leg = legs[idx];
   if (!leg || !leg.dep || !leg.arr) return;
+  if (leg._fetchingBT) return;  // prevent duplicate calls
+  leg._fetchingBT = true;
   const btEl = document.getElementById('bt-' + idx);
-  if (!btEl) return;
-  btEl.textContent = '…';
+  if (!btEl) { leg._fetchingBT = false; return; }
+  btEl.textContent = '🔍';
   btEl.style.fontStyle = 'normal';
   btEl.title = 'Searching…';
 
@@ -2354,12 +2356,18 @@ async function fetchBlockTime(idx) {
     });
     if (resp.ok) {
       const data = await resp.json();
-      const txt = (data.content || []).map(b => b.type === 'text' ? b.text : '').join('').trim();
+      // Collect all text blocks (web_search returns tool_use + text blocks)
+      const txt = (data.content || [])
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join(' ')
+        .trim();
       const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
       if (m && !txt.toUpperCase().includes('NONE')) {
         leg.blockTime = m[0]; leg.blockTimeReal = true;
         btEl.textContent = m[0]; btEl.style.fontStyle = 'normal';
         btEl.title = `Nonstop ${depIata}→${arrIata} (web)`;
+        leg._fetchingBT = false;
         return;
       }
     }
@@ -2376,6 +2384,7 @@ async function fetchBlockTime(idx) {
   const mins = Math.round(dist/spd*60)+buf;
   leg.blockTime = Math.floor(mins/60)+':'+String(mins%60).padStart(2,'0');
   leg.blockTimeReal = false;
+  leg._fetchingBT = false;
   btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
   btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
 }
