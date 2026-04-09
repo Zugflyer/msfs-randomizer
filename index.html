@@ -1994,7 +1994,7 @@ function switchView(view) {
 
   // View-specific init
   if (view === 'categories') renderCatView();
-  if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } }
+  if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } } else { if (lbSelectedAirport) clearLbSelection(); }
   if (view === 'dashboard') {
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
     // Always sync departure to last logbook arrival
@@ -3029,6 +3029,7 @@ let lbMap = null;       // world map
 let lbMapEu = null;    // Europe zoom
 let lbMapLayers = [];
 let lbMapEuLayers = [];
+let lbSelectedAirport = null; // ICAO of selected airport on logbook map
 
 function initLbMapEu() {
   const el = document.getElementById('lb-map-eu');
@@ -3049,8 +3050,8 @@ function drawLbMapEu() {
   if (!lbMapEu) return;
   lbMapEuLayers.forEach(function(l) { try { lbMapEu.removeLayer(l); } catch(e) {} });
   lbMapEuLayers = [];
+  var sel = lbSelectedAirport;
 
-  // Add plane icon for last flown position (visible if in Europe, otherwise just on world map)
   var flownEu = logbookFlights.filter(function(f) { return !f.planned && f.arr_lat; });
   var lastFlownEu = flownEu.length > 0 ? flownEu[flownEu.length - 1] : null;
   if (lastFlownEu) {
@@ -3065,23 +3066,40 @@ function drawLbMapEu() {
       lbMapEuLayers.push(pm);
     } catch(e) {}
   }
+
+  var airportMapEu = {};
   logbookFlights.forEach(function(f) {
     if (!f.dep_lat || !f.arr_lat) return;
     const dc = [f.dep_lat, f.dep_lon];
     const ac = [f.arr_lat, f.arr_lon];
-    const color = f.planned ? '#4a9eda' : '#8b949e';
+    var matchesSel = sel && (f.dep_icao === sel || f.arr_icao === sel);
+    const baseColor = f.planned ? '#4a9eda' : '#8b949e';
+    const color = matchesSel ? '#f85149' : baseColor;
+    const weight = matchesSel ? 2.5 : 1.5;
+    const opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.55);
     try {
-      const line = new L.Geodesic([[dc, ac]], { color, weight: 1.5, opacity: f.planned ? 0.85 : 0.55, steps: 6 }).addTo(lbMapEu);
-      const depTip = '<b>' + (f.dep_icao||'') + (f.dep_iata ? ' / '+f.dep_iata : '') + '</b><br>' + (f.dep||'') + (f.airline ? '<br><span style="color:#aaa">'+f.airline+(f.aircraft?' · '+f.aircraft:'')+'</span>' : '');
-      const arrTip = '<b>' + (f.arr_icao||'') + (f.arr_iata ? ' / '+f.arr_iata : '') + '</b><br>' + (f.arr||'') + (f.airline ? '<br><span style="color:#aaa">'+f.airline+(f.aircraft?' · '+f.aircraft:'')+'</span>' : '');
-      const dm = L.circleMarker(dc, { radius: 4, color, fillColor: color, fillOpacity: 0.85, weight: 0 }).addTo(lbMapEu);
-      dm.bindTooltip(depTip, { direction: 'top', className: 'lb-map-tip' });
-      const am = L.circleMarker(ac, { radius: 4, color, fillColor: color, fillOpacity: 0.85, weight: 0 }).addTo(lbMapEu);
-      am.bindTooltip(arrTip, { direction: 'top', className: 'lb-map-tip' });
-      lbMapEuLayers.push(line, dm, am);
+      const line = new L.Geodesic([[dc, ac]], { color, weight, opacity, steps: 6 }).addTo(lbMapEu);
+      lbMapEuLayers.push(line);
+    } catch(e) {}
+    if (f.dep_icao && !airportMapEu[f.dep_icao]) airportMapEu[f.dep_icao] = { icao: f.dep_icao, iata: f.dep_iata, city: f.dep, lat: f.dep_lat, lon: f.dep_lon };
+    if (f.arr_icao && !airportMapEu[f.arr_icao]) airportMapEu[f.arr_icao] = { icao: f.arr_icao, iata: f.arr_iata, city: f.arr, lat: f.arr_lat, lon: f.arr_lon };
+  });
+
+  Object.keys(airportMapEu).forEach(function(icao) {
+    var ap = airportMapEu[icao];
+    var isSel = sel === icao;
+    var r = isSel ? 6 : 4;
+    var col = isSel ? '#f85149' : '#8b949e';
+    var tipText = '<b>' + ap.icao + (ap.iata ? ' / '+ap.iata : '') + '</b><br>' + (ap.city||'');
+    try {
+      var m = L.circleMarker([ap.lat, ap.lon], { radius: r, color: col, fillColor: col, fillOpacity: 0.9, weight: isSel ? 2 : 0 }).addTo(lbMapEu);
+      m.bindTooltip(tipText, { direction: 'top', className: 'lb-map-tip' });
+      m.on('click', function() { lbSelectAirport(icao); });
+      lbMapEuLayers.push(m);
     } catch(e) {}
   });
 }
+
 
 function initLbMap() {
   initLbMapEu();
@@ -3093,36 +3111,56 @@ function initLbMap() {
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
   drawLbMap();
+  lbMap.on('click', function(e) {
+    // Only clear if not clicking a marker
+    if (lbSelectedAirport) clearLbSelection();
+  });
   setTimeout(function() { if (lbMap) lbMap.invalidateSize(); }, 200);
 }
 
 function drawLbMap() {
   if (!lbMap) return;
-  // Clear old layers
   lbMapLayers.forEach(function(l) { try { lbMap.removeLayer(l); } catch(e) {} });
   lbMapLayers = [];
 
-  // Find last flown arrival (for plane icon)
+  var sel = lbSelectedAirport;
   var flown = logbookFlights.filter(function(f) { return !f.planned && f.arr_lat; });
   var lastFlown = flown.length > 0 ? flown[flown.length - 1] : null;
+
+  // Collect unique airports for click markers
+  var airportMap = {};
 
   logbookFlights.forEach(function(f) {
     if (!f.dep_lat || !f.arr_lat) return;
     var dc = [f.dep_lat, f.dep_lon];
     var ac = [f.arr_lat, f.arr_lon];
-    var color = f.planned ? '#4a9eda' : '#8b949e';
-    var weight = 1.2;
+    var matchesSel = sel && (f.dep_icao === sel || f.arr_icao === sel);
+    var baseColor = f.planned ? '#4a9eda' : '#8b949e';
+    var color = matchesSel ? '#f85149' : baseColor;
+    var weight = matchesSel ? 2.5 : 1.2;
+    var opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.5);
     try {
-      var line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(lbMap);
+      var line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: opacity, steps: 8 }).addTo(lbMap);
       lbMapLayers.push(line);
-      var r = 3;
-      var depTipW = '<b>' + (f.dep_icao||'') + (f.dep_iata ? ' / '+f.dep_iata : '') + '</b><br>' + (f.dep||'') + (f.airline ? '<br><span style="color:#aaa">'+f.airline+(f.aircraft?' · '+f.aircraft:'')+'</span>' : '');
-      var arrTipW = '<b>' + (f.arr_icao||'') + (f.arr_iata ? ' / '+f.arr_iata : '') + '</b><br>' + (f.arr||'') + (f.airline ? '<br><span style="color:#aaa">'+f.airline+(f.aircraft?' · '+f.aircraft:'')+'</span>' : '');
-      var dm = L.circleMarker(dc, { radius: r, color: color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(lbMap);
-      dm.bindTooltip(depTipW, { direction: 'top', className: 'lb-map-tip' });
-      var am = L.circleMarker(ac, { radius: r, color: color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(lbMap);
-      am.bindTooltip(arrTipW, { direction: 'top', className: 'lb-map-tip' });
-      lbMapLayers.push(dm, am);
+    } catch(e) {}
+
+    // Collect airports
+    if (f.dep_icao && !airportMap[f.dep_icao]) airportMap[f.dep_icao] = { icao: f.dep_icao, iata: f.dep_iata, city: f.dep, lat: f.dep_lat, lon: f.dep_lon };
+    if (f.arr_icao && !airportMap[f.arr_icao]) airportMap[f.arr_icao] = { icao: f.arr_icao, iata: f.arr_iata, city: f.arr, lat: f.arr_lat, lon: f.arr_lon };
+  });
+
+  // Draw airport markers (clickable)
+  Object.keys(airportMap).forEach(function(icao) {
+    var ap = airportMap[icao];
+    var isSel = sel === icao;
+    var r = isSel ? 6 : 3;
+    var col = isSel ? '#f85149' : '#8b949e';
+    var tipText = '<b>' + ap.icao + (ap.iata ? ' / '+ap.iata : '') + '</b><br>' + (ap.city||'');
+    try {
+      var m = L.circleMarker([ap.lat, ap.lon], { radius: r, color: col, fillColor: col, fillOpacity: 0.9, weight: isSel ? 2 : 0 }).addTo(lbMap);
+      m.bindTooltip(tipText, { direction: 'top', className: 'lb-map-tip' });
+      m.on('click', function() { lbSelectAirport(icao); });
+      lbMapLayers.push(m);
     } catch(e) {}
   });
 
@@ -3132,8 +3170,7 @@ function drawLbMap() {
       var planeIcon = L.divIcon({
         className: '',
         html: '<div style="font-size:30px;transform:rotate(45deg);filter:drop-shadow(0 0 4px rgba(0,0,0,.9));">✈</div>',
-        iconSize: [22, 22],
-        iconAnchor: [11, 11]
+        iconSize: [22, 22], iconAnchor: [11, 11]
       });
       var planeMarker = L.marker([lastFlown.arr_lat, lastFlown.arr_lon], { icon: planeIcon }).addTo(lbMap);
       planeMarker.bindTooltip('<b>' + (lastFlown.arr_icao||'') + '</b> ' + (lastFlown.arr||''), { direction: 'top' });
