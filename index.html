@@ -2267,9 +2267,9 @@ function legSchedUpdateRow(idx) {
     leg.schedArrTime = ''; leg.schedArrDay = ''; leg.schedDepUTC = ''; leg.schedArrUTC = '';
   }
   const arrEl = document.getElementById('ls-arr-' + idx);
-  if (arrEl) arrEl.textContent = leg.schedArrTime || '';
+  if (arrEl) arrEl.value = leg.schedArrTime || '00:00';
   const arrDayEl = document.getElementById('ls-arrday-' + idx);
-  if (arrDayEl) arrDayEl.textContent = leg.schedArrDay || '';
+  if (arrDayEl) arrDayEl.value = leg.schedArrDay || '#';
   const arrUtcEl = document.getElementById('ls-arrutc-' + idx);
   if (arrUtcEl) arrUtcEl.textContent = leg.schedArrUTC || '';
   const depUtcEl = document.getElementById('ls-deputc-' + idx);
@@ -2355,7 +2355,7 @@ function renderLegs() {
       + inp('ls-day-'+i,'D','28px',i*10+4,leg.schedDepDay||1,'text-align:center;')
       + inp('ls-dep-'+i,'00:00','72px',i*10+5,leg.schedDepTime||'','text-align:center;')
       + '</div>'
-      + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:rgba(255,255,255,.4);text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
+      + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
 
     // ── Arrow + Block (no extra hyphen) ──
     const btCell = document.createElement('div');
@@ -2395,7 +2395,7 @@ function renderLegs() {
       + '<input id="ls-arrday-'+i+'" tabindex="'+(i*10+7)+'" style="'+arrDayStyle+'" value="' + (leg.schedArrDay || '#') + '" readonly>'
       + '<input id="ls-arr-'+i+'" tabindex="'+(i*10+8)+'" style="'+arrTimeStyle+'" value="' + (leg.schedArrTime || '00:00') + '" readonly>'
       + '</div>'
-      + '<div id="ls-arrutc-'+i+'" style="font-size:9px;color:rgba(255,255,255,.4);text-align:center;width:100%;">' + (leg.schedArrUTC||'') + '</div>';
+      + '<div id="ls-arrutc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedArrUTC||'') + '</div>';
 
     // ── TA + Gate ──
     const taGateCell = document.createElement('div');
