@@ -2387,14 +2387,12 @@ function renderLegs() {
       buildSuggestBox(inp2, ap => { legs[i].arr = ap; if (i < legs.length-1) legs[i+1].dep = ap; updateRosterLines(); renderLegs(); fetchBlockTime(i); });
     }
 
-    // ── ArrTime + Day + UTC ──
+    // ── ArrTime + Day + UTC ── (same layout as dep, but readonly + blue)
     const arrTimeCell = document.createElement('div');
     arrTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
-    const arrDayStyle = 'width:24px;min-width:24px;border:none;border-radius:0;background:transparent;color:#4a9eda;font-size:11px;font-family:monospace;text-align:center;padding:1px 0;line-height:1.2;outline:none;';
-    const arrTimeStyle = 'flex:1;border:none;border-radius:0;background:transparent;color:#4a9eda;font-size:11px;font-family:monospace;font-weight:400;text-align:center;padding:1px 0;line-height:1.2;outline:none;';
     arrTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
-      + '<input id="ls-arrday-'+i+'" tabindex="'+(i*10+7)+'" style="'+arrDayStyle+'" value="' + (leg.schedArrDay || '#') + '" readonly>'
-      + '<input id="ls-arr-'+i+'" tabindex="'+(i*10+8)+'" style="'+arrTimeStyle+'" value="' + (leg.schedArrTime || '00:00') + '" readonly>'
+      + inp('ls-arrday-'+i,'#','28px',i*10+7,leg.schedArrDay||'#','text-align:center;color:#4a9eda;')
+      + inp('ls-arr-'+i,'00:00','72px',i*10+8,leg.schedArrTime||'00:00','text-align:center;color:#4a9eda;')
       + '</div>'
       + '<div id="ls-arrutc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedArrUTC||'') + '</div>';
 
@@ -2491,7 +2489,7 @@ function renderLegs() {
   legs.forEach((leg, i) => {
     leg._fetchingBT = false;  // reset so fetch can run after re-render
     legSchedUpdateRow(i);
-    if (leg.dep && leg.arr && !leg.blockTimeReal) setTimeout(() => fetchBlockTime(i), i * 2000 + 300);
+    if (leg.dep && leg.arr && !leg.blockTime) setTimeout(() => fetchBlockTime(i), i * 2000 + 300);
   });
 
   updateRosterLines();
@@ -3118,12 +3116,11 @@ function lbSelectAirport(icao) {
   window._lbMarkerJustClicked = true;
   if (lbSelectedAirport === icao) { clearLbSelection(); return; }
   lbSelectedAirport = icao;
-  // Filter logbook table
-  logbookFilterText = icao;
+  // Simply put ICAO into the filter input and trigger the existing filter
   var filterInput = document.getElementById('lb-filter-input');
-  if (filterInput) filterInput.value = icao;
+  if (filterInput) { filterInput.value = icao; }
+  applyLogbookFilter();
   drawLbMap();
-  renderLogbook();
 }
 
 
