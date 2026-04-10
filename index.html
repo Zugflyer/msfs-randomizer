@@ -298,14 +298,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
 /* ── END BOTTOM NAV CSS ── */
 
-/* ── DST TOGGLE ── */
-.dst-toggle-wrap{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);}
-.dst-switch{position:relative;width:36px;height:20px;cursor:pointer;}
-.dst-switch input{opacity:0;width:0;height:0;}
-.dst-slider{position:absolute;inset:0;border-radius:10px;background:#f85149;transition:.3s;}
-.dst-slider::before{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.3s;}
-.dst-switch input:checked+.dst-slider{background:#3fb950;}
-.dst-switch input:checked+.dst-slider::before{transform:translateX(16px);}
+/* ── Schedule Date Picker ── */
+.schedule-date-wrap{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);}
 
 /* ── LOGBOOK ── */
 .logbook-page{display:flex;flex-direction:column;flex:1;overflow:hidden;}
@@ -632,13 +626,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div class="sec-label-sm">Flight Planner</div>
         <div class="roster-content">
           <div class="roster-legs-col" style="max-width:100%;position:relative;">
-            <div class="dst-toggle-wrap" style="position:absolute;top:8px;right:10px;z-index:10;">
-              <span>DST</span>
-              <label class="dst-switch" title="Toggle Daylight Saving Time for all calculations">
-                <input type="checkbox" id="dst-toggle" onchange="toggleDST(this.checked)">
-                <span class="dst-slider"></span>
-              </label>
-              <span id="dst-label" style="font-size:10px;color:#f85149;font-weight:600;">OFF</span>
+            <div style="position:absolute;top:6px;right:10px;z-index:10;display:flex;align-items:center;gap:6px;">
+              <span style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">Schedule Date</span>
+              <input type="date" id="schedule-date-picker" onchange="onScheduleDateChange(this.value)"
+                style="font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);cursor:pointer;">
+              <span id="schedule-date-label" style="font-size:10px;color:var(--blue);font-weight:600;min-width:90px;"></span>
             </div>
             <div class="legs-frame" id="legs-container"></div>
           </div>
@@ -836,7 +828,7 @@ DB_SCHED.forEach(r => {
 });
 // DB_IATA = airports with IATA codes (used for "Random IATA" category)
 // Falls back to DB_SCHED filtered if new airports.js not yet uploaded
-// [0]=ICAO [1]=IATA [2]=name [3]=lat [4]=lon [5]=continent [6]=country [7]=city [8]=utc_offset [9]=dst_offset
+// [0]=ICAO [1]=IATA [2]=name [3]=lat [4]=lon [5]=continent [6]=country [7]=city [8]=utc_offset [9]=dst_offset [10]=dst_region (EU|NA|AU|NZ|null)
 const DB_IATA_POOL = (typeof DB_IATA !== 'undefined') ? DB_IATA : DB_SCHED.filter(r => r[1]);
 
 function lookupAirport(code) {
@@ -2312,8 +2304,10 @@ function legSchedUpdateRow(idx) {
     leg.schedArrTime = fmtTime(Math.floor(arrMod/60), arrMod%60);
     leg.schedArrDay  = ((leg.schedDepDay - 1 + dayDelta) % 7 + 7) % 7 + 1;
     const depUTC = getUtcOffset(leg.dep), arrUTC = getUtcOffset(leg.arr);
-    leg.schedDepUTC = 'UTC' + (depUTC >= 0 ? '+' : '') + depUTC;
-    leg.schedArrUTC = 'UTC' + (arrUTC >= 0 ? '+' : '') + arrUTC;
+    const depDST = leg.dep && leg.dep[10] && isDSTActive(leg.dep[10], scheduleDate);
+    const arrDST = leg.arr && leg.arr[10] && isDSTActive(leg.arr[10], scheduleDate);
+    leg.schedDepUTC = 'UTC' + (depUTC >= 0 ? '+' : '') + depUTC + (depDST ? ' ☀' : '');
+    leg.schedArrUTC = 'UTC' + (arrUTC >= 0 ? '+' : '') + arrUTC + (arrDST ? ' ☀' : '');
   } else {
     leg.schedArrTime = ''; leg.schedArrDay = ''; leg.schedDepUTC = ''; leg.schedArrUTC = '';
   }
@@ -3424,6 +3418,8 @@ const AP_ED_FIELDS = [
   { key:'lat',     label:'Latitude',      idx:3 },
   { key:'lon',     label:'Longitude',     idx:4 },
   { key:'utc',     label:'UTC Offset',    idx:8 },
+  { key:'dst',     label:'DST Offset',    idx:9 },
+  { key:'dst_region', label:'DST Region (EU/NA/AU/NZ)', idx:10 },
 ];
 
 // Apply a single override record onto the live DB array
@@ -3433,7 +3429,7 @@ function applyOneOverride(originalIcao, rec) {
   if (!existing) return;
   AP_ED_FIELDS.forEach(function(f) {
     if (rec[f.key] !== undefined && rec[f.key] !== null && rec[f.key] !== '') {
-      existing[f.idx] = (f.idx===3||f.idx===4||f.idx===8) ? parseFloat(rec[f.key]) : rec[f.key];
+      existing[f.idx] = (f.idx===3||f.idx===4||f.idx===8||f.idx===9) ? parseFloat(rec[f.key]) : rec[f.key];
     }
   });
   // If ICAO changed, re-index under new key
@@ -3726,51 +3722,117 @@ function drawCalcLegsOnMap() {
   }
 }
 
-// ── DST Toggle ──
-var dstEnabled = false;
+// ── Regional DST Engine ──
+// DST regions: EU (last Sun Mar → last Sun Oct), NA (2nd Sun Mar → 1st Sun Nov),
+//              AU (1st Sun Oct → 1st Sun Apr), NZ (last Sun Sep → 1st Sun Apr)
+
+var scheduleDate = ''; // YYYY-MM-DD string, set by date picker
 
 function initDST() {
-  // Check if Paris (CET) is currently in DST
-  // CET summer time: last Sunday of March to last Sunday of October
+  // Default to today's date
   var now = new Date();
-  var month = now.getUTCMonth(); // 0-11
-  // Simple check: April-September is definitely DST, March/October need day check
-  if (month >= 3 && month <= 8) {
-    dstEnabled = true;
-  } else if (month === 2) { // March
-    var lastSun = 31 - new Date(now.getUTCFullYear(), 2, 31).getUTCDay();
-    dstEnabled = now.getUTCDate() >= lastSun;
-  } else if (month === 9) { // October
-    var lastSun = 31 - new Date(now.getUTCFullYear(), 9, 31).getUTCDay();
-    dstEnabled = now.getUTCDate() < lastSun;
-  } else {
-    dstEnabled = false;
-  }
-  var tog = document.getElementById('dst-toggle');
-  if (tog) tog.checked = dstEnabled;
-  updateDSTLabel();
+  var yyyy = now.getFullYear();
+  var mm = String(now.getMonth()+1).padStart(2,'0');
+  var dd = String(now.getDate()).padStart(2,'0');
+  scheduleDate = yyyy + '-' + mm + '-' + dd;
+  var picker = document.getElementById('schedule-date-picker');
+  if (picker) picker.value = scheduleDate;
+  updateDateLabel();
 }
 
-function toggleDST(on) {
-  dstEnabled = on;
-  updateDSTLabel();
-  // Recalculate all legs
+function onScheduleDateChange(val) {
+  if (!val) return;
+  scheduleDate = val;
+  updateDateLabel();
+  // Recalculate all roster legs
   if (typeof legs !== 'undefined') {
     legs.forEach(function(leg, i) { legSchedUpdateRow(i); });
   }
-}
-
-function updateDSTLabel() {
-  var lbl = document.getElementById('dst-label');
-  if (lbl) {
-    lbl.textContent = dstEnabled ? 'ON' : 'OFF';
-    lbl.style.color = dstEnabled ? '#3fb950' : '#f85149';
+  // Recalculate calc rows if visible
+  if (typeof calcRows !== 'undefined') {
+    calcRows.forEach(function(row, i) { calcUpdateRow(i); });
   }
 }
 
-function getUtcOffset(ap) {
+function updateDateLabel() {
+  var lbl = document.getElementById('schedule-date-label');
+  if (!lbl) return;
+  if (!scheduleDate) { lbl.textContent = ''; return; }
+  var d = new Date(scheduleDate + 'T12:00:00Z');
+  var days = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  lbl.textContent = days[d.getUTCDay()] + ' ' + d.getUTCDate() + ' ' + months[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+}
+
+// Helpers for DST boundary calculations
+function nthSundayOfMonth(year, month, n) {
+  // month: 1-12, n: 1=first, 2=second, etc.
+  var d = new Date(Date.UTC(year, month-1, 1));
+  var dayOfWeek = d.getUTCDay(); // 0=Sun
+  var firstSun = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+  return firstSun + (n-1)*7;
+}
+
+function lastSundayOfMonth(year, month) {
+  // month: 1-12
+  var daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  var d = new Date(Date.UTC(year, month-1, daysInMonth));
+  var dayOfWeek = d.getUTCDay();
+  return daysInMonth - dayOfWeek;
+}
+
+function isDSTActive(region, dateStr) {
+  if (!region || !dateStr) return false;
+  var parts = dateStr.split('-');
+  var year = parseInt(parts[0]);
+  var month = parseInt(parts[1]);
+  var day = parseInt(parts[2]);
+  // dayOfYear for comparison (month*100 + day as simple comparable)
+  var md = month * 100 + day;
+
+  if (region === 'EU') {
+    // Last Sunday March (01:00 UTC) → Last Sunday October (01:00 UTC)
+    var startDay = lastSundayOfMonth(year, 3);
+    var endDay   = lastSundayOfMonth(year, 10);
+    var startMD  = 3 * 100 + startDay;
+    var endMD    = 10 * 100 + endDay;
+    return md >= startMD && md < endMD;
+  }
+  if (region === 'NA') {
+    // 2nd Sunday March → 1st Sunday November
+    var startDay = nthSundayOfMonth(year, 3, 2);
+    var endDay   = nthSundayOfMonth(year, 11, 1);
+    var startMD  = 3 * 100 + startDay;
+    var endMD    = 11 * 100 + endDay;
+    return md >= startMD && md < endMD;
+  }
+  if (region === 'AU') {
+    // 1st Sunday October → 1st Sunday April (southern hemisphere: DST in summer = Oct-Apr)
+    var startDay = nthSundayOfMonth(year, 10, 1);
+    var endDay   = nthSundayOfMonth(year, 4, 1);
+    var startMD  = 10 * 100 + startDay;
+    var endMD    = 4 * 100 + endDay;
+    // DST is active Oct→Mar (wraps around year boundary)
+    return md >= startMD || md < endMD;
+  }
+  if (region === 'NZ') {
+    // Last Sunday September → 1st Sunday April
+    var startDay = lastSundayOfMonth(year, 9);
+    var endDay   = nthSundayOfMonth(year, 4, 1);
+    var startMD  = 9 * 100 + startDay;
+    var endMD    = 4 * 100 + endDay;
+    return md >= startMD || md < endMD;
+  }
+  return false;
+}
+
+function getUtcOffset(ap, dateOverride) {
   if (!ap || ap[8] === undefined) return 0;
-  if (dstEnabled && ap[9] !== null && ap[9] !== undefined) return ap[9];
+  var dateStr = dateOverride || scheduleDate;
+  var region = (ap.length > 10) ? ap[10] : null;
+  if (region && ap[9] !== null && ap[9] !== undefined && isDSTActive(region, dateStr)) {
+    return ap[9];
+  }
   return ap[8];
 }
 
