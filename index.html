@@ -298,6 +298,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
 /* ── END BOTTOM NAV CSS ── */
 
+/* ── DST TOGGLE ── */
+.dst-toggle-wrap{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);}
+.dst-switch{position:relative;width:36px;height:20px;cursor:pointer;}
+.dst-switch input{opacity:0;width:0;height:0;}
+.dst-slider{position:absolute;inset:0;border-radius:10px;background:#f85149;transition:.3s;}
+.dst-slider::before{content:'';position:absolute;left:2px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:.3s;}
+.dst-switch input:checked+.dst-slider{background:#3fb950;}
+.dst-switch input:checked+.dst-slider::before{transform:translateX(16px);}
+
 /* ── LOGBOOK ── */
 .logbook-page{display:flex;flex-direction:column;flex:1;overflow:hidden;}
 .logbook-toolbar{flex:0 0 auto;padding:10px 16px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
@@ -620,7 +629,17 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <!-- ═══ ROSTER ═══ -->
     <div id="view-roster" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
       <div class="roster-top">
-        <div class="sec-label-sm">Flight Planner</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="sec-label-sm">Flight Planner</div>
+          <div class="dst-toggle-wrap">
+            <span>DST</span>
+            <label class="dst-switch" title="Toggle Daylight Saving Time for all calculations">
+              <input type="checkbox" id="dst-toggle" onchange="toggleDST(this.checked)">
+              <span class="dst-slider"></span>
+            </label>
+            <span id="dst-label" style="font-size:10px;color:#f85149;font-weight:600;">OFF</span>
+          </div>
+        </div>
         <div class="roster-content">
           <div class="roster-legs-col" style="max-width:100%;">
             <div class="legs-frame" id="legs-container"></div>
@@ -3311,6 +3330,7 @@ window.addEventListener('load', async () => {
   if (getApiKey()) { var b=document.getElementById('apikey-btn'); if(b) b.style.color='#3fb950'; }
   // Start on logbook
   switchView('logbook');
+  initDST();
   initLbMap();
   // Pre-fill departure from last logbook arrival
   prefillDepartFromLogbook();
@@ -3708,8 +3728,51 @@ function drawCalcLegsOnMap() {
   }
 }
 
+// ── DST Toggle ──
+var dstEnabled = false;
+
+function initDST() {
+  // Check if Paris (CET) is currently in DST
+  // CET summer time: last Sunday of March to last Sunday of October
+  var now = new Date();
+  var month = now.getUTCMonth(); // 0-11
+  // Simple check: April-September is definitely DST, March/October need day check
+  if (month >= 3 && month <= 8) {
+    dstEnabled = true;
+  } else if (month === 2) { // March
+    var lastSun = 31 - new Date(now.getUTCFullYear(), 2, 31).getUTCDay();
+    dstEnabled = now.getUTCDate() >= lastSun;
+  } else if (month === 9) { // October
+    var lastSun = 31 - new Date(now.getUTCFullYear(), 9, 31).getUTCDay();
+    dstEnabled = now.getUTCDate() < lastSun;
+  } else {
+    dstEnabled = false;
+  }
+  var tog = document.getElementById('dst-toggle');
+  if (tog) tog.checked = dstEnabled;
+  updateDSTLabel();
+}
+
+function toggleDST(on) {
+  dstEnabled = on;
+  updateDSTLabel();
+  // Recalculate all legs
+  if (typeof legs !== 'undefined') {
+    legs.forEach(function(leg, i) { legSchedUpdateRow(i); });
+  }
+}
+
+function updateDSTLabel() {
+  var lbl = document.getElementById('dst-label');
+  if (lbl) {
+    lbl.textContent = dstEnabled ? 'ON' : 'OFF';
+    lbl.style.color = dstEnabled ? '#3fb950' : '#f85149';
+  }
+}
+
 function getUtcOffset(ap) {
   if (!ap || ap[8] === undefined) return 0;
+  if (dstEnabled && ap[9] !== null && ap[9] !== undefined) return ap[9];
   return ap[8];
 }
 
