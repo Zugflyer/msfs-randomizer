@@ -432,10 +432,50 @@ function buildLegend() {
   el.innerHTML = html;
 }
 
+// ═══ Load from URL hash (cat= parameter from randomizer) ═══
+function loadFromHash() {
+  const hash = window.location.hash;
+  if (!hash || !hash.startsWith('#cat=')) return false;
+  try {
+    const json = decodeURIComponent(hash.slice(5));
+    const payload = JSON.parse(json);
+    if (!payload || !payload.items || !payload.items.length) return false;
+
+    // Set title
+    const title = payload.title || 'Category';
+    document.getElementById('status-text').textContent = title;
+    document.getElementById('file-info').style.display = 'block';
+    document.getElementById('file-name').innerHTML = '📋 ' + title;
+
+    // Convert to internal format: fake XLSX rows with columns [ICAO, Name, Country]
+    loadedHeaders = ['ICAO', 'Name', 'Country'];
+    loadedData = payload.items.map(item => [item.icao || '', item.name || '', item.country || '']);
+    icaoColIdx = 0;
+    catColIdx = -1;
+    nameColIdx = 1;
+    commentColIdx = -1;
+
+    // Hide settings (no column mapping needed)
+    document.getElementById('settings-area').style.display = 'none';
+    // Hide dropzone, show a "load different file" hint
+    document.querySelector('.dropzone').innerHTML = '<div style="font-size:12px;color:var(--txt2);padding:8px;">Showing <b style="color:var(--green);">' + title + '</b> from MSFS Randomizer.<br><br><span style="color:var(--txt3);font-size:11px;">Drop an XLSX to load different data.</span></div>';
+
+    applyColumns();
+    return true;
+  } catch(e) {
+    console.warn('Failed to parse hash data:', e);
+    return false;
+  }
+}
+
 // ═══ Init ═══
 window.addEventListener('load', () => {
   initMap();
+  // Check if opened with category data from randomizer
+  loadFromHash();
 });
+// Also handle hash changes (e.g. if user navigates)
+window.addEventListener('hashchange', () => { loadFromHash(); });
 </script>
 </body>
 </html>

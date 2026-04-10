@@ -340,10 +340,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       Next Destination
     </button>
-    <button class="topnav-tab topnav-primary" id="t-tovisit" onclick="switchView('tovisit')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-      To Visit
-    </button>
     <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
@@ -477,6 +473,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <span class="filter-label">Filter:</span>
         <input class="filter-input" id="cat-filter-input" placeholder="ICAO, city, country..." oninput="applyFilter()">
         <div style="flex:1;min-width:16px;"></div>
+        <button class="btn-toolbar-purple" onclick="showCatOnMap()" title="Show airports from this category on a map">🗺 Show on Map</button>
         <button class="btn-toolbar-purple" onclick="showAddCatItem()">⊕ Add airport</button>
         <button class="btn-toolbar-red" onclick="clearAllItems()">⊗ Clear all</button>
         <button class="btn-toolbar" onclick="document.getElementById('cat-xlsx-input').click()">⬆ Import XLSX</button>
@@ -1780,6 +1777,19 @@ function deleteCatItemByRef(catId, ref) {
   renderCatTable();
 }
 
+function showCatOnMap() {
+  const cat = CATEGORIES.find(c => c.id===activeCatId);
+  if (!cat || !cat.items || !cat.items.length) { alert('No airports in this category.'); return; }
+  // Build data: collect ICAO codes and names
+  const items = cat.items.map(item => {
+    return { icao: item.icao || '', name: item.name || '', country: item.country || '' };
+  }).filter(item => item.icao);
+  // Encode as JSON in URL hash
+  const payload = { title: cat.name, items: items };
+  const encoded = encodeURIComponent(JSON.stringify(payload));
+  window.open('mapview.html#cat=' + encoded, '_blank');
+}
+
 function showAddCatItem() {
   const row = document.getElementById('cat-add-row');
   if (!row) return;
@@ -2047,7 +2057,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','tovisit'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2058,7 +2068,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'tovisit');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
