@@ -2446,17 +2446,32 @@ function renderLegs() {
 
     // Insert / Add button between rows
     const insertDiv = document.createElement('div');
-    insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 0;';
-    const insertBtn = document.createElement('button');
+    insertDiv.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 0;gap:10px;';
     const isLastLeg = (i === legs.length - 1);
-    const btnLabel = isLastLeg ? '⊕ Add Leg' : '⊕ Insert Leg';
-    const btnColor = isLastLeg ? 'rgba(88,166,255,.7)' : '#ccc';
-    insertBtn.style.cssText = `font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:${btnColor};cursor:pointer;`;
-    insertBtn.textContent = btnLabel;
-    insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.12)';
-    insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.05)';
-    insertBtn.onclick = () => isLastLeg ? addLegAtEnd() : insertLegAfter(i);
-    insertDiv.appendChild(insertBtn);
+    if (isLastLeg) {
+      const insertBtn = document.createElement('button');
+      insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#ccc;cursor:pointer;';
+      insertBtn.textContent = '⊕ Insert Leg';
+      insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.12)';
+      insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.05)';
+      insertBtn.onclick = () => insertLegAfter(i);
+      insertDiv.appendChild(insertBtn);
+      const addBtn = document.createElement('button');
+      addBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:rgba(88,166,255,.7);cursor:pointer;';
+      addBtn.textContent = '⊕ Add Leg';
+      addBtn.onmouseenter = () => addBtn.style.background = 'rgba(255,255,255,.12)';
+      addBtn.onmouseleave = () => addBtn.style.background = 'rgba(255,255,255,.05)';
+      addBtn.onclick = () => addLegAtEnd();
+      insertDiv.appendChild(addBtn);
+    } else {
+      const insertBtn = document.createElement('button');
+      insertBtn.style.cssText = 'font-size:12px;font-weight:600;padding:3px 18px;border-radius:var(--r);border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.05);color:#ccc;cursor:pointer;';
+      insertBtn.textContent = '⊕ Insert Leg';
+      insertBtn.onmouseenter = () => insertBtn.style.background = 'rgba(255,255,255,.12)';
+      insertBtn.onmouseleave = () => insertBtn.style.background = 'rgba(255,255,255,.05)';
+      insertBtn.onclick = () => insertLegAfter(i);
+      insertDiv.appendChild(insertBtn);
+    }
     container.appendChild(insertDiv);
 
     // Wire inputs
