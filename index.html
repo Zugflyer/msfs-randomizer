@@ -647,9 +647,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input class="filter-input" id="lb-filter-input" placeholder="ICAO, city, airline..." oninput="applyLogbookFilter()" style="max-width:180px;">
         <span id="lb-filter-count" style="font-size:11px;color:var(--txt2);"></span>
         <div style="flex:1;min-width:16px;"></div>
-        <button class="btn-toolbar-purple" onclick="showAddLogbookRow()">⊕ Add leg</button>
-        <button class="btn-toolbar-red" onclick="clearLogbook()">⊗ Clear all</button>
-        <button class="btn-toolbar" onclick="document.getElementById('lb-xlsx-input').click()">⬆ Import XLSX</button>
+        <button class="btn-toolbar-purple" onclick="showAddLogbookRow()">⊕ Add leg to logbook</button>
+        <button class="btn-toolbar-red" onclick="clearLogbook()">⊗ Clear logbook</button>
+        <button class="btn-toolbar" onclick="document.getElementById('lb-xlsx-input').click()">⬆ Import new logbook XLSX</button>
         <input type="file" id="lb-xlsx-input" accept=".xlsx" style="display:none;" onchange="importLogbookXlsx(this)">
         <span id="lb-status" style="font-size:11px;color:var(--txt3);"></span>
         <span id="lb-count" style="font-size:11px;color:var(--txt2);font-weight:600;"></span>
@@ -1206,7 +1206,7 @@ function destInput(val) {
 function destKeydown(e) {
   const suggestEl = document.getElementById('dest-suggestions');
   if (e.key === 'Escape') { suggestEl.style.display='none'; return; }
-  if (e.key === 'Tab' && suggestEl.style.display !== 'none') {
+  if ((e.key === 'Tab' || e.key === 'Enter') && suggestEl.style.display !== 'none') {
     const first = suggestEl.querySelector('[onmousedown]');
     if (first) {
       e.preventDefault();
