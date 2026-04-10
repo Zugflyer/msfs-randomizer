@@ -385,6 +385,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           </div>
           <div style="color:var(--txt3);font-size:18px;padding:0 2px;align-self:center;margin-top:10px;">→</div>
           <div class="depart-wrap">
+            <button class="nf-btn" onclick="planLegs()" id="plan-legs-btn" style="margin-bottom:4px;opacity:.4;pointer-events:none;">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+              Plan Legs
+            </button>
             <div class="depart-label">Destination</div>
             <div style="position:relative;">
               <input class="depart-input" id="dest-input" placeholder="ICAO / IATA / city"
@@ -1222,7 +1226,32 @@ function selectDest(code) {
   document.getElementById('dest-suggestions').style.display = 'none';
   showDashBox('dest', ap);
   updateDashFC();
-  legs = [{ dep: departAirport || null, arr: ap, airline: '', aircraft: '' }];
+  enablePlanLegsBtn();
+}
+
+function enablePlanLegsBtn() {
+  const btn = document.getElementById('plan-legs-btn');
+  if (btn && destAirport) {
+    btn.style.opacity = '1';
+    btn.style.pointerEvents = 'auto';
+  }
+}
+
+function planLegs() {
+  if (!destAirport) return;
+  // Recover departAirport if needed
+  if (!departAirport) {
+    const depBox = document.getElementById('depart-box');
+    if (depBox && depBox.style.display !== 'none' && depBox.dataset.icao) {
+      departAirport = schedByCode[depBox.dataset.icao] || null;
+    }
+    if (!departAirport) {
+      const depVal = document.getElementById('depart-input')?.value || '';
+      const code = depVal.trim().toUpperCase().split(/[\s\/—]+/)[0];
+      if (code.length >= 3) departAirport = schedByCode[code] || schedByIata[code] || null;
+    }
+  }
+  legs = [{ dep: departAirport || null, arr: destAirport, airline: '', aircraft: '' }];
   renderLegs();
   updateFlightConnectionsBtn();
   switchToMain('roster');
@@ -1232,6 +1261,8 @@ function clearDashFields() {
   dashClearField('depart');
   dashClearField('dest');
   updateDashFC();
+  const btn = document.getElementById('plan-legs-btn');
+  if (btn) { btn.style.opacity = '.4'; btn.style.pointerEvents = 'none'; }
 }
 
 function updateDashFC() {
@@ -2764,28 +2795,17 @@ function openInRoster(catId) {
   const r = res.result;
   if (r.text) return;
 
-  // Recover departAirport from depart-box or input field if not already set
-  if (!departAirport) {
-    const depBox = document.getElementById('depart-box');
-    if (depBox && depBox.style.display !== 'none' && depBox.dataset.icao) {
-      departAirport = schedByCode[depBox.dataset.icao] || null;
-    }
-    if (!departAirport) {
-      const depVal = document.getElementById('depart-input')?.value || '';
-      const code = depVal.trim().toUpperCase().split(/[\s\/—]+/)[0];
-      if (code.length >= 3) departAirport = schedByCode[code] || schedByIata[code] || null;
-    }
-  }
-
+  // Resolve the clicked airport
   let arrAp = null;
   if (r.icao) arrAp = schedByCode[r.icao] || DB_SCHED.find(ap => ap[0] === r.icao) || null;
   if (!arrAp && r.lat !== null && r.lon !== null) arrAp = nearestScheduled(r.lat, r.lon, null);
+  if (!arrAp) return;
 
-  const finalArr = destAirport || arrAp || null;
-  legs = [{ dep: departAirport || null, arr: finalArr, airline: '', aircraft: '' }];
-  renderLegs();
-  updateFlightConnectionsBtn();
-  switchToMain('roster');
+  // Set as destination (don't open legs tab)
+  destAirport = arrAp;
+  showDashBox('dest', arrAp);
+  updateDashFC();
+  enablePlanLegsBtn();
 }
 
 // ── Roster map ──
