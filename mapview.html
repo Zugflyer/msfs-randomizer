@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MSFS Airport Map Viewer</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=DM+Sans:wght@400;500;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0d1117;--surf:#161b22;--surf2:#21262d;--surf3:#30363d;
+  --bdr:#30363d;--bdr2:#484f58;
+  --txt:#e6edf3;--txt2:#8b949e;--txt3:#484f58;
+  --acc:#7d5ee8;--acc2:#a78bfa;
+  --green:#3fb950;--blue:#58a6ff;--orange:#d29922;--red:#f85149;
+  --r:6px;--ff:'DM Sans','Segoe UI',sans-serif;--mono:'JetBrains Mono',monospace;
+}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--ff);font-size:14px;}
+.app{display:flex;flex-direction:column;height:100vh;}
+
+/* HEADER */
+.header{display:flex;align-items:center;gap:14px;padding:0 16px;height:52px;border-bottom:1px solid var(--bdr);flex-shrink:0;background:var(--surf);}
+.header h1{font-size:15px;font-weight:700;letter-spacing:-.01em;}
+.header h1 span{color:var(--acc2);font-weight:800;}
+.header-sep{width:1px;height:24px;background:var(--bdr2);}
+.back-link{font-size:12px;color:var(--blue);text-decoration:none;display:flex;align-items:center;gap:4px;}
+.back-link:hover{text-decoration:underline;}
+
+/* MAIN LAYOUT */
+.main{display:flex;flex:1;overflow:hidden;}
+
+/* SIDEBAR */
+.sidebar{width:360px;min-width:280px;max-width:440px;display:flex;flex-direction:column;border-right:1px solid var(--bdr);background:var(--surf);overflow:hidden;}
+.sidebar-top{padding:14px;border-bottom:1px solid var(--bdr);flex-shrink:0;}
+
+/* DROP ZONE */
+.dropzone{border:2px dashed var(--bdr2);border-radius:10px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .2s;position:relative;}
+.dropzone:hover,.dropzone.dragover{border-color:var(--acc);background:rgba(125,94,232,.06);}
+.dropzone-icon{font-size:32px;margin-bottom:6px;}
+.dropzone-title{font-size:13px;font-weight:600;color:var(--txt);margin-bottom:4px;}
+.dropzone-sub{font-size:11px;color:var(--txt3);}
+.dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+/* FILE INFO + SETTINGS */
+.file-info{padding:10px 14px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:none;}
+.file-name{font-size:12px;font-weight:600;color:var(--green);margin-bottom:4px;display:flex;align-items:center;gap:6px;}
+.file-stats{font-size:11px;color:var(--txt2);}
+
+.settings{padding:10px 14px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:none;}
+.setting-row{display:flex;align-items:center;gap:8px;margin-bottom:8px;}
+.setting-label{font-size:10px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;min-width:90px;}
+.setting-select{font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);flex:1;}
+.setting-select:focus{outline:none;border-color:var(--acc);}
+
+/* CATEGORY FILTER */
+.cat-filter{padding:8px 14px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:none;flex-wrap:wrap;gap:4px;}
+.cat-chip{font-size:11px;padding:3px 10px;border-radius:20px;border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;font-family:var(--ff);white-space:nowrap;transition:all .15s;}
+.cat-chip:hover{border-color:var(--bdr2);color:var(--txt);}
+.cat-chip.active{border-color:var(--acc);color:#fff;font-weight:500;}
+
+/* AIRPORT LIST */
+.airport-list{flex:1;overflow-y:auto;padding:6px 0;}
+.ap-item{display:flex;align-items:flex-start;gap:10px;padding:8px 14px;cursor:pointer;border-bottom:1px solid rgba(48,54,61,.5);transition:background .1s;}
+.ap-item:hover{background:var(--surf2);}
+.ap-item.highlighted{background:rgba(125,94,232,.12);border-left:3px solid var(--acc);}
+.ap-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;margin-top:4px;}
+.ap-icao{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--blue);min-width:50px;}
+.ap-name{font-size:12px;color:var(--txt);line-height:1.3;}
+.ap-comment{font-size:10px;color:var(--txt3);margin-top:2px;line-height:1.4;max-height:2.8em;overflow:hidden;}
+.ap-notfound{font-size:10px;color:var(--red);font-weight:600;}
+
+/* MAP */
+.map-col{flex:1;position:relative;background:#0e1117;}
+#map{width:100%;height:100%;}
+.leaflet-popup-content{font-family:var(--ff);font-size:12px;color:#1a1a2e;line-height:1.5;}
+.leaflet-popup-content b{font-family:var(--mono);color:#5b21b6;}
+.leaflet-popup-content .pop-cat{font-size:10px;font-weight:700;padding:1px 6px;border-radius:3px;display:inline-block;margin-bottom:4px;}
+.leaflet-popup-content .pop-comment{font-size:11px;color:#555;margin-top:4px;max-width:280px;}
+
+/* LEGEND */
+.legend{position:absolute;bottom:20px;right:20px;z-index:1000;background:rgba(22,27,34,.92);backdrop-filter:blur(8px);border:1px solid var(--bdr2);border-radius:8px;padding:10px 14px;display:none;}
+.legend-title{font-size:10px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px;}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--txt2);margin-bottom:3px;}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+
+/* EMPTY STATE */
+.empty-map{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;z-index:500;}
+.empty-map-inner{text-align:center;color:var(--txt3);font-size:13px;}
+.empty-map-inner .icon{font-size:48px;margin-bottom:8px;opacity:.4;}
+</style>
+</head>
+<body>
+<script src="airports.js"></script>
+<div class="app">
+  <!-- HEADER -->
+  <div class="header">
+    <a href="index.html" class="back-link">← Randomizer</a>
+    <div class="header-sep"></div>
+    <h1>✈ <span>Airport Map</span> Viewer</h1>
+    <div style="flex:1;"></div>
+    <div style="font-size:11px;color:var(--txt3);" id="status-text">Drop an XLSX file to begin</div>
+  </div>
+
+  <div class="main">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-top">
+        <div class="dropzone" id="dropzone">
+          <div class="dropzone-icon">📂</div>
+          <div class="dropzone-title">Drop XLSX here</div>
+          <div class="dropzone-sub">or click to browse — needs an ICAO column</div>
+          <input type="file" accept=".xlsx,.xls,.csv" id="file-input">
+        </div>
+      </div>
+      <div class="file-info" id="file-info">
+        <div class="file-name" id="file-name"></div>
+        <div class="file-stats" id="file-stats"></div>
+      </div>
+      <div class="settings" id="settings-area"></div>
+      <div class="cat-filter" id="cat-filter"></div>
+      <div class="airport-list" id="airport-list">
+        <div style="padding:20px 14px;color:var(--txt3);font-size:12px;text-align:center;">No airports loaded yet.</div>
+      </div>
+    </div>
+
+    <!-- MAP -->
+    <div class="map-col">
+      <div id="map"></div>
+      <div class="empty-map" id="empty-map">
+        <div class="empty-map-inner">
+          <div class="icon">🌍</div>
+          Load an XLSX with ICAO codes to see airports on the map
+        </div>
+      </div>
+      <div class="legend" id="legend"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══ Airport DB lookup ═══
+const schedByCode = {};
+const schedByIata = {};
+if (typeof DB_SCHED !== 'undefined') {
+  DB_SCHED.forEach(r => { if(r[0]) schedByCode[r[0]] = r; if(r[1]) schedByIata[r[1]] = r; });
+}
+
+// ═══ State ═══
+let mapObj = null;
+let mapMarkers = [];
+let loadedData = [];     // raw rows from XLSX
+let loadedHeaders = [];  // column headers
+let icaoColIdx = -1;
+let catColIdx = -1;
+let nameColIdx = -1;
+let commentColIdx = -1;
+let categories = [];
+let activeCategories = new Set();
+let catColors = {};
+
+const PALETTE = ['#f85149','#d29922','#58a6ff','#3fb950','#a78bfa','#ec6547','#79c0ff','#f0883e','#56d364','#d2a8ff','#ff7b72','#ffa657'];
+
+// ═══ Init Map ═══
+function initMap() {
+  mapObj = L.map('map', { zoomControl: true, attributionControl: false }).setView([30, 0], 2);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(mapObj);
+}
+
+// ═══ File Handling ═══
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); if (e.dataTransfer.files.length) processFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) processFile(e.target.files[0]); });
+
+function processFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const wb = XLSX.read(e.target.result, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (json.length < 2) { alert('File appears empty or has no data rows.'); return; }
+
+    loadedHeaders = json[0].map(String);
+    loadedData = json.slice(1).filter(row => row.some(cell => String(cell).trim()));
+
+    // Show file info
+    document.getElementById('file-info').style.display = 'block';
+    document.getElementById('file-name').innerHTML = '📄 ' + file.name;
+
+    // Auto-detect columns
+    autoDetectColumns();
+    buildSettingsUI();
+    applyColumns();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function autoDetectColumns() {
+  icaoColIdx = -1; catColIdx = -1; nameColIdx = -1; commentColIdx = -1;
+  loadedHeaders.forEach((h, i) => {
+    const hl = h.toLowerCase().trim();
+    if (icaoColIdx < 0 && (hl === 'icao' || hl.includes('icao'))) icaoColIdx = i;
+    if (catColIdx < 0 && (hl.includes('kategorie') || hl.includes('category') || hl.includes('cat'))) catColIdx = i;
+    if (nameColIdx < 0 && (hl.includes('name') || hl.includes('flughafen') || hl.includes('airport'))) nameColIdx = i;
+    if (commentColIdx < 0 && (hl.includes('kommentar') || hl.includes('comment') || hl.includes('anflug') || hl.includes('approach') || hl.includes('notes'))) commentColIdx = i;
+  });
+  // Fallback: if no ICAO column found, check first row values
+  if (icaoColIdx < 0) {
+    for (let i = 0; i < loadedHeaders.length; i++) {
+      const sample = String(loadedData[0]?.[i] || '').trim().toUpperCase();
+      if (sample.length >= 3 && sample.length <= 4 && /^[A-Z]{4}$/.test(sample)) {
+        icaoColIdx = i; break;
+      }
+    }
+  }
+  if (icaoColIdx < 0) icaoColIdx = 0; // ultimate fallback
+}
+
+function buildSettingsUI() {
+  const area = document.getElementById('settings-area');
+  area.style.display = 'block';
+  const opts = loadedHeaders.map((h, i) => `<option value="${i}">${h || 'Col ' + (i+1)}</option>`).join('');
+  const noneOpt = '<option value="-1">(none)</option>';
+  area.innerHTML = `
+    <div class="setting-row"><span class="setting-label">ICAO Column</span><select class="setting-select" id="sel-icao" onchange="onColChange()">${opts}</select></div>
+    <div class="setting-row"><span class="setting-label">Category</span><select class="setting-select" id="sel-cat" onchange="onColChange()">${noneOpt}${opts}</select></div>
+    <div class="setting-row"><span class="setting-label">Name / Label</span><select class="setting-select" id="sel-name" onchange="onColChange()">${noneOpt}${opts}</select></div>
+    <div class="setting-row"><span class="setting-label">Comment</span><select class="setting-select" id="sel-comment" onchange="onColChange()">${noneOpt}${opts}</select></div>
+  `;
+  document.getElementById('sel-icao').value = icaoColIdx;
+  document.getElementById('sel-cat').value = catColIdx;
+  document.getElementById('sel-name').value = nameColIdx;
+  document.getElementById('sel-comment').value = commentColIdx;
+}
+
+function onColChange() {
+  icaoColIdx = parseInt(document.getElementById('sel-icao').value);
+  catColIdx = parseInt(document.getElementById('sel-cat').value);
+  nameColIdx = parseInt(document.getElementById('sel-name').value);
+  commentColIdx = parseInt(document.getElementById('sel-comment').value);
+  applyColumns();
+}
+
+// ═══ Apply columns & render ═══
+function applyColumns() {
+  // Extract categories
+  categories = [];
+  catColors = {};
+  if (catColIdx >= 0) {
+    const catSet = new Set();
+    loadedData.forEach(row => {
+      const c = String(row[catColIdx] || '').trim();
+      if (c) catSet.add(c);
+    });
+    categories = Array.from(catSet);
+    categories.forEach((c, i) => catColors[c] = PALETTE[i % PALETTE.length]);
+    activeCategories = new Set(categories);
+  } else {
+    activeCategories = new Set();
+  }
+
+  // Stats
+  let found = 0, notFound = 0;
+  loadedData.forEach(row => {
+    const icaos = parseIcaoCodes(String(row[icaoColIdx] || ''));
+    icaos.forEach(code => { if (schedByCode[code]) found++; else notFound++; });
+  });
+  document.getElementById('file-stats').textContent = `${loadedData.length} rows · ${found} airports found · ${notFound} not in DB`;
+  document.getElementById('status-text').textContent = `${found} airports plotted`;
+
+  buildCatFilter();
+  renderList();
+  renderMap();
+}
+
+function parseIcaoCodes(raw) {
+  // Handle "VQGP / VQBT / VQTY" or "KJFK Canarsie" or plain "LFPG"
+  return raw.split(/[\/,;]+/).map(s => {
+    const cleaned = s.trim().toUpperCase().replace(/[^A-Z0-9]/g, ' ').split(/\s+/)[0];
+    return cleaned;
+  }).filter(s => s.length >= 3 && s.length <= 6);
+}
+
+// ═══ Category Filter ═══
+function buildCatFilter() {
+  const el = document.getElementById('cat-filter');
+  if (!categories.length) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = categories.map(c => {
+    const active = activeCategories.has(c);
+    const col = catColors[c];
+    const bgStyle = active ? `background:${col};border-color:${col};color:#000;` : '';
+    return `<button class="cat-chip${active ? ' active' : ''}" style="${bgStyle}" onclick="toggleCat('${c.replace(/'/g,"\\'")}')">${c}</button>`;
+  }).join('');
+}
+
+function toggleCat(cat) {
+  if (activeCategories.has(cat)) activeCategories.delete(cat);
+  else activeCategories.add(cat);
+  buildCatFilter();
+  renderList();
+  renderMap();
+}
+
+// ═══ Airport List ═══
+function renderList() {
+  const el = document.getElementById('airport-list');
+  let html = '';
+  loadedData.forEach((row, ri) => {
+    const cat = catColIdx >= 0 ? String(row[catColIdx] || '').trim() : '';
+    if (cat && !activeCategories.has(cat)) return;
+    const rawIcao = String(row[icaoColIdx] || '').trim();
+    const icaos = parseIcaoCodes(rawIcao);
+    const name = nameColIdx >= 0 ? String(row[nameColIdx] || '').trim() : '';
+    const comment = commentColIdx >= 0 ? String(row[commentColIdx] || '').trim() : '';
+    const color = cat ? (catColors[cat] || '#888') : '#58a6ff';
+
+    const firstFound = icaos.find(c => schedByCode[c]);
+    const displayIcao = icaos.join(' / ');
+
+    html += `<div class="ap-item" data-row="${ri}" onclick="focusAirport(${ri})">`
+      + `<div class="ap-dot" style="background:${color};"></div>`
+      + `<div style="flex:1;min-width:0;">`
+      + `<div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${displayIcao}</span></div>`
+      + (name ? `<div class="ap-name">${name}</div>` : '')
+      + (comment ? `<div class="ap-comment">${comment}</div>` : '')
+      + (!firstFound ? `<div class="ap-notfound">⚠ Not in airport database</div>` : '')
+      + `</div></div>`;
+  });
+  if (!html) html = '<div style="padding:20px 14px;color:var(--txt3);font-size:12px;text-align:center;">No airports match the current filter.</div>';
+  el.innerHTML = html;
+}
+
+function focusAirport(ri) {
+  const row = loadedData[ri];
+  if (!row) return;
+  const icaos = parseIcaoCodes(String(row[icaoColIdx] || ''));
+  const firstFound = icaos.find(c => schedByCode[c]);
+  if (firstFound && schedByCode[firstFound]) {
+    const ap = schedByCode[firstFound];
+    mapObj.setView([ap[3], ap[4]], 8, { animate: true });
+    // Flash marker
+    mapMarkers.forEach(m => {
+      if (m._icao === firstFound) m.openPopup();
+    });
+  }
+  // Highlight in list
+  document.querySelectorAll('.ap-item').forEach(el => el.classList.remove('highlighted'));
+  const item = document.querySelector(`.ap-item[data-row="${ri}"]`);
+  if (item) { item.classList.add('highlighted'); item.scrollIntoView({ block: 'nearest' }); }
+}
+
+// ═══ Map Rendering ═══
+function renderMap() {
+  // Clear existing
+  mapMarkers.forEach(m => mapObj.removeLayer(m));
+  mapMarkers = [];
+
+  document.getElementById('empty-map').style.display = 'none';
+  const points = [];
+
+  loadedData.forEach((row, ri) => {
+    const cat = catColIdx >= 0 ? String(row[catColIdx] || '').trim() : '';
+    if (cat && !activeCategories.has(cat)) return;
+    const rawIcao = String(row[icaoColIdx] || '').trim();
+    const icaos = parseIcaoCodes(rawIcao);
+    const name = nameColIdx >= 0 ? String(row[nameColIdx] || '').trim() : '';
+    const comment = commentColIdx >= 0 ? String(row[commentColIdx] || '').trim() : '';
+    const color = cat ? (catColors[cat] || '#888') : '#58a6ff';
+
+    icaos.forEach(code => {
+      const ap = schedByCode[code];
+      if (!ap) return;
+      const lat = ap[3], lon = ap[4];
+      points.push([lat, lon]);
+
+      const marker = L.circleMarker([lat, lon], {
+        radius: 7, color: '#0e1117', weight: 2,
+        fillColor: color, fillOpacity: 0.95
+      }).addTo(mapObj);
+
+      marker._icao = code;
+
+      // Popup
+      let popHtml = '';
+      if (cat) popHtml += `<div class="pop-cat" style="background:${color};color:#000;">${cat}</div>`;
+      popHtml += `<b>${code}</b>`;
+      if (ap[1]) popHtml += ` <span style="color:#666;">${ap[1]}</span>`;
+      popHtml += `<br>${name || ap[2] || ''}`;
+      popHtml += `<br><span style="color:#888;">${ap[7] || ''}, ${ap[6] || ''}</span>`;
+      if (comment) popHtml += `<div class="pop-comment">${comment.length > 200 ? comment.slice(0,200) + '…' : comment}</div>`;
+      marker.bindPopup(popHtml, { maxWidth: 320 });
+
+      marker.on('click', () => {
+        document.querySelectorAll('.ap-item').forEach(el => el.classList.remove('highlighted'));
+        const item = document.querySelector(`.ap-item[data-row="${ri}"]`);
+        if (item) { item.classList.add('highlighted'); item.scrollIntoView({ block: 'nearest' }); }
+      });
+
+      mapMarkers.push(marker);
+    });
+  });
+
+  // Fit bounds
+  if (points.length >= 2) {
+    try { mapObj.fitBounds(L.latLngBounds(points), { padding: [40, 40] }); } catch(e) {}
+  } else if (points.length === 1) {
+    mapObj.setView(points[0], 6);
+  }
+
+  // Legend
+  buildLegend();
+}
+
+function buildLegend() {
+  const el = document.getElementById('legend');
+  if (!categories.length) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  let html = '<div class="legend-title">Categories</div>';
+  categories.forEach(c => {
+    if (!activeCategories.has(c)) return;
+    const count = loadedData.filter(row => String(row[catColIdx] || '').trim() === c).length;
+    html += `<div class="legend-item"><div class="legend-dot" style="background:${catColors[c]};"></div>${c} <span style="color:var(--txt3);margin-left:4px;">(${count})</span></div>`;
+  });
+  el.innerHTML = html;
+}
+
+// ═══ Init ═══
+window.addEventListener('load', () => {
+  initMap();
+});
+</script>
+</body>
+</html>
