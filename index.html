@@ -198,7 +198,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .leg-airline-col{display:flex;flex-direction:column;gap:4px;min-width:90px;}
 .leg-sm-input{font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);width:100%;}
 .leg-sm-input:focus{outline:none;border-color:var(--acc);}
-.leg-del{position:absolute;top:5px;right:7px;font-size:11px;padding:1px 6px;border-radius:4px;border:1px solid var(--bdr);background:none;color:var(--txt3);cursor:pointer;}
+.leg-del{font-size:18px;padding:4px 8px;border-radius:50%;border:2px solid var(--red);background:none;color:var(--red);cursor:pointer;line-height:1;width:34px;height:34px;display:flex;align-items:center;justify-content:center;}
 .leg-del:hover{color:var(--red);border-color:var(--red);}
 .roster-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:center;}
 .btn-addleg{display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:8px 16px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt);cursor:pointer;font-family:var(--ff);}
@@ -2424,13 +2424,11 @@ function renderLegs() {
 
     // ── Delete ──
     const delCell = document.createElement('div');
-    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding-left:2px;';
-    if (legs.length > 1) {
-      const del = document.createElement('button');
-      del.className = 'leg-del'; del.textContent = '✕';
-      del.onclick = () => deleteLeg(i);
-      delCell.appendChild(del);
-    }
+    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding-left:4px;';
+    const del = document.createElement('button');
+    del.className = 'leg-del'; del.textContent = '✕';
+    del.onclick = () => deleteLeg(i);
+    delCell.appendChild(del);
 
     row.appendChild(logoCell);
     row.appendChild(alCell);
@@ -2689,7 +2687,12 @@ function addLegAtEnd() {
 }
 
 function deleteLeg(i) {
-  if (legs.length <= 1) return;
+  if (legs.length <= 1) {
+    // Reset to empty leg
+    legs = [{ dep: departAirport || null, arr: null, airline: '', aircraft: '' }];
+    renderLegs();
+    return;
+  }
   if (i > 0 && i < legs.length - 1) {
     legs[i-1].arr = legs[i+1].dep;
   } else if (i === legs.length - 1 && i > 0) {
