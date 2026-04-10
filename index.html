@@ -646,12 +646,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <span class="filter-label">Filter:</span>
         <input class="filter-input" id="lb-filter-input" placeholder="ICAO, city, airline..." oninput="applyLogbookFilter()" style="max-width:180px;">
         <span id="lb-filter-count" style="font-size:11px;color:var(--txt2);"></span>
-        <div style="flex:1;min-width:16px;"></div>
         <button class="btn-toolbar-purple" onclick="showAddLogbookRow()">⊕ Add leg to logbook</button>
         <button class="btn-toolbar-red" onclick="clearLogbook()">⊗ Clear logbook</button>
         <button class="btn-toolbar" onclick="document.getElementById('lb-xlsx-input').click()">⬆ Import new logbook XLSX</button>
         <input type="file" id="lb-xlsx-input" accept=".xlsx" style="display:none;" onchange="importLogbookXlsx(this)">
         <span id="lb-status" style="font-size:11px;color:var(--txt3);"></span>
+        <div style="flex:1;min-width:16px;"></div>
         <span id="lb-count" style="font-size:11px;color:var(--txt2);font-weight:600;"></span>
       </div>
       <!-- Inline add-leg row -->
