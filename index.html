@@ -2664,12 +2664,17 @@ function openFlightConnections(e) {
 
 // ── Roster actions ──
 function insertLegAfter(idx) {
-  // Insert between existing legs: dep = arr of current, arr = empty, clear next dep
-  const depAp = legs[idx]?.arr || null;
+  // Insert a stopover: new leg gets arr of current leg, current leg arr becomes empty
+  const arrAp = legs[idx]?.arr || null;
   const airline = legs[idx]?.airline || '';
   const aircraft = legs[idx]?.aircraft || '';
-  if (legs[idx + 1]) legs[idx + 1].dep = null;
-  legs.splice(idx + 1, 0, { dep: depAp, arr: null, airline, aircraft });
+  // Clear arrival of current leg (user will type new intermediate destination)
+  legs[idx].arr = null;
+  // New leg: dep will auto-fill when user sets arr of current leg, arr = old destination
+  const newLeg = { dep: null, arr: arrAp, airline, aircraft };
+  // If there's a next leg, clear its dep (will link to new leg's arr)
+  if (legs[idx + 1]) legs[idx + 1].dep = arrAp;
+  legs.splice(idx + 1, 0, newLeg);
   renderLegs();
 }
 
