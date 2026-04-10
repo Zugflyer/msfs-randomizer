@@ -340,6 +340,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
       Next Destination
     </button>
+    <button class="topnav-tab topnav-primary" id="t-tovisit" onclick="switchView('tovisit')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 1 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      To Visit
+    </button>
+    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-primary" id="t-roster" onclick="switchView('roster')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
       Legs
@@ -402,8 +407,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             </div>
           </div>
           <div class="region-wrap">
-            <div class="region-label">Region filter</div>
-            <button class="region-btn" id="region-btn" onclick="toggleRegionDD()">
+            <button class="region-btn" id="region-btn" onclick="toggleRegionDD()" style="height:38px;">
               <span id="region-btn-label">All regions</span>
               <span>▾</span>
             </button>
@@ -416,11 +420,16 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <label class="region-item"><input type="checkbox" value="OC" onchange="updateRegionFilter()"> Oceania</label>
               <label class="region-item"><input type="checkbox" value="AN" onchange="updateRegionFilter()"> Antarctica</label>
             </div>
+            <!-- Airport Map Viewer link -->
+            <a href="mapview.html" target="_blank" title="Open Airport Map Viewer — plot XLSX files on a map"
+              style="display:flex;align-items:center;justify-content:center;height:38px;margin-top:6px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);cursor:pointer;text-decoration:none;font-size:12px;font-weight:600;font-family:var(--ff);gap:6px;transition:border-color .15s,color .15s;">
+              <span style="font-size:15px;">🗺</span> Airport Map Viewer
+            </a>
             <!-- FlightConnections quick link -->
             <a id="dash-fc-btn" href="https://www.flightconnections.com/" target="_blank"
               onclick="dashOpenFC(event)" title="Open in FlightConnections"
-              style="display:flex;align-items:center;justify-content:center;padding:5px 0;cursor:pointer;text-decoration:none;margin-top:6px;">
-              <img src="" id="dash-fc-logo" style="max-height:22px;max-width:100px;object-fit:contain;" alt="FlightConnections">
+              style="display:flex;align-items:center;justify-content:center;height:38px;margin-top:6px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);cursor:pointer;text-decoration:none;">
+              <img src="" id="dash-fc-logo" style="max-height:24px;max-width:130px;object-fit:contain;" alt="FlightConnections">
             </a>
           </div>
         </div>
@@ -619,6 +628,22 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
     </div>
 
+
+    <!-- ═══ TO VISIT ═══ -->
+    <div id="view-tovisit" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div style="padding:12px 18px;border-bottom:1px solid var(--bdr);flex-shrink:0;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div class="sec-label-sm" style="margin:0;">To Visit</div>
+        <button onclick="tovisitUpload()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:1px solid var(--acc);background:rgba(125,94,232,.15);color:var(--acc2);cursor:pointer;font-weight:600;font-family:var(--ff);">📂 Import XLSX</button>
+        <button onclick="tovisitClear()" style="font-size:11px;padding:5px 12px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;font-family:var(--ff);">Clear</button>
+        <span id="tovisit-count" style="font-size:11px;color:var(--txt3);margin-left:auto;"></span>
+      </div>
+      <div id="tovisit-list" style="flex-shrink:0;max-height:35%;overflow-y:auto;padding:10px 18px;border-bottom:1px solid var(--bdr);">
+        <div style="color:var(--txt3);font-size:12px;padding:10px 0;">No airports loaded yet. Click <b style="color:var(--acc2);">Import XLSX</b> to upload a file with ICAO codes.</div>
+      </div>
+      <div style="flex:1;position:relative;min-height:200px;">
+        <div id="tovisit-map" style="width:100%;height:100%;"></div>
+      </div>
+    </div>
 
     <!-- ═══ ROSTER ═══ -->
     <div id="view-roster" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
@@ -2022,7 +2047,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','tovisit'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2031,9 +2056,9 @@ function switchView(view) {
     if (btn) btn.classList.toggle('active', v === view);
   });
 
-  // Full-screen mode for roster/logbook: hide the map column entirely
+  // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'tovisit');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2048,6 +2073,12 @@ function switchView(view) {
     setTimeout(() => {
       if (rosterMap) rosterMap.invalidateSize();
       else initRosterMap();
+    }, 120);
+  }
+  if (view === 'tovisit') {
+    setTimeout(() => {
+      if (tovisitMap) tovisitMap.invalidateSize();
+      else initTovisitMap();
     }, 120);
   }
 }
