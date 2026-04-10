@@ -2389,7 +2389,7 @@ function renderLegs() {
 
     // ── ArrTime + Day + UTC ──
     const arrTimeCell = document.createElement('div');
-    arrTimeCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:4px 5px;min-height:54px;box-sizing:border-box;flex-shrink:0;width:100px;min-width:100px;gap:2px;';
+    arrTimeCell.style.cssText = bS + 'width:120px;min-width:120px;gap:3px;align-items:center;';
     const arrDayStyle = 'width:24px;min-width:24px;border:none;border-radius:0;background:transparent;color:#4a9eda;font-size:11px;font-family:monospace;text-align:center;padding:1px 0;line-height:1.2;outline:none;';
     const arrTimeStyle = 'flex:1;border:none;border-radius:0;background:transparent;color:#4a9eda;font-size:11px;font-family:monospace;font-weight:400;text-align:center;padding:1px 0;line-height:1.2;outline:none;';
     arrTimeCell.innerHTML = '<div style="display:flex;gap:3px;width:100%;">'
@@ -2410,7 +2410,7 @@ function renderLegs() {
     const navCell = document.createElement('div');
     navCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:54px;flex-shrink:0;gap:4px;';
     const navBtn = document.createElement('div');
-    navBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:38px;height:24px;cursor:pointer;padding:2px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);';
+    navBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:38px;height:24px;cursor:pointer;padding:2px;border:none;background:transparent;';
     navBtn.title = 'Open Navigraph Charts';
     navBtn.onclick = () => {
       const icao = legs[i].arr ? legs[i].arr[0] : '';
@@ -2419,7 +2419,7 @@ function renderLegs() {
     };
     navBtn.innerHTML = '<img src="' + CHARTS_LOGO + '" style="width:34px;height:auto;object-fit:contain;" alt="Navigraph">';
     const sbBtn = document.createElement('div');
-    sbBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:38px;height:24px;cursor:pointer;padding:2px;border-radius:4px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.04);';
+    sbBtn.style.cssText = 'display:flex;align-items:center;justify-content:center;width:38px;height:24px;cursor:pointer;padding:2px;border:none;background:transparent;';
     sbBtn.title = 'Open SimBrief Dispatch';
     sbBtn.onclick = () => window.open('https://dispatch.simbrief.com/home','_blank');
     sbBtn.innerHTML = '<img src="' + SIMBRIEF_LOGO + '" style="width:22px;height:22px;object-fit:contain;border-radius:2px;" alt="SimBrief">';
@@ -2556,12 +2556,8 @@ async function fetchBlockTime(idx) {
   const arrIata = leg.arr[1] || leg.arr[0];
   const apiKey = getApiKey();
   if (!apiKey) {
-    btEl.textContent = '–';
-    btEl.style.fontStyle = 'normal';
-    btEl.title = 'Add API key (🔑) to look up real block times';
-    leg._fetchingBT = false;
-    return;
-  }
+    // No API key - skip web lookup, go straight to fallback estimate
+  } else {
 
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages', {
@@ -2601,8 +2597,10 @@ async function fetchBlockTime(idx) {
       }
     }
   } catch(e) { /* fall through to estimate */ }
+  } // end if(apiKey)
 
   // Fallback: great circle estimate in italic
+  if (!leg.blockTimeReal) {
   const R = 6371;
   const φ1 = leg.dep[3]*Math.PI/180, φ2 = leg.arr[3]*Math.PI/180;
   const Δφ = (leg.arr[3]-leg.dep[3])*Math.PI/180, Δλ = (leg.arr[4]-leg.dep[4])*Math.PI/180;
@@ -2617,6 +2615,7 @@ async function fetchBlockTime(idx) {
   btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
   btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
   legSchedUpdateRow(idx);
+  } // end fallback
 }
 
 function updateFlightConnectionsBtn() {
