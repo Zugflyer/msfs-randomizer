@@ -761,6 +761,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         onkeydown="apEdKeydown(event)"
         onblur="setTimeout(function(){var s=document.getElementById('ap-ed-suggestions');if(s)s.style.display='none';},250)">
       <button onclick="apEdDoSearch()" style="font-size:13px;padding:7px 18px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Search</button>
+      <button onclick="apEdAddNew()" style="font-size:13px;padding:7px 14px;border-radius:var(--r);border:1px solid var(--green);background:transparent;color:var(--green);cursor:pointer;font-weight:600;" title="Add a completely new airport">+ New</button>
     </div>
     <!-- Search suggestions -->
     <div id="ap-ed-suggestions" style="display:none;padding:0 20px 8px;flex-shrink:0;max-height:140px;overflow-y:auto;border-bottom:1px solid var(--bdr);"></div>
@@ -3446,8 +3447,35 @@ async function loadApOverrides() {
     var res = await sb.from('categories').select('items').eq('name','__ap_overrides__').single();
     if (res.data && Array.isArray(res.data.items)) {
       res.data.items.forEach(function(rec) {
-        apOverrides[rec._origIcao || rec.icao] = rec;
-        applyOneOverride(rec._origIcao || rec.icao, rec);
+        var key = rec._origIcao || rec.icao;
+        apOverrides[key] = rec;
+
+        if (rec._isNew) {
+          // This is a user-created airport — insert into DB_SCHED if not already present
+          var icao = (rec.icao || '').toUpperCase();
+          if (icao && !schedByCode[icao]) {
+            var lat = parseFloat(rec.lat) || 0;
+            var lon = parseFloat(rec.lon) || 0;
+            var utc = parseFloat(rec.utc) || 0;
+            var dst = (rec.dst !== '' && rec.dst !== undefined && rec.dst !== null) ? parseFloat(rec.dst) : null;
+            var dstRegion = (rec.dst_region || '').toUpperCase();
+            if (dstRegion && !['EU','NA','AU','NZ'].includes(dstRegion)) dstRegion = null;
+            if (!dstRegion) dstRegion = null;
+            var continent = '';
+            if (lon > -30 && lon < 60 && lat > 30) continent = 'EU';
+            else if (lon >= 60 && lon < 180) continent = 'AS';
+            else if (lon >= -180 && lon < -30 && lat > 15) continent = 'NA';
+            else if (lon >= -90 && lon < -30 && lat <= 15) continent = 'SA';
+            else if (lon > -30 && lon < 60 && lat <= 30) continent = 'AF';
+            else continent = 'OC';
+            var newAp = [icao, rec.iata || '', rec.name || icao, lat, lon, continent, rec.country || '', rec.city || '', utc, dst, dstRegion];
+            DB_SCHED.push(newAp);
+            schedByCode[icao] = newAp;
+            if (rec.iata) schedByIata[rec.iata.toUpperCase()] = newAp;
+          }
+        } else {
+          applyOneOverride(key, rec);
+        }
       });
       if (res.data.items.length > 0)
         console.log('Loaded ' + res.data.items.length + ' airport override(s) from Supabase');
@@ -3466,11 +3494,12 @@ function openApEditor() {
   if (modal) modal.style.display = 'flex';
   document.getElementById('ap-ed-search').value = '';
   document.getElementById('ap-ed-suggestions').style.display = 'none';
-  document.getElementById('ap-ed-left').innerHTML  = '<div style="color:var(--txt3);font-size:12px;padding:8px 0;">Search for an airport above to load its current data.</div>';
+  document.getElementById('ap-ed-left').innerHTML  = '<div style="color:var(--txt3);font-size:12px;padding:8px 0;">Search for an airport above to load its current data, or click <b style="color:var(--green);">+ New</b> to add one.</div>';
   document.getElementById('ap-ed-right').innerHTML = '';
   document.getElementById('ap-ed-save-btn').style.display = 'none';
   document.getElementById('ap-ed-result').style.display = 'none';
   apEdCurrentAp = null;
+  apEdIsNewMode = false;
   setTimeout(function() { document.getElementById('ap-ed-search').focus(); }, 100);
 }
 
@@ -3579,9 +3608,53 @@ function apEdSelectAp(icao) {
   document.getElementById('ap-ed-left').innerHTML = leftHtml;
   document.getElementById('ap-ed-right').innerHTML = rightHtml;
   document.getElementById('ap-ed-save-btn').style.display = 'block';
+  document.getElementById('ap-ed-save-btn').textContent = '💾 Save Edits to Airport Base Data';
+}
+
+// ── Add New Airport (blank form) ──
+var apEdIsNewMode = false;
+
+function apEdAddNew() {
+  apEdCurrentAp = null;
+  apEdIsNewMode = true;
+  var searchEl = document.getElementById('ap-ed-search');
+  if (searchEl) searchEl.value = '';
+  var sugEl = document.getElementById('ap-ed-suggestions');
+  if (sugEl) sugEl.style.display = 'none';
+  var resEl = document.getElementById('ap-ed-result');
+  if (resEl) resEl.style.display = 'none';
+
+  var rE = 'width:100%;font-size:12px;padding:5px 8px;border-radius:4px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;margin-bottom:10px;box-sizing:border-box;';
+  var lS = 'font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px;font-weight:600;';
+  var reqS = 'font-size:9px;color:var(--orange);margin-left:4px;';
+
+  var leftHtml = '<div style="color:var(--green);font-size:12px;padding:8px 0;font-weight:600;">Creating a new airport.<br><span style="color:var(--txt3);font-weight:400;font-size:11px;">Fill in the fields on the right. ICAO code is required.</span></div>';
+
+  var rightHtml = '';
+  var defaults = { icao:'', iata:'', name:'', city:'', country:'', lat:'', lon:'', utc:'0', dst:'', dst_region:'' };
+  var placeholders = { icao:'e.g. ZZZZ', iata:'e.g. ZZZ', name:'Airport Name', city:'City', country:'Country', lat:'e.g. 48.8566', lon:'e.g. 2.3522', utc:'e.g. 1', dst:'e.g. 2 (or leave blank)', dst_region:'EU / NA / AU / NZ (or blank)' };
+  AP_ED_FIELDS.forEach(function(f) {
+    var req = (f.key === 'icao') ? '<span style="' + reqS + '">REQUIRED</span>' : '';
+    rightHtml += '<div style="' + lS + '">' + f.label + req + '</div>'
+              + '<input id="ap-ed-new-' + f.key + '" placeholder="' + (placeholders[f.key]||'') + '" value="' + (defaults[f.key]||'') + '" style="' + rE + '">';
+  });
+
+  var badge = document.getElementById('ap-ed-new-badge');
+  if (badge) {
+    badge.textContent = 'NEW AIRPORT'; badge.style.color='#3fb950';
+    badge.style.background='rgba(63,185,80,.15)'; badge.style.border='1px solid rgba(63,185,80,.3)';
+    badge.style.padding='2px 8px'; badge.style.borderRadius='4px'; badge.style.display='';
+  }
+
+  document.getElementById('ap-ed-left').innerHTML = leftHtml;
+  document.getElementById('ap-ed-right').innerHTML = rightHtml;
+  document.getElementById('ap-ed-save-btn').style.display = 'block';
+  document.getElementById('ap-ed-save-btn').textContent = '✈ Create New Airport';
+  setTimeout(function() { var el = document.getElementById('ap-ed-new-icao'); if (el) el.focus(); }, 100);
 }
 
 async function apEdSave() {
+  if (apEdIsNewMode) { await apEdSaveNew(); return; }
   if (!apEdCurrentAp) return;
   var ap = apEdCurrentAp;
   var btn = document.getElementById('ap-ed-save-btn');
@@ -3628,6 +3701,89 @@ async function apEdSave() {
   var newIcao = (rec.icao && rec.icao !== ap[0]) ? rec.icao : ap[0];
   apEdCurrentAp = schedByCode[newIcao] || ap;
   apEdSelectAp(apEdCurrentAp[0]);
+}
+
+async function apEdSaveNew() {
+  var btn = document.getElementById('ap-ed-save-btn');
+  btn.textContent = 'Creating…'; btn.disabled = true;
+
+  // Read all fields
+  var rec = {};
+  AP_ED_FIELDS.forEach(function(f) {
+    var inp = document.getElementById('ap-ed-new-' + f.key);
+    if (inp) rec[f.key] = inp.value.trim();
+  });
+
+  // Validate ICAO
+  var icao = (rec.icao || '').toUpperCase();
+  if (!icao || icao.length < 3 || icao.length > 6) {
+    document.getElementById('ap-ed-result-msg').textContent = '⚠ ICAO code is required (3-6 characters).';
+    document.getElementById('ap-ed-result-msg').style.color = '#f85149';
+    document.getElementById('ap-ed-result').style.display = 'block';
+    btn.textContent = '✈ Create New Airport'; btn.disabled = false;
+    return;
+  }
+  if (schedByCode[icao]) {
+    document.getElementById('ap-ed-result-msg').textContent = '⚠ ICAO "' + icao + '" already exists. Use search to edit it.';
+    document.getElementById('ap-ed-result-msg').style.color = '#f85149';
+    document.getElementById('ap-ed-result').style.display = 'block';
+    btn.textContent = '✈ Create New Airport'; btn.disabled = false;
+    return;
+  }
+
+  // Build the airport array: [ICAO, IATA, name, lat, lon, continent, country, city, utc, dst, dst_region]
+  var lat = parseFloat(rec.lat) || 0;
+  var lon = parseFloat(rec.lon) || 0;
+  var utc = parseFloat(rec.utc) || 0;
+  var dst = (rec.dst !== '' && rec.dst !== undefined) ? parseFloat(rec.dst) : null;
+  var dstRegion = (rec.dst_region || '').toUpperCase();
+  if (dstRegion && !['EU','NA','AU','NZ'].includes(dstRegion)) dstRegion = null;
+  if (!dstRegion) dstRegion = null;
+
+  // Guess continent from lat/lon (rough)
+  var continent = '';
+  if (lon > -30 && lon < 60 && lat > 30) continent = 'EU';
+  else if (lon >= 60 && lon < 180) continent = 'AS';
+  else if (lon >= -180 && lon < -30 && lat > 15) continent = 'NA';
+  else if (lon >= -90 && lon < -30 && lat <= 15) continent = 'SA';
+  else if (lon > -30 && lon < 60 && lat <= 30) continent = 'AF';
+  else continent = 'OC';
+
+  var newAp = [icao, rec.iata || '', rec.name || icao, lat, lon, continent, rec.country || '', rec.city || '', utc, dst, dstRegion];
+
+  // Add to live data
+  DB_SCHED.push(newAp);
+  schedByCode[icao] = newAp;
+  if (rec.iata) schedByIata[rec.iata.toUpperCase()] = newAp;
+
+  // Store as override so it persists via Supabase
+  var overrideRec = { _isNew: true };
+  AP_ED_FIELDS.forEach(function(f) {
+    var inp = document.getElementById('ap-ed-new-' + f.key);
+    if (inp && inp.value.trim()) overrideRec[f.key] = inp.value.trim();
+  });
+  overrideRec.icao = icao;
+  overrideRec._origIcao = '__new__' + icao;
+  apOverrides['__new__' + icao] = overrideRec;
+
+  // Persist
+  try {
+    await saveApOverrides();
+    document.getElementById('ap-ed-result-msg').textContent = '✓ Created new airport ' + icao + ' — available everywhere immediately.';
+    document.getElementById('ap-ed-result-msg').style.color = '#3fb950';
+    document.getElementById('ap-ed-result').style.display = 'block';
+  } catch(e) {
+    document.getElementById('ap-ed-result-msg').textContent = '⚠ Save failed: ' + e.message;
+    document.getElementById('ap-ed-result-msg').style.color = '#f85149';
+    document.getElementById('ap-ed-result').style.display = 'block';
+  }
+
+  btn.textContent = '✈ Create New Airport'; btn.disabled = false;
+  apEdIsNewMode = false;
+
+  // Switch to edit mode showing the new airport
+  apEdCurrentAp = newAp;
+  apEdSelectAp(icao);
 }
 
 // Close on backdrop click
