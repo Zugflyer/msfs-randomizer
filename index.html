@@ -435,21 +435,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button onclick="clearDashFields()" style="font-size:10px;padding:2px 9px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕ Clear</button>
       </div>
 
-      <!-- Results -->
-      <div class="results-area" id="results-area">
-        <div class="row-group">
-          <div class="results-row" id="row-r1"></div>
-          <div class="results-row" id="row-r2"></div>
-        </div>
-        <div class="row-group">
-          <div class="results-row" id="row-r3"></div>
-          <div class="results-row" id="row-r4"></div>
-        </div>
-        <div class="row-group">
-          <div class="results-row" id="row-r5"></div>
-          <div class="results-row" id="row-r6"></div>
-        </div>
-      </div>
+      <!-- Results — rows are generated dynamically by renderResults() -->
+      <div class="results-area" id="results-area"></div>
     </div>
 
     <!-- CATEGORIES -->
@@ -467,6 +454,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button onclick="window.open('https://www.avcodes.co.uk/default.asp','_blank')" title="AV Codes" style="padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;display:flex;align-items:center;justify-content:center;">
           <img src="data:image/png;base64,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Vc6OQhskT3QzwPGwdEac0juFsUuXy/jzBcvlE2TYlZrrOOwmqKRjpQPl166tfdtc5PT4bt35ZrSc7cwyW36vdyJfxD5Yj6m1PTLof9QfHvt9rez7lcY9+Q5bkAL33S/XmteGjqMlTUzu1oD3c46H3+i0hh8L/BcUzJW4KwuY4OAfc6xzdj5gykEfceykLD8Iw/D4nR4vjNqs/XsPdS0zWPf338TgOp35la55qdQf4K+E8k40o7jkmU1j6Wvu8DIhaI3hzYWNPUHyn3k7kAA6aCdkk6b2/KHAWFciclWfM7+yRxoYDFV0bOzK/pIMXmH103bwQO7gWjYDdGWkVt3Z9kk1v7vlSU1PR0kNJSQRU9PAxscUUTA1kbANBrQOwAA0AF9URRRERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQEREBERAREQf/Z" style="width:28px;height:28px;object-fit:contain;filter:invert(1) brightness(0.75);" alt="AV Codes">
         </button>
+        <button class="btn-toolbar-purple" onclick="createCustomCategory()" title="Neue Custom-Kategorie anlegen (erscheint neben Formula 1 im Themes-Block)" style="margin-left:6px;">⊕ Neue Kategorie</button>
       </div>
       <div class="cat-tabs-row" id="cat-tabs"></div>
       <div class="filter-bar" id="cat-filter-bar" style="display:none;">
@@ -1057,6 +1045,7 @@ async function loadAllFromCloud() {
     if (data && data.length > 0) {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
+      // 1. Patch existing built-in categories from cloud
       CATEGORIES.forEach(cat => { 
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
           const cloudItems = byId[cat.id];
@@ -1068,11 +1057,29 @@ async function loadAllFromCloud() {
               const valid = cloudItems.every(i => i.icao && i.icao.length >= 3);
               if (valid) cat.items = cloudItems;
             }
-
           } else {
             cat.items = cloudItems;
           }
         }
+      });
+      // 2. Inject unknown rows as custom list-simple categories in 'themes' group
+      const reservedIds = new Set(['__airline_logos__', '__airport_overrides__', '__roster__']);
+      const knownIds = new Set(CATEGORIES.map(c => c.id));
+      data.forEach(row => {
+        if (knownIds.has(row.name) || reservedIds.has(row.name)) return;
+        if (!Array.isArray(row.items) || row.items.length === 0) return;
+        if (!row.items[0] || !row.items[0].icao) return; // only list-simple style
+        const usedIdxs = new Set(CATEGORIES.filter(c => c.group === 'themes').map(c => c.colorIdx));
+        const nextIdx = COLORS.findIndex((_, i) => !usedIdxs.has(i));
+        CATEGORIES.push({
+          id: row.name,
+          name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+          group: 'themes',
+          colorIdx: nextIdx >= 0 ? nextIdx : (CATEGORIES.length % COLORS.length),
+          type: 'list-simple',
+          items: row.items
+        });
+        knownIds.add(row.name);
       });
       setCloudStatus('✓ Synced', 'ok');
     } else {
@@ -1457,20 +1464,18 @@ function rollAll() {
 // RENDER RESULTS
 // ═══════════════════════════════════════════════════════════
 function renderResults() {
-  // Row 1: Difficult Airports, Interesting Airports, Routings
-  // Row 2: Mountain Climbing, Formula 1
-  // Row 3: Random World, Random ICAO, Random Non-Scheduled
-  // Row 4: Random Europe, Random North America, Random South America, Random Oceania
-  // Row 5: British Isles, Nordics, Central Europe
-  // Row 6: France / Belux, Iberia, Eastern Mediterranean
-  const ROW_IDS = [
-    ['difficult','interesting','routings'],
-    ['mountain','formula1'],
-    ['rand_world','rand_icao','rand_iata'],
-    ['rand_europe','rand_namerica','rand_samerica','rand_australia'],
-    ['british','nordics','central_eu'],
-    ['france_belux','iberia','eastern_med'],
-  ];
+  // ── DYNAMIC RENDERING ──────────────────────────────────────────────────────
+  // Rows are generated from CATEGORIES, grouped by cat.group.
+  // Group order: themes → randoms → networks → any custom groups.
+  // 'themes' group: max 3 cards per row (wraps automatically for custom cats).
+  // Other groups: all categories in a single row each.
+  // ──────────────────────────────────────────────────────────────────────────
+  const container = document.getElementById('results-area');
+  if (!container) return;
+
+  const GROUP_ORDER = ['themes', 'randoms', 'networks'];
+  const THEMES_PER_ROW = 3;
+
   const byId = {};
   lastResults.forEach(r => { byId[r.cat.id] = r; });
 
@@ -1502,12 +1507,52 @@ function renderResults() {
     return `<div class="res-card" onclick="openInRoster('${cat.id}')" style="cursor:pointer;" title="Click to plan this flight"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
   }
 
-  ROW_IDS.forEach((ids, i) => {
-    const el = document.getElementById('row-r' + (i+1));
-    if (!el) return;
-    const cards = ids.map(id => byId[id] ? renderCard(byId[id]) : '').join('');
-    el.innerHTML = cards || (i===0 ? '<div class="empty-state">Click "Next Flight" to roll.</div>' : '');
+  // Build group map preserving CATEGORIES order
+  const groups = {};
+  const groupOrder = [];
+  CATEGORIES.forEach(cat => {
+    const g = cat.group || 'themes';
+    if (!groups[g]) { groups[g] = []; groupOrder.push(g); }
+    groups[g].push(cat);
   });
+
+  // Merge with canonical order, then any extra groups appended
+  const orderedGroups = [
+    ...GROUP_ORDER.filter(g => groups[g]),
+    ...groupOrder.filter(g => !GROUP_ORDER.includes(g) && groups[g])
+  ];
+
+  let html = '';
+  let isFirstGroup = true;
+
+  orderedGroups.forEach(group => {
+    const cats = groups[group];
+    if (!cats || cats.length === 0) return;
+
+    // themes: max THEMES_PER_ROW per row; other groups: all in one row
+    const perRow = (group === 'themes') ? THEMES_PER_ROW : cats.length;
+
+    const rows = [];
+    for (let i = 0; i < cats.length; i += perRow) {
+      rows.push(cats.slice(i, i + perRow));
+    }
+
+    const rowsHtml = rows.map((rowCats, rowIdx) => {
+      const cards = rowCats.map(cat => byId[cat.id] ? renderCard(byId[cat.id]) : '').join('');
+      // Empty state only on very first row of first group
+      const isEmpty = !cards || rowCats.every(cat => !byId[cat.id] ||
+        (!byId[cat.id].result.icao && !byId[cat.id].result.text && !byId[cat.id].result.coord));
+      const content = (isFirstGroup && rowIdx === 0 && isEmpty)
+        ? '<div class="empty-state">Click "Next Flight" to roll.</div>'
+        : cards;
+      if (isFirstGroup && rowIdx === 0) isFirstGroup = false;
+      return `<div class="results-row">${content}</div>`;
+    }).join('');
+
+    html += `<div class="row-group">${rowsHtml}</div>`;
+  });
+
+  container.innerHTML = html || '<div class="row-group"><div class="results-row"><div class="empty-state">Click "Next Flight" to roll.</div></div></div>';
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1979,7 +2024,31 @@ function addCatItem() {
 // ═══════════════════════════════════════════════════════════
 function importXlsxForActiveCat(input) {
   const file = input.files[0]; if (!file) return;
-  const cat = CATEGORIES.find(c => c.id===activeCatId); if (!cat) return;
+
+  // If no active category exists yet, prompt to create a new custom one
+  let cat = CATEGORIES.find(c => c.id === activeCatId);
+  if (!cat) {
+    const catName = prompt('Name für neue Kategorie (wird in der Themes-Gruppe angelegt):');
+    if (!catName || !catName.trim()) { input.value = ''; return; }
+    const name = catName.trim();
+    const catId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+    if (CATEGORIES.find(c => c.id === catId)) {
+      alert('Eine Kategorie mit diesem Namen existiert bereits. Bitte öffne sie zuerst im Data-Tab.');
+      input.value = ''; return;
+    }
+    const usedIdxs = new Set(CATEGORIES.filter(c => c.group === 'themes').map(c => c.colorIdx));
+    const nextIdx = COLORS.findIndex((_, i) => !usedIdxs.has(i));
+    cat = {
+      id: catId,
+      name: name,
+      group: 'themes',
+      colorIdx: nextIdx >= 0 ? nextIdx : (CATEGORIES.length % COLORS.length),
+      type: 'list-simple',
+      items: []
+    };
+    CATEGORIES.push(cat);
+    activeCatId = catId;
+  }
   const reader = new FileReader();
   reader.onload = async e => {
     try {
@@ -2018,6 +2087,34 @@ function importXlsxForActiveCat(input) {
   };
   reader.readAsArrayBuffer(file);
   input.value = '';
+}
+
+// Create a new empty custom list-simple category in the 'themes' group
+// ═══════════════════════════════════════════════════════════
+function createCustomCategory() {
+  const catName = prompt('Name für neue Kategorie (erscheint im Themes-Block neben Formula 1):');
+  if (!catName || !catName.trim()) return;
+  const name = catName.trim();
+  const catId = name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  if (CATEGORIES.find(c => c.id === catId)) {
+    alert('Eine Kategorie mit diesem Namen existiert bereits.');
+    return;
+  }
+  const usedIdxs = new Set(CATEGORIES.filter(c => c.group === 'themes').map(c => c.colorIdx));
+  const nextIdx = COLORS.findIndex((_, i) => !usedIdxs.has(i));
+  const cat = {
+    id: catId,
+    name: name,
+    group: 'themes',
+    colorIdx: nextIdx >= 0 ? nextIdx : (CATEGORIES.length % COLORS.length),
+    type: 'list-simple',
+    items: []
+  };
+  CATEGORIES.push(cat);
+  activeCatId = catId;
+  saveCategory(cat); // persist empty shell to Supabase immediately
+  switchView('categories');
+  renderCatView();
 }
 
 function exportJSON() {
