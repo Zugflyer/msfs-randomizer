@@ -466,6 +466,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="btn-toolbar-red" onclick="clearAllItems()">⊗ Clear all</button>
         <button class="btn-toolbar" onclick="document.getElementById('cat-xlsx-input').click()">⬆ Import XLSX</button>
         <input type="file" id="cat-xlsx-input" accept=".xlsx" style="display:none;" onchange="importXlsxForActiveCat(this)">
+        <button class="btn-toolbar-red" id="btn-delete-cat" onclick="deleteCustomCategory()" style="display:none;" title="Diese Kategorie löschen">🗑 Delete</button>
         <span class="row-count" id="row-count"></span>
       </div>
       <!-- Add row: appears ABOVE table when Add airport is clicked -->
@@ -1475,6 +1476,9 @@ function renderResults() {
 
   const GROUP_ORDER = ['themes', 'randoms', 'networks'];
   const THEMES_PER_ROW = 3;
+  // randoms: first 3 (ICAO, IATA, World) on row 1; remaining regionals on row 2
+  const RANDOMS_ROW1_IDS = ['rand_icao', 'rand_iata', 'rand_world'];
+  const RANDOMS_ROW2_IDS = ['rand_europe', 'rand_namerica', 'rand_samerica', 'rand_australia'];
 
   const byId = {};
   lastResults.forEach(r => { byId[r.cat.id] = r; });
@@ -1529,12 +1533,23 @@ function renderResults() {
     const cats = groups[group];
     if (!cats || cats.length === 0) return;
 
-    // themes: max THEMES_PER_ROW per row; other groups: all in one row
-    const perRow = (group === 'themes') ? THEMES_PER_ROW : cats.length;
-
-    const rows = [];
-    for (let i = 0; i < cats.length; i += perRow) {
-      rows.push(cats.slice(i, i + perRow));
+    // Determine rows for this group
+    let rows = [];
+    if (group === 'themes') {
+      for (let i = 0; i < cats.length; i += THEMES_PER_ROW) {
+        rows.push(cats.slice(i, i + THEMES_PER_ROW));
+      }
+    } else if (group === 'randoms') {
+      // Fixed layout: row1 = ICAO/IATA/World, row2 = regional coords
+      const row1 = cats.filter(c => RANDOMS_ROW1_IDS.includes(c.id));
+      const row2 = cats.filter(c => RANDOMS_ROW2_IDS.includes(c.id));
+      const extras = cats.filter(c => !RANDOMS_ROW1_IDS.includes(c.id) && !RANDOMS_ROW2_IDS.includes(c.id));
+      if (row1.length) rows.push(row1);
+      if (row2.length) rows.push(row2);
+      if (extras.length) rows.push(extras);
+    } else {
+      // networks and any others: all in one row
+      rows.push(cats);
     }
 
     const rowsHtml = rows.map((rowCats, rowIdx) => {
@@ -1741,6 +1756,9 @@ function renderCatTable() {
   const filterBar = document.getElementById('cat-filter-bar');
   if (!cat) { area.innerHTML=''; addRow.style.display='none'; filterBar.style.display='none'; return; }
   filterBar.style.display = 'flex';
+  // Show delete button only for custom (non-builtin) categories
+  const delBtn = document.getElementById('btn-delete-cat');
+  if (delBtn) delBtn.style.display = BUILTIN_CAT_IDS.has(activeCatId) ? 'none' : '';
   const items = getFilteredSortedItems(cat);
   const countEl = document.getElementById('row-count');
   if (countEl) countEl.textContent = `${items.length} of ${cat.items.length}`;
@@ -2055,34 +2073,93 @@ function importXlsxForActiveCat(input) {
       const wb = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
-      const firstRow = (rows[0]||[]).map(c => String(c).toLowerCase());
-      const hasHeader = firstRow.some(c => c.includes('icao')||c.includes('iata')||c.includes('name'));
+      if (!rows || rows.length === 0) { alert('Die Datei scheint leer zu sein.'); return; }
+
+      // Auto-detect header row and column roles
+      const firstRow = (rows[0]||[]).map(c => String(c).toLowerCase().trim());
+      const hasHeader = firstRow.some(c =>
+        c.includes('icao') || c.includes('iata') || c.includes('city') ||
+        c.includes('name') || c.includes('stadt') || c.includes('ort')
+      );
       const dataRows = hasHeader ? rows.slice(1) : rows;
+
+      // Detect column indices from header (or fall back to positional)
+      let colIcao = 0, colIata = 1, colName = 2, colCountry = 3;
+      if (hasHeader) {
+        firstRow.forEach((h, i) => {
+          if (h.includes('icao')) colIcao = i;
+          else if (h.includes('iata')) colIata = i;
+          else if (h.includes('city') || h.includes('name') || h.includes('stadt') || h.includes('ort')) colName = i;
+          else if (h.includes('country') || h.includes('land')) colCountry = i;
+        });
+      }
+
       let added = 0;
       dataRows.forEach(row => {
-        if (!row || (!row[0] && !row[2])) return;
-        const icao = String(row[0]||'').trim().toUpperCase();
-        const iata = String(row[1]||'').trim().toUpperCase();
-        const name = String(row[2]||'').trim();
-        const country = String(row[3]||'').trim();
-        if (!icao && !name) return;
-        if (cat.type==='text') cat.items.push({name: name||icao});
-        else if (cat.type==='list-simple') cat.items.push({icao, iata, name, country});
-        else cat.items.push({icao, diff:'', region:''});
+        if (!row || row.every(c => !c)) return;
+        let icao = String(row[colIcao]||'').trim().toUpperCase();
+        const iata = String(row[colIata]||'').trim().toUpperCase();
+        const nameRaw = String(row[colName]||'').trim();
+        const country = String(row[colCountry]||'').trim();
+
+        // If we have a city name but no ICAO → nearest airport lookup
+        if (!icao && nameRaw) {
+          // Try direct IATA lookup first
+          if (iata && iata.length === 3 && schedByIata[iata]) {
+            icao = schedByIata[iata][0];
+          } else {
+            // Search DB_SCHED for matching city/municipality name
+            const needle = nameRaw.toLowerCase();
+            let best = null;
+            for (const r of DB_SCHED) {
+              const city = (r[7] || r[2] || '').toLowerCase();
+              if (city === needle || city.startsWith(needle)) { best = r; break; }
+            }
+            if (!best) {
+              // Broader partial match
+              for (const r of DB_SCHED) {
+                const city = (r[7] || r[2] || '').toLowerCase();
+                if (city.includes(needle) || needle.includes(city)) { best = r; break; }
+              }
+            }
+            if (best) icao = best[0];
+          }
+        }
+
+        // If still no ICAO, try treating the name column as an ICAO code directly
+        if (!icao && nameRaw.length >= 3 && nameRaw.length <= 4 && /^[A-Z0-9]+$/i.test(nameRaw)) {
+          const tryCode = nameRaw.toUpperCase();
+          if (schedByCode[tryCode]) icao = tryCode;
+          else if (schedByIata[tryCode]) icao = schedByIata[tryCode][0];
+        }
+
+        const displayName = nameRaw || icao;
+        if (!icao && !displayName) return;
+
+        if (cat.type === 'text') {
+          cat.items.push({name: displayName});
+        } else if (cat.type === 'list-simple') {
+          // Enrich from DB if possible
+          const db = icao ? (schedByCode[icao] || null) : null;
+          cat.items.push({
+            icao: icao || '',
+            iata: iata || (db ? db[1]||'' : ''),
+            name: displayName,
+            country: country || (db ? (COUNTRY_NAMES[db[6]] || db[6] || '') : '')
+          });
+        } else {
+          cat.items.push({icao: icao||'', diff:'', region:''});
+        }
         added++;
       });
+
       await saveCategory(cat);
       renderCatTable();
-      const btn = document.querySelector('.btn-import-cat');
-      if (btn) {
-        const orig = btn.textContent;
-        btn.textContent = `✓ ${added} imported`;
-        btn.style.color = '#3fb950';
-        setTimeout(() => { btn.textContent=orig; btn.style.color=''; }, 3000);
-      }
+      setCloudStatus(`✓ ${added} importiert`, 'ok');
+      setTimeout(() => setCloudStatus('✓ Synced', 'ok'), 3000);
     } catch(err) {
       console.error('XLSX error:', err);
-      alert('Error reading file: ' + err.message);
+      alert('Fehler beim Lesen der Datei: ' + err.message);
     }
   };
   reader.readAsArrayBuffer(file);
@@ -2115,6 +2192,33 @@ function createCustomCategory() {
   saveCategory(cat); // persist empty shell to Supabase immediately
   switchView('categories');
   renderCatView();
+}
+
+// Delete a custom category (only non-builtin ones can be deleted)
+// ═══════════════════════════════════════════════════════════
+const BUILTIN_CAT_IDS = new Set([
+  'difficult','interesting','mountain','routings','formula1',
+  'rand_icao','rand_iata','rand_world','rand_europe','rand_namerica','rand_samerica','rand_australia',
+  'british','nordics','central_eu','france_belux','iberia','eastern_med'
+]);
+
+async function deleteCustomCategory() {
+  const cat = CATEGORIES.find(c => c.id === activeCatId);
+  if (!cat) return;
+  if (BUILTIN_CAT_IDS.has(cat.id)) { alert('Built-in Kategorien können nicht gelöscht werden.'); return; }
+  if (!confirm(`Kategorie "${cat.name}" wirklich löschen? Das kann nicht rückgängig gemacht werden.`)) return;
+  // Remove from Supabase
+  try {
+    await sb.from('categories').delete().eq('name', cat.id);
+  } catch(e) { console.warn('Supabase delete error:', e); }
+  // Remove from local CATEGORIES
+  const idx = CATEGORIES.findIndex(c => c.id === cat.id);
+  if (idx >= 0) CATEGORIES.splice(idx, 1);
+  // Switch to first available category
+  activeCatId = CATEGORIES.find(c => c.type === 'list-simple' || c.type === 'list')?.id || CATEGORIES[0]?.id || '';
+  renderCatView();
+  setCloudStatus('✓ Gelöscht', 'ok');
+  setTimeout(() => setCloudStatus('✓ Synced', 'ok'), 2000);
 }
 
 function exportJSON() {
