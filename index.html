@@ -2150,7 +2150,6 @@ const _logoExists = {};
 function airlineLogoHtml(icao) {
   const code = (icao || '').toUpperCase().trim();
   if (!code) return '';
-  const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
 
   function uploadBtn() {
     return '<div onclick="triggerLogoUpload(\'' + code + '\')" title="Logo hochladen für ' + code + '" '
@@ -2163,7 +2162,8 @@ function airlineLogoHtml(icao) {
   }
 
   function logoImg() {
-    return '<img src="' + ghUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
+    var url = getLogoUrl(code);
+    return '<img src="' + url + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
   }
 
   const wrapStyle = 'display:inline-flex;align-items:center;justify-content:center;'
@@ -2178,9 +2178,10 @@ function airlineLogoHtml(icao) {
     // Not yet checked — show button, then fetch
     setTimeout(function() {
       if (_logoExists[code] !== undefined) return; // already resolved
+      var ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
       fetch(ghUrl, { method: 'HEAD', cache: 'no-cache' })
         .then(function(r) {
-          const ct = r.headers.get('content-type') || '';
+          var ct = r.headers.get('content-type') || '';
           _logoExists[code] = r.ok && ct.indexOf('image/') === 0;
           if (_logoExists[code]) {
             document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
@@ -3357,6 +3358,7 @@ window.addEventListener('load', async () => {
   renderLegs();
   initDashFCLogo();
   await loadApOverrides();
+  await loadLogosFromSupabase();
   // API key modal backdrop
   var akm = document.getElementById('apikey-modal');
   if (akm) akm.addEventListener('click', function(e) { if (e.target===this) closeApiKeyDialog(); });
@@ -3372,50 +3374,76 @@ window.addEventListener('load', async () => {
 
 
 // ── Logo Upload via GitHub API ──
+// ── Logo storage via Supabase (no GitHub token needed) ──
+let _supabaseLogos = {}; // code → base64 data URL
+
+async function loadLogosFromSupabase() {
+  try {
+    var res = await sb.from('categories').select('items').eq('name','__airline_logos__').single();
+    if (res.data && res.data.items && typeof res.data.items === 'object') {
+      _supabaseLogos = res.data.items;
+      // Mark all loaded logos as existing
+      Object.keys(_supabaseLogos).forEach(function(code) { _logoExists[code] = true; });
+      console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' airline logo(s) from Supabase');
+    }
+  } catch(e) { console.warn('Logo load:', e); }
+}
+
+async function saveLogoToSupabase(code, dataUrl) {
+  _supabaseLogos[code] = dataUrl;
+  try {
+    await sb.from('categories').upsert({ name:'__airline_logos__', items: _supabaseLogos }, { onConflict:'name' });
+    return true;
+  } catch(e) {
+    console.error('Logo save failed:', e);
+    return false;
+  }
+}
+
+function getLogoUrl(code) {
+  // Supabase logos take priority, then fall back to GitHub-hosted
+  if (_supabaseLogos[code]) return _supabaseLogos[code];
+  return 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
+}
+
 async function uploadLogoToGitHub(icaoCode, file) {
-  const token = getGitHubToken();
-  if (!token) { alert('Please set your GitHub token in 🔑 settings first.'); return false; }
-  
-  const reader = new FileReader();
+  // Repurposed: now saves to Supabase instead of GitHub
   return new Promise(function(resolve) {
+    var reader = new FileReader();
     reader.onload = async function(e) {
-      const base64 = e.target.result.split(',')[1];
-      const path = 'logos/' + icaoCode.toUpperCase() + '.png';
-      const url = 'https://api.github.com/repos/Zugflyer/msfs-randomizer/contents/' + path;
-      
-      // Check if file exists (to get SHA for update)
-      let sha = null;
-      try {
-        const check = await fetch(url, { headers: { 'Authorization': 'token ' + token } });
-        if (check.ok) { const data = await check.json(); sha = data.sha; }
-      } catch(e) {}
-      
-      const body = { message: 'Add logo ' + icaoCode, content: base64 };
-      if (sha) body.sha = sha;
-      
-      const resp = await fetch(url, {
-        method: 'PUT',
-        headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
-      });
-      
-      if (resp.ok) {
-        // Mark as exists and swap all upload buttons to logo images immediately
-        const code = icaoCode.toUpperCase();
-        _logoExists[code] = true;
-        const ghUrl = 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png?t=' + Date.now();
-        document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
-          el.style.background = '#fff';
-          el.style.padding = '2px 4px';
-          el.style.border = '';
-          el.innerHTML = '<img src="' + ghUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
-        });
-        resolve(true);
-      } else {
-        const err = await resp.json();
-        alert('Upload failed: ' + (err.message || 'unknown error'));
-        resolve(false);
-      }
+      var dataUrl = e.target.result;
+      var code = icaoCode.toUpperCase();
+
+      // Resize to max 80px height to keep Supabase payload small
+      var img = new Image();
+      img.onload = async function() {
+        var canvas = document.createElement('canvas');
+        var maxH = 80;
+        var scale = Math.min(1, maxH / img.height);
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        var ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        var smallDataUrl = canvas.toDataURL('image/png');
+
+        var ok = await saveLogoToSupabase(code, smallDataUrl);
+        if (ok) {
+          _logoExists[code] = true;
+          // Swap all upload buttons to show the logo
+          document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
+            el.style.background = '#fff';
+            el.style.padding = '2px 4px';
+            el.style.border = '';
+            el.innerHTML = '<img src="' + smallDataUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
+          });
+          resolve(true);
+        } else {
+          alert('Upload failed — could not save to cloud.');
+          resolve(false);
+        }
+      };
+      img.onerror = function() { alert('Could not read image file.'); resolve(false); };
+      img.src = dataUrl;
     };
     reader.readAsDataURL(file);
   });
