@@ -1759,8 +1759,10 @@ function createCustomCategoryFlow() {
   const name = prompt('Enter a name for the new category:');
   if (!name || !name.trim()) return;
   pendingCustomCatName = name.trim();
-  // Trigger file picker
-  document.getElementById('custom-cat-xlsx-input').click();
+  // Reset and trigger file picker
+  const fileInput = document.getElementById('custom-cat-xlsx-input');
+  fileInput.value = ''; // Reset so same file can be selected again
+  fileInput.click();
 }
 
 async function handleCustomCatXlsx(event) {
