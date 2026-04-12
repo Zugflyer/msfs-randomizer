@@ -1976,7 +1976,7 @@ function renderCatTable() {
   filterBar.style.display = 'flex';
   if(toolbarRow) toolbarRow.style.display = 'flex';
   // Show delete button only for custom categories (not built-in)
-  if(deleteBtn) deleteBtn.style.display = BUILTIN_CAT_IDS.has(cat.id) ? 'none' : '';
+  if(deleteBtn) deleteBtn.style.display = '';
   const items = getFilteredSortedItems(cat);
   const countEl = document.getElementById('row-count');
   const countEl2 = document.getElementById('row-count2');
