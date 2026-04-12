@@ -2129,8 +2129,10 @@ function addCatItemManual() {
   } else if (cat.type === 'list-simple') {
     cat.items.push({ icao: ap[0], iata: ap[1]||'', name: ap[7]||ap[2], country: countryName(ap[6]) });
   } else if (cat.type === 'list-themed') {
-    // For themed categories, add with empty theme (user can edit later or re-import)
-    cat.items.push({ theme: '', icao: ap[0], iata: ap[1]||'', city: ap[7]||ap[2], country: countryName(ap[6]) });
+    // Ask for theme name before adding
+    const theme = prompt('Enter the theme for this airport (e.g. Factory, Administration, etc.):');
+    if (theme === null) return; // User cancelled
+    cat.items.push({ theme: theme.trim(), icao: ap[0], iata: ap[1]||'', city: ap[7]||ap[2], country: countryName(ap[6]) });
   }
   catAddSelectedAp = null;
   const inp = document.getElementById('in-search'); if (inp) inp.value = '';
