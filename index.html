@@ -474,14 +474,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input class="filter-input" id="cat-filter-input" placeholder="ICAO, city, country..." oninput="applyFilter()">
         <div style="flex:1;min-width:16px;"></div>
         <button class="btn-toolbar-purple" onclick="showCatOnMap()" title="Show airports from this category on a map">🗺 Show on Map</button>
-        <button class="btn-toolbar-purple" onclick="showAddCatItem()">⊕ Add airport</button>
         <button class="btn-toolbar-red" onclick="clearAllItems()">⊗ Clear all</button>
         <button class="btn-toolbar" onclick="document.getElementById('cat-xlsx-input').click()">⬆ Import XLSX</button>
         <input type="file" id="cat-xlsx-input" accept=".xlsx" style="display:none;" onchange="importXlsxForActiveCat(this)">
         <span class="row-count" id="row-count"></span>
       </div>
-      <!-- Add row: appears ABOVE table when Add airport is clicked -->
-      <div class="add-row" id="cat-add-row" style="display:none;border-bottom:1px solid var(--bdr);background:var(--surf);">
+      <!-- Add row: always visible above table -->
+      <div class="add-row" id="cat-add-row" style="display:flex;border-bottom:1px solid var(--bdr);background:var(--surf);">
         <!-- Airport search (list/list-simple) -->
         <div id="in-search-wrap" style="position:relative;flex:1;max-width:340px;">
           <input id="in-search" placeholder="Type ICAO, IATA or city name…" style="width:100%;font-size:12px;padding:5px 9px;border-radius:var(--r);border:1px solid var(--acc);background:var(--bg);color:var(--txt);font-family:var(--ff);"
@@ -493,7 +492,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           onkeydown="if(event.key==='Enter'){event.preventDefault();addCatItemManual();}" autocomplete="off">
         <input id="in-diff" placeholder="Diff (***)" style="width:80px;display:none;">
         <button class="btn-add" onclick="addCatItemManual()">+ Add</button>
-        <button class="btn-add" onclick="showAddCatItem()" style="background:transparent;color:var(--txt3);border-color:var(--bdr);">✕</button>
       </div>
       <div class="table-area" id="cat-table-area"></div>
 
