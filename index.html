@@ -470,8 +470,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         </button>
       </div>
       <div class="cat-tabs-row" id="cat-tabs"></div>
-      <!-- Toolbar row: Show on Map (left), Clear all + Import XLSX (right) -->
+      <!-- Toolbar row: Delete category (left), Show on Map, then Clear all + Import XLSX (right) -->
       <div id="cat-toolbar-row" style="display:none;padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;">
+        <button id="btn-delete-category" class="btn-toolbar-red" onclick="deleteActiveCategory()" title="Delete this category permanently">Delete category</button>
         <button class="btn-toolbar-purple" onclick="showCatOnMap()" title="Show airports from this category on a map">🗺 Show on Map</button>
         <div style="flex:1;"></div>
         <button class="btn-toolbar-red" onclick="clearAllItems()">⊗ Clear all</button>
@@ -1659,6 +1660,35 @@ function clearAllItems() {
   cat.items = [];
   saveCategory(cat);
   renderCatTable();
+}
+
+async function deleteActiveCategory() {
+  const cat = CATEGORIES.find(c => c.id===activeCatId); if (!cat) return;
+  // Confirm deletion
+  if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud\n\nThis cannot be undone!`)) return;
+  
+  // Remove from CATEGORIES array
+  const idx = CATEGORIES.findIndex(c => c.id === activeCatId);
+  if (idx !== -1) CATEGORIES.splice(idx, 1);
+  
+  // Delete from cloud
+  try {
+    setCloudStatus('Deleting…', 'ing');
+    const { error } = await sb.from('categories').delete().eq('name', activeCatId);
+    if (error) throw error;
+    setCloudStatus('✓ Synced', 'ok');
+  } catch(e) {
+    console.error('Delete error:', e);
+    setCloudStatus('⚠ Error', 'err');
+  }
+  
+  // Switch to first available category
+  const listCats = CATEGORIES.filter(c => c.type==='list'||c.type==='list-simple'||c.type==='text');
+  activeCatId = listCats.length > 0 ? listCats[0].id : '';
+  
+  // Re-render everything
+  renderCatView();
+  renderResults();
 }
 
 function sortBy(colKey) {
