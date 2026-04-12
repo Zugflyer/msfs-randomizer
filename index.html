@@ -500,7 +500,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div style="display:flex;align-items:center;gap:6px;border-left:1px solid var(--bdr2);padding-left:12px;">
           <div id="in-search-wrap" style="position:relative;">
             <input id="in-search" placeholder="Type ICAO, IATA or city name…" style="width:220px;font-size:12px;padding:6px 10px;border-radius:var(--r);border:1px solid #fff;background:var(--bg);color:var(--txt);font-family:var(--ff);"
-              oninput="catAddSearch(this.value)" autocomplete="off">
+              oninput="catAddSearch(this.value)" 
+              onkeydown="catAddKeydown(event)"
+              autocomplete="off">
             <div id="cat-add-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
           </div>
           <input id="in-freetext" placeholder="New routing entry…" style="display:none;width:200px;font-size:12px;padding:6px 10px;border-radius:var(--r);border:1px solid #fff;background:var(--bg);color:var(--txt);font-family:var(--ff);"
@@ -2068,6 +2070,36 @@ function catAddSelectAp(e, code) {
   if (inp) inp.value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}, ${countryName(ap[6])}`;
   const box = document.getElementById('cat-add-suggest');
   if (box) box.style.display = 'none';
+}
+
+function catAddKeydown(e) {
+  const box = document.getElementById('cat-add-suggest');
+  // Escape closes suggestions
+  if (e.key === 'Escape') {
+    if (box) box.style.display = 'none';
+    return;
+  }
+  // Tab selects first suggestion
+  if (e.key === 'Tab' && box && box.style.display !== 'none') {
+    const first = box.querySelector('.leg-sug-item');
+    if (first) {
+      e.preventDefault();
+      first.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+    }
+    return;
+  }
+  // Enter adds airport if selected, or selects first if not
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    if (catAddSelectedAp) {
+      addCatItemManual();
+    } else if (box && box.style.display !== 'none') {
+      const first = box.querySelector('.leg-sug-item');
+      if (first) {
+        first.dispatchEvent(new MouseEvent('mousedown', {bubbles: true}));
+      }
+    }
+  }
 }
 
 function addCatItemManual() {
