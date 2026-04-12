@@ -449,12 +449,17 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           <div class="results-row" id="row-r5"></div>
           <div class="results-row" id="row-r6"></div>
         </div>
+        <div class="row-group" id="custom-cat-row-group" style="display:none;">
+          <div class="results-row" id="row-custom"></div>
+        </div>
       </div>
     </div>
 
     <!-- CATEGORIES -->
     <div id="view-categories" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="data-panel">
       <div style="padding:8px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <button class="btn-toolbar-purple" onclick="createCustomCategoryFlow()" title="Create a new custom category with themed airports">Create new category</button>
+        <input type="file" id="custom-cat-xlsx-input" accept=".xlsx,.xls" style="display:none;" onchange="handleCustomCatXlsx(event)">
         <button id="btn-delete-category" class="btn-toolbar-red" onclick="deleteActiveCategory()" title="Delete this category permanently" style="display:none;">Delete category</button>
         <div style="flex:1;"></div>
         <button onclick="openApEditor()" title="Airport Base Data" style="padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);cursor:pointer;display:flex;align-items:center;justify-content:center;">
@@ -1076,6 +1081,8 @@ async function loadAllFromCloud() {
     if (data && data.length > 0) {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
+      
+      // Update existing categories
       CATEGORIES.forEach(cat => { 
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
           const cloudItems = byId[cat.id];
@@ -1087,12 +1094,31 @@ async function loadAllFromCloud() {
               const valid = cloudItems.every(i => i.icao && i.icao.length >= 3);
               if (valid) cat.items = cloudItems;
             }
-
           } else {
             cat.items = cloudItems;
           }
         }
       });
+      
+      // Load custom themed categories from cloud
+      const existingIds = new Set(CATEGORIES.map(c => c.id));
+      data.forEach(row => {
+        if (!existingIds.has(row.name) && Array.isArray(row.items) && row.items.length > 0) {
+          // Check if it looks like a themed category (items have theme field)
+          if (row.items[0] && row.items[0].theme !== undefined) {
+            const newCat = {
+              id: row.name,
+              name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+              group: 'custom',
+              colorIdx: CATEGORIES.length % 12,
+              type: 'list-themed',
+              items: row.items
+            };
+            CATEGORIES.push(newCat);
+          }
+        }
+      });
+      
       setCloudStatus('✓ Synced', 'ok');
     } else {
       setCloudStatus('First run…', 'ing');
@@ -1105,7 +1131,7 @@ async function loadAllFromCloud() {
 }
 
 async function pushDefaultsToCloud() {
-  const cats = CATEGORIES.filter(c => (c.type==='list'||c.type==='list-simple'||c.type==='text') && c.items.length > 0);
+  const cats = CATEGORIES.filter(c => (c.type==='list'||c.type==='list-simple'||c.type==='text'||c.type==='list-themed') && c.items.length > 0);
   for (const cat of cats) {
     await sb.from('categories').upsert({ name: cat.id, items: cat.items }, { onConflict: 'name' });
   }
@@ -1424,6 +1450,26 @@ function rollAll() {
       result.itemName = item.name || '';  // badge: F1 theme or list-simple name
       if (db) { result.lat = db[3]; result.lon = db[4]; }
     }
+    else if (cat.type === 'list-themed') {
+      let pool = cat.items;
+      if (activeContFilter.length > 0) {
+        const f = cat.items.filter(i => {
+          const db = i.icao ? schedByCode[i.icao] : null;
+          return db && activeContFilter.includes(db[5]);
+        });
+        if (f.length > 0) pool = f;
+      }
+      if (!pool.length) { result.text = '–'; return {cat, result}; }
+      const item = pool[Math.floor(Math.random() * pool.length)];
+      const db = item.icao ? (schedByCode[item.icao] || null) : null;
+      result.icao = item.icao || '';
+      result.iata = item.iata || (db ? db[1] : '') || '';
+      result.city = item.city || (db ? db[7] || db[2] : '');
+      result.country = item.country || (db ? countryName(db[6]) : '');
+      result.name = db ? db[2] : item.city || '';
+      result.itemName = item.theme || '';  // theme badge
+      if (db) { result.lat = db[3]; result.lon = db[4]; }
+    }
     else if (cat.type === 'text') {
       if (!cat.items.length) return {cat, result};
       result.text = cat.items[Math.floor(Math.random() * cat.items.length)].name;
@@ -1482,6 +1528,7 @@ function renderResults() {
   // Row 4: Random Europe, Random North America, Random South America, Random Oceania
   // Row 5: British Isles, Nordics, Central Europe
   // Row 6: France / Belux, Iberia, Eastern Mediterranean
+  // Row Custom: All custom themed categories
   const ROW_IDS = [
     ['difficult','interesting','routings'],
     ['mountain','formula1'],
@@ -1506,8 +1553,8 @@ function renderResults() {
       if (result.coord) inner = `<div class="res-coord">${result.coordLat}°, ${result.coordLon}°</div>` + inner;
       // Orange diff badge: ONLY for difficult airports
       if (result.diff && result.diff !== '' && cat.id === 'difficult') inner += `<div class="res-badge">${result.diff}</div>`;
-      // Orange theme badge: ONLY for formula1
-      if (result.itemName && cat.id === 'formula1') inner += `<div class="res-badge" style="background:rgba(240,136,62,.18);color:#f0883e;border-color:#f0883e;">${result.itemName}</div>`;
+      // Orange theme badge: for formula1 and list-themed categories
+      if (result.itemName && (cat.id === 'formula1' || cat.type === 'list-themed')) inner += `<div class="res-badge" style="background:rgba(240,136,62,.18);color:#f0883e;border-color:#f0883e;">${result.itemName}</div>`;
     }
     // Routing cards: clickable if text contains //
     if (result.text) {
@@ -1527,6 +1574,21 @@ function renderResults() {
     const cards = ids.map(id => byId[id] ? renderCard(byId[id]) : '').join('');
     el.innerHTML = cards || (i===0 ? '<div class="empty-state">Click "Next Flight" to roll.</div>' : '');
   });
+  
+  // Render custom themed categories
+  const customCats = CATEGORIES.filter(c => c.type === 'list-themed');
+  const customRowEl = document.getElementById('row-custom');
+  const customGroupEl = document.getElementById('custom-cat-row-group');
+  if (customCats.length > 0 && customRowEl && customGroupEl) {
+    customGroupEl.style.display = '';
+    const customCards = customCats.map(cat => {
+      const r = byId[cat.id];
+      return r ? renderCard(r) : '';
+    }).join('');
+    customRowEl.innerHTML = customCards;
+  } else if (customGroupEl) {
+    customGroupEl.style.display = 'none';
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1638,7 +1700,7 @@ function renderPins() {
 // CATEGORIES VIEW
 // ═══════════════════════════════════════════════════════════
 function renderCatView() {
-  const listCats = CATEGORIES.filter(c => c.type==='list'||c.type==='list-simple'||c.type==='text');
+  const listCats = CATEGORIES.filter(c => c.type==='list'||c.type==='list-simple'||c.type==='text'||c.type==='list-themed');
   document.getElementById('cat-tabs').innerHTML = listCats.map(c =>
     `<button class="cat-tab${c.id===activeCatId?' active':''}" onclick="selectCat('${c.id}')">${c.name}</button>`
   ).join('');
@@ -1689,12 +1751,124 @@ async function deleteActiveCategory() {
   }
   
   // Switch to first available category
-  const listCats = CATEGORIES.filter(c => c.type==='list'||c.type==='list-simple'||c.type==='text');
+  const listCats = CATEGORIES.filter(c => c.type==='list'||c.type==='list-simple'||c.type==='text'||c.type==='list-themed');
   activeCatId = listCats.length > 0 ? listCats[0].id : '';
   
   // Re-render everything
   renderCatView();
   renderResults();
+}
+
+// ═══════════════════════════════════════════════════════════
+// CUSTOM THEMED CATEGORIES
+// ═══════════════════════════════════════════════════════════
+let pendingCustomCatName = '';
+
+function createCustomCategoryFlow() {
+  const name = prompt('Enter a name for the new category:');
+  if (!name || !name.trim()) return;
+  pendingCustomCatName = name.trim();
+  // Trigger file picker
+  document.getElementById('custom-cat-xlsx-input').click();
+}
+
+async function handleCustomCatXlsx(event) {
+  const file = event.target.files[0];
+  if (!file || !pendingCustomCatName) { event.target.value = ''; return; }
+  
+  try {
+    const data = await file.arrayBuffer();
+    const workbook = XLSX.read(data, { type: 'array' });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    
+    if (!rows.length) { alert('No data found in XLSX'); event.target.value = ''; return; }
+    
+    // Process and enrich each row
+    const enrichedItems = [];
+    for (const row of rows) {
+      const theme = (row.Theme || row.theme || '').trim();
+      let icao = (row.ICAO || row.icao || '').trim().toUpperCase();
+      let iata = (row.IATA || row.iata || '').trim().toUpperCase();
+      let city = (row.City || row.city || row.CITY || '').trim();
+      let country = (row.Country || row.country || row.COUNTRY || '').trim();
+      
+      // Try to find airport in database
+      let foundAp = null;
+      if (icao && schedByCode[icao]) {
+        foundAp = schedByCode[icao];
+      } else if (iata) {
+        foundAp = DB_SCHED.find(ap => ap[1] === iata);
+      } else if (city) {
+        const cityUpper = city.toUpperCase();
+        foundAp = DB_SCHED.find(ap => 
+          (ap[7] && ap[7].toUpperCase().includes(cityUpper)) ||
+          (ap[2] && ap[2].toUpperCase().includes(cityUpper))
+        );
+      }
+      
+      // Enrich with found data
+      if (foundAp) {
+        if (!icao) icao = foundAp[0];
+        if (!iata) iata = foundAp[1] || '';
+        if (!city) city = foundAp[7] || foundAp[2] || '';
+        if (!country) country = countryName(foundAp[6]) || '';
+      }
+      
+      if (icao) { // Only add if we have an ICAO
+        enrichedItems.push({
+          theme: theme,
+          icao: icao,
+          iata: iata,
+          city: city,
+          country: country
+        });
+      }
+    }
+    
+    if (!enrichedItems.length) {
+      alert('No valid airports found in XLSX. Make sure at least ICAO, IATA or City is provided.');
+      event.target.value = '';
+      return;
+    }
+    
+    // Create category ID from name
+    const catId = pendingCustomCatName.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_');
+    
+    // Check if ID already exists
+    if (CATEGORIES.find(c => c.id === catId)) {
+      alert('A category with this name already exists.');
+      event.target.value = '';
+      return;
+    }
+    
+    // Create new category
+    const newCat = {
+      id: catId,
+      name: pendingCustomCatName,
+      group: 'custom',
+      colorIdx: CATEGORIES.length % 12,
+      type: 'list-themed',
+      items: enrichedItems
+    };
+    
+    CATEGORIES.push(newCat);
+    await saveCategory(newCat);
+    
+    // Switch to new category
+    activeCatId = catId;
+    renderCatView();
+    renderResults();
+    
+    alert(`Category "${pendingCustomCatName}" created with ${enrichedItems.length} airports!`);
+    
+  } catch(e) {
+    console.error('XLSX parse error:', e);
+    alert('Error reading XLSX file: ' + e.message);
+  }
+  
+  event.target.value = '';
+  pendingCustomCatName = '';
 }
 
 function sortBy(colKey) {
@@ -1707,7 +1881,7 @@ function getFilteredSortedItems(cat) {
   if (filterText) {
     items = items.filter(item => {
       const db = item.icao ? schedByCode[item.icao] : null;
-      return [item.icao||'', item.iata||'', item.name||'', item.country||'',
+      return [item.icao||'', item.iata||'', item.name||'', item.country||'', item.theme||'', item.city||'',
         db?db[1]:'', db?db[2]:'', db?db[7]:'', db?countryName(db[6]):'']
         .join(' ').toLowerCase().includes(filterText);
     });
@@ -1720,10 +1894,11 @@ function getFilteredSortedItems(cat) {
       const dbb = b.icao ? schedByCode[b.icao] : null;
       if(col==='icao'){va=a.icao||'';vb=b.icao||'';}
       else if(col==='iata'){va=a.iata||dba&&dba[1]||'';vb=b.iata||dbb&&dbb[1]||'';}
-      else if(col==='name'){va=a.name||dba&&dba[2]||'';vb=b.name||dbb&&dbb[2]||'';}
+      else if(col==='name'){va=a.name||a.city||dba&&dba[2]||'';vb=b.name||b.city||dbb&&dbb[2]||'';}
       else if(col==='country'){va=a.country||dba&&countryName(dba[6])||'';vb=b.country||dbb&&countryName(dbb[6])||'';}
       else if(col==='diff'){va=a.diff||'';vb=b.diff||'';}
       else if(col==='entry'){va=a.name||'';vb=b.name||'';}
+      else if(col==='theme'){va=a.theme||'';vb=b.theme||'';}
       return dir==='asc' ? va.localeCompare(vb,undefined,{sensitivity:'base'})
                          : -va.localeCompare(vb,undefined,{sensitivity:'base'});
     });
@@ -1812,6 +1987,27 @@ function renderCatTable() {
     document.getElementById('in-city').style.width = '130px';
     const sw3 = document.getElementById('in-search-wrap'); if(sw3) sw3.style.display='';
     const ft3 = document.getElementById('in-freetext'); if(ft3) ft3.style.display='none';
+  }
+  else if (cat.type === 'list-themed') {
+    area.innerHTML = `<table class="data-tbl"><thead><tr>
+      ${sortHeader('theme','Theme')}${sortHeader('icao','ICAO')}${sortHeader('iata','IATA')}${sortHeader('name','City')}${sortHeader('country','Country')}<th></th>
+    </tr></thead><tbody>
+      ${items.map((item, idx) => {
+        const safeRef = (item.icao||'').replace(/'/g,"\\'");
+        return `<tr>
+          <td style="color:var(--orange);">${item.theme||''}</td>
+          <td class="mono">${item.icao||'–'}</td>
+          <td class="mono">${item.iata||'–'}</td>
+          <td>${item.city||''}</td>
+          <td class="muted">${item.country||''}</td>
+          <td><button class="btn-del" onclick="deleteCatItemByRef('${cat.id}','${safeRef}')">✕</button></td>
+        </tr>`;
+      }).join('')}
+    </tbody></table>`;
+    // Hide add row for themed categories (they are imported via XLSX)
+    addRow.style.display = 'none';
+    const sw4 = document.getElementById('in-search-wrap'); if(sw4) sw4.style.display='none';
+    const ft4 = document.getElementById('in-freetext'); if(ft4) ft4.style.display='none';
   }
 }
 
