@@ -1745,12 +1745,10 @@ function renderCatTable() {
         </tr>`;
       }).join('')}
     </tbody></table>`;
-    addRow.style.display = 'flex';
-    ['in-iata','in-airport','in-region2'].forEach(id => document.getElementById(id).style.display='none');
-    document.getElementById('in-icao').style.display = '';
-    document.getElementById('in-diff').style.display = 'none';
-    document.getElementById('in-city').placeholder = 'Name';
-    document.getElementById('in-city').style.width = '200px';
+    // Show search wrap and hide freetext for list-simple
+    const sw2 = document.getElementById('in-search-wrap'); if(sw2) sw2.style.display='';
+    const ft2 = document.getElementById('in-freetext'); if(ft2) ft2.style.display='none';
+    const df2 = document.getElementById('in-diff'); if(df2) df2.style.display='none';
   }
   else if (cat.type === 'list') {
     area.innerHTML = `<table class="data-tbl"><thead><tr>
