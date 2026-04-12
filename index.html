@@ -449,9 +449,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           <div class="results-row" id="row-r5"></div>
           <div class="results-row" id="row-r6"></div>
         </div>
-        <div class="row-group" id="custom-cat-row-group" style="display:none;">
-          <div class="results-row" id="row-custom"></div>
-        </div>
       </div>
     </div>
 
@@ -1523,15 +1520,14 @@ function rollAll() {
 // ═══════════════════════════════════════════════════════════
 function renderResults() {
   // Row 1: Difficult Airports, Interesting Airports, Routings
-  // Row 2: Mountain Climbing, Formula 1
+  // Row 2: Mountain Climbing, Formula 1, + all custom themed categories
   // Row 3: Random World, Random ICAO, Random Non-Scheduled
   // Row 4: Random Europe, Random North America, Random South America, Random Oceania
   // Row 5: British Isles, Nordics, Central Europe
   // Row 6: France / Belux, Iberia, Eastern Mediterranean
-  // Row Custom: All custom themed categories
   const ROW_IDS = [
     ['difficult','interesting','routings'],
-    ['mountain','formula1'],
+    ['mountain','formula1'],  // custom themed will be appended here
     ['rand_world','rand_icao','rand_iata'],
     ['rand_europe','rand_namerica','rand_samerica','rand_australia'],
     ['british','nordics','central_eu'],
@@ -1568,27 +1564,20 @@ function renderResults() {
     return `<div class="res-card" onclick="openInRoster('${cat.id}')" style="cursor:pointer;" title="Click to plan this flight"><div class="res-cat"><span class="res-dot" style="background:${col}"></span>${cat.name}</div>${inner}</div>`;
   }
 
+  // Get custom themed category IDs
+  const customCatIds = CATEGORIES.filter(c => c.type === 'list-themed').map(c => c.id);
+
   ROW_IDS.forEach((ids, i) => {
     const el = document.getElementById('row-r' + (i+1));
     if (!el) return;
-    const cards = ids.map(id => byId[id] ? renderCard(byId[id]) : '').join('');
+    // For row 2 (index 1), append custom themed categories
+    let rowIds = ids;
+    if (i === 1) {
+      rowIds = [...ids, ...customCatIds];
+    }
+    const cards = rowIds.map(id => byId[id] ? renderCard(byId[id]) : '').join('');
     el.innerHTML = cards || (i===0 ? '<div class="empty-state">Click "Next Flight" to roll.</div>' : '');
   });
-  
-  // Render custom themed categories
-  const customCats = CATEGORIES.filter(c => c.type === 'list-themed');
-  const customRowEl = document.getElementById('row-custom');
-  const customGroupEl = document.getElementById('custom-cat-row-group');
-  if (customCats.length > 0 && customRowEl && customGroupEl) {
-    customGroupEl.style.display = '';
-    const customCards = customCats.map(cat => {
-      const r = byId[cat.id];
-      return r ? renderCard(r) : '';
-    }).join('');
-    customRowEl.innerHTML = customCards;
-  } else if (customGroupEl) {
-    customGroupEl.style.display = 'none';
-  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -2004,10 +1993,10 @@ function renderCatTable() {
         </tr>`;
       }).join('')}
     </tbody></table>`;
-    // Hide add row for themed categories (they are imported via XLSX)
-    addRow.style.display = 'none';
-    const sw4 = document.getElementById('in-search-wrap'); if(sw4) sw4.style.display='none';
+    // Show search wrap for adding airports (same as list-simple)
+    const sw4 = document.getElementById('in-search-wrap'); if(sw4) sw4.style.display='';
     const ft4 = document.getElementById('in-freetext'); if(ft4) ft4.style.display='none';
+    const df4 = document.getElementById('in-diff'); if(df4) df4.style.display='none';
   }
 }
 
@@ -2107,6 +2096,9 @@ function addCatItemManual() {
     cat.items.push({ icao: ap[0], diff, region: ap[5] || '' });
   } else if (cat.type === 'list-simple') {
     cat.items.push({ icao: ap[0], iata: ap[1]||'', name: ap[7]||ap[2], country: countryName(ap[6]) });
+  } else if (cat.type === 'list-themed') {
+    // For themed categories, add with empty theme (user can edit later or re-import)
+    cat.items.push({ theme: '', icao: ap[0], iata: ap[1]||'', city: ap[7]||ap[2], country: countryName(ap[6]) });
   }
   catAddSelectedAp = null;
   const inp = document.getElementById('in-search'); if (inp) inp.value = '';
