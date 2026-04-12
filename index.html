@@ -1775,6 +1775,33 @@ async function handleCustomCatXlsx(event) {
     
     if (!rows.length) { alert('No data found in XLSX'); event.target.value = ''; return; }
     
+    // Helper: find nearest airport with IATA code (commercial scheduled service)
+    function nearestIataAirport(lat, lon) {
+      let best = null, bestD = Infinity;
+      for (const r of DB_IATA_POOL) {
+        const d = Math.hypot(r[3] - lat, r[4] - lon);
+        if (d < bestD) { bestD = d; best = r; }
+      }
+      return best;
+    }
+    
+    // Helper: search airport by city name in database
+    function findAirportByCity(cityName) {
+      const q = cityName.toUpperCase();
+      // First try exact match on municipality or airport name
+      let found = DB_IATA_POOL.find(ap => 
+        (ap[7] && ap[7].toUpperCase() === q) ||
+        (ap[2] && ap[2].toUpperCase() === q)
+      );
+      if (found) return found;
+      // Then try partial match
+      found = DB_IATA_POOL.find(ap => 
+        (ap[7] && ap[7].toUpperCase().includes(q)) ||
+        (ap[2] && ap[2].toUpperCase().includes(q))
+      );
+      return found;
+    }
+    
     // Process and enrich each row
     const enrichedItems = [];
     let geocodeCount = 0;
@@ -1789,26 +1816,34 @@ async function handleCustomCatXlsx(event) {
       
       let foundAp = null;
       
-      // Variante 2: Location is a city name (not "Airport") - need to geocode and find nearest airport
+      // Variante 2: Location is a city name (not "Airport") - need to find nearest airport
       if (location && location.toLowerCase() !== 'airport' && !icao && !iata && !city) {
-        try {
-          // Geocode the location using OpenStreetMap Nominatim
-          const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`, {
-            headers: { 'User-Agent': 'MSFS-Randomizer/1.0' }
-          });
-          const geoData = await geoResponse.json();
-          
-          if (geoData && geoData.length > 0) {
-            const lat = parseFloat(geoData[0].lat);
-            const lon = parseFloat(geoData[0].lon);
-            // Find nearest scheduled airport
-            foundAp = nearestScheduled(lat, lon, null);
-            geocodeCount++;
-            // Small delay to respect Nominatim rate limits
+        // Extract city name (remove country suffix like ", LUX" or ", FRA")
+        const cityPart = location.split(',')[0].trim();
+        
+        // Step 1: Try to find airport by city name in database
+        foundAp = findAirportByCity(cityPart);
+        
+        // Step 2: If not found, try geocoding
+        if (!foundAp) {
+          try {
+            const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`, {
+              headers: { 'User-Agent': 'MSFS-Randomizer/1.0' }
+            });
+            const geoData = await geoResponse.json();
+            
+            if (geoData && geoData.length > 0) {
+              const lat = parseFloat(geoData[0].lat);
+              const lon = parseFloat(geoData[0].lon);
+              // Find nearest airport with IATA code (commercial)
+              foundAp = nearestIataAirport(lat, lon);
+              geocodeCount++;
+            }
+            // Respect Nominatim rate limit
             await new Promise(r => setTimeout(r, 1100));
+          } catch (geoErr) {
+            console.warn('Geocoding failed for:', location, geoErr);
           }
-        } catch (geoErr) {
-          console.warn('Geocoding failed for:', location, geoErr);
         }
       }
       // Variante 1: Location is "Airport" - find airport by ICAO/IATA/City
@@ -1816,13 +1851,9 @@ async function handleCustomCatXlsx(event) {
         if (icao && schedByCode[icao]) {
           foundAp = schedByCode[icao];
         } else if (iata) {
-          foundAp = DB_SCHED.find(ap => ap[1] === iata);
+          foundAp = DB_IATA_POOL.find(ap => ap[1] === iata);
         } else if (city) {
-          const cityUpper = city.toUpperCase();
-          foundAp = DB_SCHED.find(ap => 
-            (ap[7] && ap[7].toUpperCase().includes(cityUpper)) ||
-            (ap[2] && ap[2].toUpperCase().includes(cityUpper))
-          );
+          foundAp = findAirportByCity(city);
         }
       }
       
