@@ -1777,33 +1777,61 @@ async function handleCustomCatXlsx(event) {
     
     // Process and enrich each row
     const enrichedItems = [];
+    let geocodeCount = 0;
+    
     for (const row of rows) {
       const theme = (row.Theme || row.theme || '').trim();
+      const location = (row.Location || row.location || '').trim();
       let icao = (row.ICAO || row.icao || '').trim().toUpperCase();
       let iata = (row.IATA || row.iata || '').trim().toUpperCase();
       let city = (row.City || row.city || row.CITY || '').trim();
       let country = (row.Country || row.country || row.COUNTRY || '').trim();
       
-      // Try to find airport in database
       let foundAp = null;
-      if (icao && schedByCode[icao]) {
-        foundAp = schedByCode[icao];
-      } else if (iata) {
-        foundAp = DB_SCHED.find(ap => ap[1] === iata);
-      } else if (city) {
-        const cityUpper = city.toUpperCase();
-        foundAp = DB_SCHED.find(ap => 
-          (ap[7] && ap[7].toUpperCase().includes(cityUpper)) ||
-          (ap[2] && ap[2].toUpperCase().includes(cityUpper))
-        );
+      
+      // Variante 2: Location is a city name (not "Airport") - need to geocode and find nearest airport
+      if (location && location.toLowerCase() !== 'airport' && !icao && !iata && !city) {
+        try {
+          // Geocode the location using OpenStreetMap Nominatim
+          const geoResponse = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(location)}&limit=1`, {
+            headers: { 'User-Agent': 'MSFS-Randomizer/1.0' }
+          });
+          const geoData = await geoResponse.json();
+          
+          if (geoData && geoData.length > 0) {
+            const lat = parseFloat(geoData[0].lat);
+            const lon = parseFloat(geoData[0].lon);
+            // Find nearest scheduled airport
+            foundAp = nearestScheduled(lat, lon, null);
+            geocodeCount++;
+            // Small delay to respect Nominatim rate limits
+            await new Promise(r => setTimeout(r, 1100));
+          }
+        } catch (geoErr) {
+          console.warn('Geocoding failed for:', location, geoErr);
+        }
+      }
+      // Variante 1: Location is "Airport" - find airport by ICAO/IATA/City
+      else {
+        if (icao && schedByCode[icao]) {
+          foundAp = schedByCode[icao];
+        } else if (iata) {
+          foundAp = DB_SCHED.find(ap => ap[1] === iata);
+        } else if (city) {
+          const cityUpper = city.toUpperCase();
+          foundAp = DB_SCHED.find(ap => 
+            (ap[7] && ap[7].toUpperCase().includes(cityUpper)) ||
+            (ap[2] && ap[2].toUpperCase().includes(cityUpper))
+          );
+        }
       }
       
       // Enrich with found data
       if (foundAp) {
-        if (!icao) icao = foundAp[0];
-        if (!iata) iata = foundAp[1] || '';
-        if (!city) city = foundAp[7] || foundAp[2] || '';
-        if (!country) country = countryName(foundAp[6]) || '';
+        icao = foundAp[0];
+        iata = foundAp[1] || '';
+        city = foundAp[7] || foundAp[2] || '';
+        country = countryName(foundAp[6]) || '';
       }
       
       if (icao) { // Only add if we have an ICAO
@@ -1818,7 +1846,7 @@ async function handleCustomCatXlsx(event) {
     }
     
     if (!enrichedItems.length) {
-      alert('No valid airports found in XLSX. Make sure at least ICAO, IATA or City is provided.');
+      alert('No valid airports found in XLSX. Make sure at least ICAO, IATA, City or a Location name is provided.');
       event.target.value = '';
       return;
     }
@@ -1851,7 +1879,8 @@ async function handleCustomCatXlsx(event) {
     renderCatView();
     renderResults();
     
-    alert(`Category "${pendingCustomCatName}" created with ${enrichedItems.length} airports!`);
+    const geoMsg = geocodeCount > 0 ? ` (${geocodeCount} locations geocoded)` : '';
+    alert(`Category "${pendingCustomCatName}" created with ${enrichedItems.length} airports!${geoMsg}`);
     
   } catch(e) {
     console.error('XLSX parse error:', e);
