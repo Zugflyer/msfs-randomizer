@@ -1301,15 +1301,11 @@ function rollAll() {
   if (typeof DB_SCHED === 'undefined') { setTimeout(rollAll, 500); return; }
   if (navigator.vibrate) navigator.vibrate(10);
   
-  lastResults = CATEGORIES.filter(c => {
-    // For list types, need items
-    if (['list','list-simple','list-themed','text'].includes(c.type)) return c.items && c.items.length > 0;
-    // For rand types, always include
-    if (['rand-icao','rand-iata','rand-coord'].includes(c.type)) return true;
-    return false;
-  }).map(cat => {
+  lastResults = CATEGORIES.map(cat => {
     let result = {icao:'',city:'',country:'',iata:'',diff:'',itemName:'',lat:null,lon:null};
-    if (['list','list-simple','list-themed'].includes(cat.type)) {
+    
+    if (cat.type === 'list') {
+      if (!cat.items || !cat.items.length) return {cat, result};
       const item = cat.items[Math.floor(Math.random() * cat.items.length)];
       const db = item.icao ? schedByCode[item.icao] : null;
       result.icao = item.icao || '';
@@ -1317,18 +1313,44 @@ function rollAll() {
       result.city = item.city || item.name || (db ? db[7] || db[2] : '');
       result.country = item.country || (db ? countryName(db[6]) : '');
       result.diff = item.diff || '';
-      result.itemName = item.theme || (cat.id === 'formula1' ? item.name : '') || '';
       if (db) { result.lat = db[3]; result.lon = db[4]; }
-    } else if (cat.type === 'text') {
-      // Text type - just pick random text item
+    }
+    else if (cat.type === 'list-simple') {
+      if (!cat.items || !cat.items.length) return {cat, result};
+      const item = cat.items[Math.floor(Math.random() * cat.items.length)];
+      const db = item.icao ? schedByCode[item.icao] : null;
+      result.icao = item.icao || '';
+      result.iata = item.iata || (db ? db[1] : '') || '';
+      result.city = item.city || item.name || (db ? db[7] || db[2] : '');
+      result.country = item.country || (db ? countryName(db[6]) : '');
+      if (db) { result.lat = db[3]; result.lon = db[4]; }
+    }
+    else if (cat.type === 'list-themed') {
+      if (!cat.items || !cat.items.length) return {cat, result};
+      const item = cat.items[Math.floor(Math.random() * cat.items.length)];
+      const db = item.icao ? schedByCode[item.icao] : null;
+      result.icao = item.icao || '';
+      result.iata = item.iata || (db ? db[1] : '') || '';
+      result.city = item.city || item.name || (db ? db[7] || db[2] : '');
+      result.country = item.country || (db ? countryName(db[6]) : '');
+      result.itemName = item.theme || '';
+      if (db) { result.lat = db[3]; result.lon = db[4]; }
+    }
+    else if (cat.type === 'text') {
+      if (!cat.items || !cat.items.length) return {cat, result};
       const item = cat.items[Math.floor(Math.random() * cat.items.length)];
       result.itemName = item.name || item || '';
-    } else if (cat.type === 'rand-icao' || cat.type === 'rand-iata') {
-      const pool = cat.type === 'rand-iata' ? DB_SCHED.filter(r => r[1]) : DB_SCHED;
+    }
+    else if (cat.type === 'rand-icao') {
+      const ap = DB_SCHED[Math.floor(Math.random() * DB_SCHED.length)];
+      result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
+    }
+    else if (cat.type === 'rand-iata') {
+      const pool = DB_SCHED.filter(r => r[1]);
       const ap = pool[Math.floor(Math.random() * pool.length)];
       result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
-    } else if (cat.type === 'rand-coord' && cat.region) {
-      // Random within region bounds
+    }
+    else if (cat.type === 'rand-coord' && cat.region) {
       const r = cat.region;
       const pool = DB_SCHED.filter(ap => {
         const lat = ap[3], lon = ap[4];
@@ -1339,6 +1361,7 @@ function rollAll() {
         result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
       }
     }
+    
     return { cat, result };
   });
   renderResults();
