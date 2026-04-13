@@ -9,7 +9,9 @@
   <link rel="apple-touch-icon" href="apple-touch-icon.png">
   <title>MSFS Manager</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="https://unpkg.com/globe.gl@2.27.1/dist/globe.gl.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-arc@1.0.2/leaflet-arc.min.js"></script>
   <script src="airports.js" defer></script>
   <style>
 :root {
@@ -100,14 +102,14 @@ html, body {
   position: relative;
 }
 
-#globe-container {
+#map-container {
   width: 100%;
   flex-shrink: 0;
   position: relative;
-  background: #000;
+  background: var(--bg);
   transition: height 0.3s ease;
 }
-#globe-container canvas { touch-action: none; }
+#map-container .leaflet-container { background: var(--bg); }
 
 /* Swipeable Panel */
 #logbook-panel {
@@ -368,7 +370,7 @@ html, body {
       <!-- LOGBOOK -->
       <div class="tab-content active" id="tab-logbook">
         <div id="logbook-wrapper">
-          <div id="globe-container"></div>
+          <div id="map-container"></div>
           <div id="logbook-panel">
             <div class="panel-handle" id="panel-handle">
               <div class="panel-handle-bar"></div>
@@ -457,8 +459,7 @@ let logbookFlights = [];
 let lastResults = [];
 let _supabaseLogos = {}; // code → base64 data URL (same as desktop)
 let filterText = '';
-let myGlobe = null;
-let globeHeight = 0;
+let mapHeight = 0;
 let panelMinHeight = 180;
 
 // SUPABASE
@@ -517,7 +518,7 @@ async function loadAllFromCloud() {
 function switchTab(tabId) {
   document.querySelectorAll('.nav-item').forEach((btn, i) => btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId));
   document.querySelectorAll('.tab-content').forEach(tab => tab.classList.toggle('active', tab.id === 'tab-' + tabId));
-  if (tabId === 'logbook') { renderLogbook(); updateGlobeArcs(); resizeGlobe(); }
+  if (tabId === 'logbook') { renderLogbook(); updateMapRoutes(); setTimeout(() => { if (myMap) myMap.invalidateSize(); }, 100); }
   if (tabId === 'data') renderCatsList();
 }
 
@@ -525,7 +526,7 @@ function switchTab(tabId) {
 function initPanelSwipe() {
   const handle = document.getElementById('panel-handle');
   const panel = document.getElementById('logbook-panel');
-  const globeContainer = document.getElementById('globe-container');
+  const mapContainer = document.getElementById('map-container');
   const wrapper = document.getElementById('logbook-wrapper');
   
   let startY = 0;
@@ -535,108 +536,116 @@ function initPanelSwipe() {
   handle.addEventListener('touchstart', e => {
     isDragging = true;
     startY = e.touches[0].clientY;
-    startHeight = globeContainer.offsetHeight;
+    startHeight = mapContainer.offsetHeight;
     panel.style.transition = 'none';
-    globeContainer.style.transition = 'none';
+    mapContainer.style.transition = 'none';
   });
   
   document.addEventListener('touchmove', e => {
     if (!isDragging) return;
     const dy = e.touches[0].clientY - startY;
     const wrapperHeight = wrapper.offsetHeight;
-    let newGlobeHeight = startHeight + dy;
+    let newMapHeight = startHeight + dy;
     
-    const minGlobeHeight = 100;
-    const maxGlobeHeight = wrapperHeight - panelMinHeight;
-    newGlobeHeight = Math.max(minGlobeHeight, Math.min(maxGlobeHeight, newGlobeHeight));
+    const minMapHeight = 100;
+    const maxMapHeight = wrapperHeight - panelMinHeight;
+    newMapHeight = Math.max(minMapHeight, Math.min(maxMapHeight, newMapHeight));
     
-    globeContainer.style.height = newGlobeHeight + 'px';
-    globeHeight = newGlobeHeight;
+    mapContainer.style.height = newMapHeight + 'px';
+    mapHeight = newMapHeight;
   });
   
   document.addEventListener('touchend', () => {
     if (!isDragging) return;
     isDragging = false;
     panel.style.transition = '';
-    globeContainer.style.transition = '';
-    resizeGlobe();
+    mapContainer.style.transition = '';
+    if (myMap) myMap.invalidateSize();
   });
 }
 
-// GLOBE
-function initGlobe() {
-  const container = document.getElementById('globe-container');
+// MAP (Leaflet)
+let myMap = null;
+let routeLayer = null;
+let markerLayer = null;
+
+function initMap() {
+  const container = document.getElementById('map-container');
   const wrapper = document.getElementById('logbook-wrapper');
   
-  globeHeight = Math.round(wrapper.offsetHeight * 0.55);
-  container.style.height = globeHeight + 'px';
+  mapHeight = Math.round(wrapper.offsetHeight * 0.50);
+  container.style.height = mapHeight + 'px';
   
-  const w = container.offsetWidth;
-  const h = globeHeight;
-  
-  myGlobe = Globe()
-    // Natural Earth II - shows terrain + political style, good contrast
-    .globeImageUrl('https://upload.wikimedia.org/wikipedia/commons/thumb/e/e0/Large_World_Physical_Map.png/2560px-Large_World_Physical_Map.png')
-    .backgroundColor('rgba(0,0,0,0)')
-    .width(w)
-    .height(h)
-    // Use paths instead of arcs - draws ON the surface
-    .pathsData([])
-    .pathPoints(d => d.coords)
-    .pathPointLat(p => p[0])
-    .pathPointLng(p => p[1])
-    .pathColor(d => d.planned ? 'rgba(88,166,255,0.7)' : 'rgba(255,255,255,0.8)')
-    .pathStroke(1.5)
-    .pathTransitionDuration(0)
-    // Small points at airports
-    .pointColor(d => d.planned ? '#58a6ff' : '#ffffff')
-    .pointAltitude(0.005)
-    .pointRadius(0.2)
-    // Subtle atmosphere
-    .atmosphereColor('#4080a0')
-    .atmosphereAltitude(0.1)
-    (container);
-  
-  // Start over Europe
-  myGlobe.pointOfView({ lat: 48, lng: 10, altitude: 2.2 }, 0);
-  
-  // Controls
-  myGlobe.controls().enableZoom = true;
-  myGlobe.controls().enablePan = false;
-  myGlobe.controls().autoRotate = false;
-  myGlobe.controls().minDistance = 120;
-  myGlobe.controls().maxDistance = 400;
-}
-
-function resizeGlobe() {
-  if (!myGlobe) return;
-  const container = document.getElementById('globe-container');
-  myGlobe.width(container.offsetWidth);
-  myGlobe.height(container.offsetHeight);
-}
-
-function updateGlobeArcs() {
-  if (!myGlobe) return;
-  
-  const flights = getFilteredFlights();
-  
-  // Build paths - each path is an array of [lat, lng] coordinates
-  const paths = flights.filter(f => f.dep_lat && f.arr_lat).map(f => ({
-    coords: [
-      [f.dep_lat, f.dep_lon],
-      [f.arr_lat, f.arr_lon]
-    ],
-    planned: f.planned
-  }));
-  
-  // Points
-  const pointSet = new Map();
-  flights.forEach(f => {
-    if (f.dep_lat) pointSet.set(f.dep_icao, { lat: f.dep_lat, lng: f.dep_lon, planned: f.planned });
-    if (f.arr_lat) pointSet.set(f.arr_icao, { lat: f.arr_lat, lng: f.arr_lon, planned: f.planned });
+  myMap = L.map(container, {
+    center: [50, 10],
+    zoom: 4,
+    zoomControl: false,
+    attributionControl: false
   });
   
-  myGlobe.pathsData(paths).pointsData(Array.from(pointSet.values()));
+  // CartoDB Dark Matter - same as desktop
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18
+  }).addTo(myMap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+    maxZoom: 18
+  }).addTo(myMap);
+  
+  // Layers for routes and markers
+  routeLayer = L.layerGroup().addTo(myMap);
+  markerLayer = L.layerGroup().addTo(myMap);
+}
+
+function updateMapRoutes() {
+  if (!myMap) return;
+  
+  routeLayer.clearLayers();
+  markerLayer.clearLayers();
+  
+  const flights = getFilteredFlights();
+  const bounds = [];
+  
+  // Draw routes as great circle arcs
+  flights.filter(f => f.dep_lat && f.arr_lat).forEach(f => {
+    const color = f.planned ? '#58a6ff' : '#ffffff';
+    const opacity = f.planned ? 0.7 : 0.8;
+    
+    // Use leaflet-arc for great circle lines
+    const arc = L.Polyline.Arc([f.dep_lat, f.dep_lon], [f.arr_lat, f.arr_lon], {
+      vertices: 50,
+      color: color,
+      weight: 1.5,
+      opacity: opacity
+    });
+    arc.addTo(routeLayer);
+    
+    bounds.push([f.dep_lat, f.dep_lon]);
+    bounds.push([f.arr_lat, f.arr_lon]);
+  });
+  
+  // Draw airport markers
+  const pointSet = new Map();
+  flights.forEach(f => {
+    if (f.dep_lat) pointSet.set(f.dep_icao, { lat: f.dep_lat, lng: f.dep_lon, planned: f.planned, icao: f.dep_icao });
+    if (f.arr_lat) pointSet.set(f.arr_icao, { lat: f.arr_lat, lng: f.arr_lon, planned: f.planned, icao: f.arr_icao });
+  });
+  
+  pointSet.forEach(pt => {
+    const color = pt.planned ? '#58a6ff' : '#ffffff';
+    L.circleMarker([pt.lat, pt.lng], {
+      radius: 4,
+      fillColor: color,
+      fillOpacity: 0.9,
+      color: color,
+      weight: 1,
+      opacity: 0.9
+    }).addTo(markerLayer);
+  });
+  
+  // Fit bounds if we have routes
+  if (bounds.length > 0) {
+    myMap.fitBounds(bounds, { padding: [20, 20], maxZoom: 6 });
+  }
 }
 
 function getFilteredFlights() {
@@ -656,7 +665,7 @@ function getFilteredFlights() {
 function applyFilter() {
   filterText = document.getElementById('filter-input').value.trim();
   renderLogbook();
-  updateGlobeArcs();
+  updateMapRoutes();
 }
 
 // LOGBOOK
@@ -782,12 +791,12 @@ async function init() {
   
   await loadAllFromCloud();
   
-  initGlobe();
+  initMap();
   initPanelSwipe();
   renderLogbook();
-  updateGlobeArcs();
+  updateMapRoutes();
   
-  window.addEventListener('resize', resizeGlobe);
+  window.addEventListener('resize', () => { if (myMap) myMap.invalidateSize(); });
   
   document.getElementById('loading').classList.add('hidden');
 }
