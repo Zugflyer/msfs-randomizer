@@ -184,19 +184,28 @@ html, body {
 .flight-item.planned { border-left: 3px solid var(--blue); }
 .flight-item.flown { border-left: 3px solid #fff; }
 
+/* Logo container with light background for visibility */
 .flight-logo {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 4px;
-  background: var(--surf2);
+  background: #f0f0f0;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   flex-shrink: 0;
 }
-.flight-logo img { width: 100%; height: 100%; object-fit: contain; }
-.flight-logo-text { font-size: 8px; font-weight: 700; color: var(--txt3); }
+.flight-logo img { 
+  width: 100%; 
+  height: 100%; 
+  object-fit: contain;
+}
+.flight-logo-text { 
+  font-size: 8px; 
+  font-weight: 700; 
+  color: #666;
+}
 
 .flight-route { flex: 1; min-width: 0; }
 .flight-icaos {
@@ -446,7 +455,7 @@ let CATEGORIES = [
 let schedByCode = {};
 let logbookFlights = [];
 let lastResults = [];
-let airlineLogos = {};
+let _supabaseLogos = {}; // code → base64 data URL (same as desktop)
 let filterText = '';
 let myGlobe = null;
 let globeHeight = 0;
@@ -462,6 +471,14 @@ function setCloudStatus(msg, cls) {
   if (el) { el.textContent = msg; el.style.color = cls === 'ok' ? '#3fb950' : cls === 'err' ? '#f85149' : '#d29922'; }
 }
 
+// Logo URL - same logic as desktop: Supabase first, then GitHub
+function getLogoUrl(code) {
+  if (!code) return null;
+  code = code.toUpperCase();
+  if (_supabaseLogos[code]) return _supabaseLogos[code];
+  return 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
+}
+
 async function loadAllFromCloud() {
   setCloudStatus('Loading…', 'ing');
   try {
@@ -470,15 +487,27 @@ async function loadAllFromCloud() {
     if (data && data.length > 0) {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
+      
+      // Load logbook
       if (byId['__logbook__']) logbookFlights = byId['__logbook__'];
-      if (byId['__airline_logos__']) byId['__airline_logos__'].forEach(l => { airlineLogos[l.code] = l.url; });
+      
+      // Load airline logos - stored as OBJECT not array!
+      if (byId['__airline_logos__'] && typeof byId['__airline_logos__'] === 'object' && !Array.isArray(byId['__airline_logos__'])) {
+        _supabaseLogos = byId['__airline_logos__'];
+        console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' logos from Supabase');
+      }
+      
+      // Update categories
       CATEGORIES.forEach(cat => { if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; });
+      
+      // Load custom themed categories
       const existingIds = new Set(CATEGORIES.map(c => c.id));
       data.forEach(row => {
         if (!existingIds.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0 && row.items[0]?.theme !== undefined) {
           CATEGORIES.push({ id: row.name, name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), group: 'custom', colorIdx: CATEGORIES.length % 12, type: 'list-themed', items: row.items });
         }
       });
+      
       setCloudStatus('✓ Synced', 'ok');
     }
   } catch(e) { console.error(e); setCloudStatus('⚠ Offline', 'err'); }
@@ -517,7 +546,6 @@ function initPanelSwipe() {
     const wrapperHeight = wrapper.offsetHeight;
     let newGlobeHeight = startHeight + dy;
     
-    // Constraints
     const minGlobeHeight = 100;
     const maxGlobeHeight = wrapperHeight - panelMinHeight;
     newGlobeHeight = Math.max(minGlobeHeight, Math.min(maxGlobeHeight, newGlobeHeight));
@@ -540,7 +568,6 @@ function initGlobe() {
   const container = document.getElementById('globe-container');
   const wrapper = document.getElementById('logbook-wrapper');
   
-  // Initial height: 55% of wrapper
   globeHeight = Math.round(wrapper.offsetHeight * 0.55);
   container.style.height = globeHeight + 'px';
   
@@ -548,25 +575,25 @@ function initGlobe() {
   const h = globeHeight;
   
   myGlobe = Globe()
-    // Clean map texture - no satellite imagery
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
-    .backgroundColor('#000000')
+    // Natural Earth map - clearer landmasses like desktop
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
+    .backgroundColor('rgba(0,0,0,0)')
     .width(w)
     .height(h)
-    // Simple static arcs - no animation
-    .arcColor(d => d.planned ? '#58a6ff' : '#ffffff')
-    .arcStroke(0.8)
+    // Thin, subtle arcs - white for flown, blue for planned
+    .arcColor(d => d.planned ? 'rgba(88,166,255,0.6)' : 'rgba(255,255,255,0.7)')
+    .arcStroke(0.4)
     .arcDashLength(1)
     .arcDashGap(0)
     .arcDashAnimateTime(0)
     .arcsTransitionDuration(0)
-    // Points at airports
+    // Small points at airports
     .pointColor(d => d.planned ? '#58a6ff' : '#ffffff')
     .pointAltitude(0.005)
-    .pointRadius(0.25)
+    .pointRadius(0.2)
     // Subtle atmosphere
-    .atmosphereColor('#304878')
-    .atmosphereAltitude(0.12)
+    .atmosphereColor('#4080a0')
+    .atmosphereAltitude(0.1)
     (container);
   
   // Start over Europe
@@ -644,14 +671,13 @@ function renderLogbook() {
   }
   
   c.innerHTML = [...flights].reverse().map(f => {
-    // Try logos/ folder first, then Supabase airlineLogos
     const code = f.airline || '';
-    const logoUrl = code ? `logos/${code}.png` : null;
-    const fallbackUrl = airlineLogos[code];
+    const logoUrl = getLogoUrl(code);
     
-    const logoHtml = code
-      ? `<img src="${logoUrl}" onerror="this.onerror=null;${fallbackUrl ? `this.src='${fallbackUrl}'` : `this.style.display='none';this.parentNode.innerHTML='<span class=flight-logo-text>${code}</span>'`}" alt="${code}">`
-      : `<span class="flight-logo-text">–</span>`;
+    // If we have a logo URL, show image with onerror fallback to text
+    const logoHtml = logoUrl
+      ? `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${code}"><span class="flight-logo-text" style="display:none;">${code || '–'}</span>`
+      : `<span class="flight-logo-text">${code || '–'}</span>`;
     
     return `<div class="flight-item ${f.planned ? 'planned' : 'flown'}">
       <div class="flight-logo">${logoHtml}</div>
