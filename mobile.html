@@ -642,23 +642,58 @@ function updateMapRoutes() {
   
   // Draw routes as great circle arcs
   flights.filter(f => f.dep_lat && f.arr_lat).forEach(f => {
-    const color = f.planned ? '#58a6ff' : '#ffffff';
-    const opacity = f.planned ? 0.7 : 0.8;
+    // Dezentere Farben
+    const color = f.planned ? 'rgba(88,166,255,0.5)' : 'rgba(255,255,255,0.35)';
     
-    // Calculate great circle points
-    const points = greatCirclePoints(f.dep_lat, f.dep_lon, f.arr_lat, f.arr_lon, 50);
+    // Check if route crosses dateline (transpacific)
+    const lonDiff = Math.abs(f.dep_lon - f.arr_lon);
     
-    L.polyline(points, {
-      color: color,
-      weight: 1.5,
-      opacity: opacity
-    }).addTo(routeLayer);
+    if (lonDiff > 180) {
+      // Transpacific: split into two segments
+      // Adjust longitude to go the "short way" around
+      let depLon = f.dep_lon;
+      let arrLon = f.arr_lon;
+      
+      if (depLon < 0) depLon += 360;
+      if (arrLon < 0) arrLon += 360;
+      
+      const points = greatCirclePoints(f.dep_lat, depLon, f.arr_lat, arrLon, 80);
+      
+      // Split points at dateline
+      const segment1 = [];
+      const segment2 = [];
+      let crossedDateline = false;
+      
+      points.forEach((p, i) => {
+        let lng = p[1];
+        if (lng > 180) lng -= 360;
+        if (lng < -180) lng += 360;
+        
+        if (!crossedDateline) {
+          if (i > 0 && Math.abs(lng - (segment1[segment1.length-1]?.[1] || lng)) > 180) {
+            crossedDateline = true;
+            segment2.push([p[0], lng]);
+          } else {
+            segment1.push([p[0], lng]);
+          }
+        } else {
+          segment2.push([p[0], lng]);
+        }
+      });
+      
+      if (segment1.length > 1) L.polyline(segment1, { color, weight: 1.5 }).addTo(routeLayer);
+      if (segment2.length > 1) L.polyline(segment2, { color, weight: 1.5 }).addTo(routeLayer);
+    } else {
+      // Normal route
+      const points = greatCirclePoints(f.dep_lat, f.dep_lon, f.arr_lat, f.arr_lon, 50);
+      L.polyline(points, { color, weight: 1.5 }).addTo(routeLayer);
+    }
     
     bounds.push([f.dep_lat, f.dep_lon]);
     bounds.push([f.arr_lat, f.arr_lon]);
   });
   
-  // Draw airport markers
+  // Draw airport markers - auch dezenter
   const pointSet = new Map();
   flights.forEach(f => {
     if (f.dep_lat) pointSet.set(f.dep_icao, { lat: f.dep_lat, lng: f.dep_lon, planned: f.planned, icao: f.dep_icao });
@@ -668,12 +703,12 @@ function updateMapRoutes() {
   pointSet.forEach(pt => {
     const color = pt.planned ? '#58a6ff' : '#ffffff';
     L.circleMarker([pt.lat, pt.lng], {
-      radius: 4,
+      radius: 3,
       fillColor: color,
-      fillOpacity: 0.9,
+      fillOpacity: 0.6,
       color: color,
       weight: 1,
-      opacity: 0.9
+      opacity: 0.6
     }).addTo(markerLayer);
   });
   
