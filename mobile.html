@@ -443,6 +443,11 @@ html, body {
 .roll-button:active { transform: scale(0.98); }
 
 .results-list { 
+  display: flex;
+  flex-direction: column;
+  gap: 8px; 
+}
+.results-grid {
   display: grid; 
   grid-template-columns: 1fr 1fr; 
   gap: 8px; 
@@ -453,6 +458,9 @@ html, body {
   border-radius: var(--r);
   padding: 10px 12px;
   cursor: pointer;
+}
+.result-card-full {
+  grid-column: 1 / -1;
 }
 .result-card:active {
   background: var(--surf2);
@@ -1372,32 +1380,46 @@ function rollAll() {
 
 function renderResults() {
   const c = document.getElementById('results-list');
-  // Check if we have any results (icao for airports, or itemName for text type)
-  if (!lastResults.some(r => r.result.icao || r.result.itemName)) {
+  const validResults = lastResults.filter(r => r.result.icao || r.result.itemName);
+  
+  if (!validResults.length) {
     c.innerHTML = '';
     return;
   }
-  c.innerHTML = lastResults.filter(r => r.result.icao || r.result.itemName).map(({cat, result}) => {
+  
+  // Separate text type (Routings) from airport types
+  const textResults = validResults.filter(r => r.cat.type === 'text');
+  const airportResults = validResults.filter(r => r.cat.type !== 'text');
+  
+  let html = '';
+  
+  // Routings first - full width
+  textResults.forEach(({cat, result}) => {
     const col = COLORS[cat.colorIdx % COLORS.length];
-    
-    // Text type (Routings) - just show the text
-    if (cat.type === 'text') {
-      return `<div class="result-card">
-        <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
-        <div class="result-city" style="font-size:13px;font-weight:500;">${result.itemName}</div>
-      </div>`;
-    }
-    
-    // Airport type - show ICAO, city, country, badge
-    const badge = result.itemName || result.diff || '';
-    return `<div class="result-card" onclick="selectResult('${result.icao}')">
+    html += `<div class="result-card result-card-full">
       <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
-      <div class="result-icao">${result.icao}${result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : ''}</div>
-      <div class="result-city">${result.city}</div>
-      <div class="result-country">${result.country}</div>
-      ${badge ? `<div class="result-badge">${badge}</div>` : ''}
+      <div class="result-city" style="font-size:13px;font-weight:500;">${result.itemName}</div>
     </div>`;
-  }).join('');
+  });
+  
+  // Airport results in grid
+  if (airportResults.length > 0) {
+    html += '<div class="results-grid">';
+    airportResults.forEach(({cat, result}) => {
+      const col = COLORS[cat.colorIdx % COLORS.length];
+      const badge = result.itemName || result.diff || '';
+      html += `<div class="result-card" onclick="selectResult('${result.icao}')">
+        <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
+        <div class="result-icao">${result.icao}${result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : ''}</div>
+        <div class="result-city">${result.city}</div>
+        <div class="result-country">${result.country}</div>
+        ${badge ? `<div class="result-badge">${badge}</div>` : ''}
+      </div>`;
+    });
+    html += '</div>';
+  }
+  
+  c.innerHTML = html;
 }
 
 // DATA
