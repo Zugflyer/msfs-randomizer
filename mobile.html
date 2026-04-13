@@ -600,7 +600,10 @@ function initMap() {
   const container = document.getElementById('map-container');
   const wrapper = document.getElementById('logbook-wrapper');
   
-  mapHeight = Math.round(wrapper.offsetHeight * 0.50);
+  // Calculate height - use fallback if wrapper not ready
+  const wrapperH = wrapper.offsetHeight || window.innerHeight - 150;
+  mapHeight = Math.round(wrapperH * 0.50);
+  if (mapHeight < 150) mapHeight = 200;
   container.style.height = mapHeight + 'px';
   
   myMap = L.map(container, {
@@ -612,15 +615,20 @@ function initMap() {
   
   // CartoDB Dark Matter - same as desktop
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
-    maxZoom: 18
+    maxZoom: 18,
+    subdomains: 'abcd'
   }).addTo(myMap);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
-    maxZoom: 18
+    maxZoom: 18,
+    subdomains: 'abcd'
   }).addTo(myMap);
   
   // Layers for routes and markers
   routeLayer = L.layerGroup().addTo(myMap);
   markerLayer = L.layerGroup().addTo(myMap);
+  
+  // Force invalidate after a moment
+  setTimeout(() => { myMap.invalidateSize(); }, 200);
 }
 
 function updateMapRoutes() {
