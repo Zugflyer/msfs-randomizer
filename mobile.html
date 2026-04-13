@@ -520,6 +520,210 @@ html, body {
   color: var(--orange);
 }
 
+/* PLAN TAB */
+.plan-tab-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-bottom: calc(70px + var(--safe-bottom));
+}
+.plan-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bdr);
+}
+.plan-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+.plan-clear-btn {
+  font-size: 11px;
+  padding: 5px 10px;
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--txt3);
+  font-family: var(--ff);
+}
+.legs-list {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 14px;
+}
+.leg-card {
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.leg-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--bdr);
+  background: rgba(255,255,255,0.02);
+}
+.leg-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  background: #f0f0f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.leg-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.leg-logo-text {
+  font-size: 8px;
+  font-weight: 700;
+  color: #666;
+}
+.leg-airline-eqp {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.leg-airline-input, .leg-eqp-input {
+  background: transparent;
+  border: 1px solid var(--bdr);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 11px;
+  font-family: 'SF Mono', monospace;
+  color: var(--txt);
+  width: 70px;
+  text-transform: uppercase;
+}
+.leg-airline-input::placeholder, .leg-eqp-input::placeholder {
+  color: var(--txt3);
+}
+.leg-delete-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--txt3);
+  border-radius: 4px;
+}
+.leg-delete-btn:active {
+  color: #f85149;
+}
+.leg-airport {
+  display: flex;
+  align-items: center;
+  padding: 10px 12px;
+  gap: 10px;
+}
+.leg-airport-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--txt3);
+  width: 28px;
+}
+.leg-airport-info {
+  flex: 1;
+}
+.leg-airport-icao {
+  font-family: 'SF Mono', monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--acc2);
+}
+.leg-airport-iata {
+  font-size: 12px;
+  color: var(--blue);
+  margin-left: 4px;
+}
+.leg-airport-city {
+  font-size: 11px;
+  color: var(--txt2);
+  margin-top: 2px;
+}
+.leg-time-input {
+  width: 60px;
+  background: transparent;
+  border: 1px solid var(--bdr);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-family: 'SF Mono', monospace;
+  color: var(--txt);
+  text-align: center;
+}
+.leg-time-input::placeholder {
+  color: var(--txt3);
+}
+.leg-charts-btn {
+  padding: 6px 10px;
+  font-size: 10px;
+  background: rgba(88,166,255,0.15);
+  color: var(--blue);
+  border: none;
+  border-radius: 4px;
+  font-family: var(--ff);
+}
+.leg-arrow {
+  display: flex;
+  justify-content: center;
+  padding: 4px 0;
+  color: var(--txt3);
+}
+.leg-insert-btns {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+.leg-insert-btn {
+  font-size: 10px;
+  padding: 5px 12px;
+  border: 1px solid var(--bdr);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--txt3);
+  font-family: var(--ff);
+}
+.leg-insert-btn:active {
+  background: var(--surf2);
+}
+.plan-footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--bdr);
+}
+.add-to-logbook-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border: none;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, #3fb950 0%, #2ea043 100%);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  font-family: var(--ff);
+}
+.add-to-logbook-btn:active {
+  transform: scale(0.98);
+}
+
 /* DATA */
 .data-tab-content { padding: 14px; padding-bottom: calc(70px + var(--safe-bottom)); overflow-y: auto; }
 .cat-section { margin-bottom: 20px; }
@@ -686,6 +890,27 @@ html, body {
           <div class="cat-items-list" id="cat-items-list"></div>
         </div>
       </div>
+      
+      <!-- PLAN -->
+      <div class="tab-content" id="tab-plan">
+        <div class="plan-tab-content">
+          <div class="plan-header">
+            <span class="plan-title">Flight Plan</span>
+            <button class="plan-clear-btn" onclick="clearAllLegs()">Clear All</button>
+          </div>
+          <div class="legs-list" id="legs-list">
+            <div class="empty-state"><div class="empty-state-icon">✈️</div><div class="empty-state-text">No legs planned. Use "Plan Legs" in the Next tab.</div></div>
+          </div>
+          <div class="plan-footer" id="plan-footer" style="display:none;">
+            <button class="add-to-logbook-btn" onclick="addLegsToLogbook()">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
+              Add to Logbook
+            </button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <nav class="bottom-nav">
@@ -700,6 +925,14 @@ html, body {
           <path d="M5 12h14M12 5l7 7-7 7"/>
         </svg>
         Next
+      </button>
+      <button class="nav-item" onclick="switchTab('plan')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+          <rect x="9" y="3" width="6" height="4" rx="1"/>
+          <path d="M9 12h6M9 16h6"/>
+        </svg>
+        Plan
       </button>
       <button class="nav-item" onclick="switchTab('data')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
@@ -914,10 +1147,11 @@ async function loadAllFromCloud() {
 
 // NAV
 function switchTab(tabId) {
-  document.querySelectorAll('.nav-item').forEach((btn, i) => btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId));
+  document.querySelectorAll('.nav-item').forEach((btn, i) => btn.classList.toggle('active', ['logbook','roll','plan','data'][i] === tabId));
   document.querySelectorAll('.tab-content').forEach(tab => tab.classList.toggle('active', tab.id === 'tab-' + tabId));
   if (tabId === 'logbook') { renderLogbook(); updateMapRoutes(); setTimeout(() => { if (myMap) myMap.invalidateSize(); }, 100); }
   if (tabId === 'roll') { initNextFlightTab(); }
+  if (tabId === 'plan') { renderLegs(); }
   if (tabId === 'data') renderCatsList();
 }
 
@@ -1127,16 +1361,272 @@ function showFlightOnMap() {
   }, 100);
 }
 
-// Plan legs (placeholder)
+// ═══════════════════════════════════════════════════════════
+// PLAN LEGS
+// ═══════════════════════════════════════════════════════════
+let legs = [];
+
 function planLegs() {
-  const dep = document.getElementById('dep-input').value.toUpperCase().trim();
-  const arr = document.getElementById('arr-input').value.toUpperCase().trim();
-  if (!dep || !arr) {
+  const depIcao = document.getElementById('dep-input').value.toUpperCase().trim();
+  const arrIcao = document.getElementById('arr-input').value.toUpperCase().trim();
+  
+  if (!depIcao || !arrIcao) {
     alert('Please enter both DEP and ARR airports');
     return;
   }
-  // TODO: Plan legs functionality
-  alert('Plan legs: ' + dep + ' → ' + arr);
+  
+  const depAp = schedByCode[depIcao] || null;
+  const arrAp = schedByCode[arrIcao] || null;
+  
+  // Create leg from DEP to ARR
+  legs = [{
+    dep: depAp,
+    arr: arrAp,
+    airline: '',
+    aircraft: '',
+    depTime: '',
+    arrTime: ''
+  }];
+  
+  // Check if there's a Routings result with multiple legs
+  if (lastResults) {
+    const routingsResult = lastResults.find(r => r.cat.type === 'text' && r.result.itemName);
+    if (routingsResult && routingsResult.result.itemName) {
+      const parsed = parseRoutingString(routingsResult.result.itemName);
+      if (parsed && parsed.legs.length > 0) {
+        legs = parsed.legs.map(l => ({
+          dep: schedByCode[l.dep] || null,
+          arr: schedByCode[l.arr] || null,
+          airline: parsed.airline || '',
+          aircraft: parsed.aircraft || '',
+          depTime: '',
+          arrTime: ''
+        }));
+      }
+    }
+  }
+  
+  // Switch to Plan tab
+  switchTab('plan');
+}
+
+// Parse routing string like "LH B747 // EDDF-KJFK-KLAX"
+function parseRoutingString(str) {
+  if (!str) return null;
+  
+  // Try to match pattern: AIRLINE EQP // ICAO-ICAO-ICAO or AIRLINE EQP → ICAO-ICAO
+  const match = str.match(/^([A-Z0-9]{2,3})?\s*([A-Z0-9]{2,6})?\s*(?:\/\/|→|->)?\s*(.+)$/i);
+  if (!match) return null;
+  
+  const airline = (match[1] || '').toUpperCase();
+  const aircraft = (match[2] || '').toUpperCase();
+  const routePart = match[3] || '';
+  
+  // Split by - or → or /
+  const icaos = routePart.split(/[-→\/]/).map(s => s.trim().toUpperCase()).filter(s => s.length >= 3 && s.length <= 4);
+  
+  if (icaos.length < 2) return null;
+  
+  const legs = [];
+  for (let i = 0; i < icaos.length - 1; i++) {
+    legs.push({ dep: icaos[i], arr: icaos[i + 1] });
+  }
+  
+  return { airline, aircraft, legs };
+}
+
+function renderLegs() {
+  const container = document.getElementById('legs-list');
+  const footer = document.getElementById('plan-footer');
+  
+  if (!legs || legs.length === 0) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✈️</div><div class="empty-state-text">No legs planned. Use "Plan Legs" in the Next tab.</div></div>';
+    footer.style.display = 'none';
+    return;
+  }
+  
+  footer.style.display = 'block';
+  
+  let html = '';
+  legs.forEach((leg, i) => {
+    const depIcao = leg.dep ? leg.dep[0] : '????';
+    const depIata = leg.dep ? (leg.dep[1] || '') : '';
+    const depCity = leg.dep ? (leg.dep[7] || leg.dep[2] || '') : '';
+    const arrIcao = leg.arr ? leg.arr[0] : '????';
+    const arrIata = leg.arr ? (leg.arr[1] || '') : '';
+    const arrCity = leg.arr ? (leg.arr[7] || leg.arr[2] || '') : '';
+    
+    const logoUrl = leg.airline ? getLogoUrl(leg.airline) : null;
+    const logoHtml = logoUrl 
+      ? `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${leg.airline}"><span class="leg-logo-text" style="display:none;">${leg.airline || '–'}</span>`
+      : `<span class="leg-logo-text">${leg.airline || '–'}</span>`;
+    
+    html += `<div class="leg-card">
+      <div class="leg-header">
+        <div class="leg-logo" id="leg-logo-${i}">${logoHtml}</div>
+        <div class="leg-airline-eqp">
+          <input type="text" class="leg-airline-input" id="leg-al-${i}" placeholder="Airline" value="${leg.airline}" maxlength="3" oninput="updateLegAirline(${i}, this.value)">
+          <input type="text" class="leg-eqp-input" id="leg-ac-${i}" placeholder="EQP" value="${leg.aircraft}" maxlength="6" oninput="updateLegAircraft(${i}, this.value)">
+        </div>
+        <button class="leg-delete-btn" onclick="deleteLeg(${i})">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          </svg>
+        </button>
+      </div>
+      <div class="leg-airport">
+        <div class="leg-airport-label">DEP</div>
+        <div class="leg-airport-info">
+          <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-iata">/ ${depIata}</span>` : ''}
+          <div class="leg-airport-city">${depCity}</div>
+        </div>
+        <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)">
+        <button class="leg-charts-btn" onclick="openCharts('${depIcao}')">Charts</button>
+      </div>
+      <div class="leg-arrow">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 5v14M5 12l7 7 7-7"/>
+        </svg>
+      </div>
+      <div class="leg-airport">
+        <div class="leg-airport-label">ARR</div>
+        <div class="leg-airport-info">
+          <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-iata">/ ${arrIata}</span>` : ''}
+          <div class="leg-airport-city">${arrCity}</div>
+        </div>
+        <input type="text" class="leg-time-input" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" oninput="updateLegArrTime(${i}, this.value)">
+        <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')">Charts</button>
+      </div>
+    </div>
+    <div class="leg-insert-btns">
+      <button class="leg-insert-btn" onclick="insertLegAfter(${i})">+ Insert Leg</button>
+      ${i === legs.length - 1 ? `<button class="leg-insert-btn" onclick="addLegAtEnd()">+ Add Leg</button>` : ''}
+    </div>`;
+  });
+  
+  container.innerHTML = html;
+}
+
+function updateLegAirline(i, val) {
+  const code = val.toUpperCase().trim();
+  legs[i].airline = code;
+  const logoDiv = document.getElementById('leg-logo-' + i);
+  if (logoDiv && code.length >= 2) {
+    const logoUrl = getLogoUrl(code);
+    logoDiv.innerHTML = logoUrl 
+      ? `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${code}"><span class="leg-logo-text" style="display:none;">${code}</span>`
+      : `<span class="leg-logo-text">${code}</span>`;
+  }
+}
+
+function updateLegAircraft(i, val) {
+  legs[i].aircraft = val.toUpperCase().trim();
+}
+
+function updateLegDepTime(i, val) {
+  legs[i].depTime = val;
+}
+
+function updateLegArrTime(i, val) {
+  legs[i].arrTime = val;
+}
+
+function deleteLeg(i) {
+  if (legs.length === 1) {
+    legs = [];
+  } else {
+    legs.splice(i, 1);
+    // Update connections
+    if (i > 0 && i < legs.length) {
+      legs[i].dep = legs[i - 1].arr;
+    }
+  }
+  renderLegs();
+}
+
+function insertLegAfter(i) {
+  const prevArr = legs[i].arr;
+  const newLeg = {
+    dep: prevArr,
+    arr: null,
+    airline: legs[i].airline,
+    aircraft: legs[i].aircraft,
+    depTime: '',
+    arrTime: ''
+  };
+  legs.splice(i + 1, 0, newLeg);
+  renderLegs();
+}
+
+function addLegAtEnd() {
+  const lastLeg = legs[legs.length - 1];
+  const newLeg = {
+    dep: lastLeg ? lastLeg.arr : null,
+    arr: null,
+    airline: lastLeg ? lastLeg.airline : '',
+    aircraft: lastLeg ? lastLeg.aircraft : '',
+    depTime: '',
+    arrTime: ''
+  };
+  legs.push(newLeg);
+  renderLegs();
+}
+
+function clearAllLegs() {
+  if (legs.length === 0 || confirm('Clear all legs?')) {
+    legs = [];
+    renderLegs();
+  }
+}
+
+function openCharts(icao) {
+  if (icao && icao !== '????') {
+    window.open(`https://chartfox.org/${icao}`, '_blank');
+  }
+}
+
+function addLegsToLogbook() {
+  if (legs.length === 0) return;
+  
+  let added = 0;
+  legs.forEach(leg => {
+    if (leg.dep && leg.arr) {
+      const flight = {
+        dep: leg.dep[7] || leg.dep[2] || '',
+        dep_icao: leg.dep[0],
+        dep_iata: leg.dep[1] || '',
+        dep_lat: leg.dep[3],
+        dep_lon: leg.dep[4],
+        arr: leg.arr[7] || leg.arr[2] || '',
+        arr_icao: leg.arr[0],
+        arr_iata: leg.arr[1] || '',
+        arr_lat: leg.arr[3],
+        arr_lon: leg.arr[4],
+        airline: leg.airline,
+        aircraft: leg.aircraft,
+        planned: true
+      };
+      logbookFlights.push(flight);
+      added++;
+    }
+  });
+  
+  if (added > 0) {
+    // Save to cloud
+    saveLogbookToCloud();
+    alert(`Added ${added} flight${added > 1 ? 's' : ''} to logbook as planned.`);
+    legs = [];
+    renderLegs();
+    switchTab('logbook');
+  } else {
+    alert('No complete legs to add (both DEP and ARR required).');
+  }
+}
+
+async function saveLogbookToCloud() {
+  try {
+    await sb.from('categories').upsert({ name: '__logbook__', items: logbookFlights }, { onConflict: 'name' });
+  } catch(e) { console.error('Save failed:', e); }
 }
 
 // PANEL SWIPE
