@@ -8,15 +8,14 @@
   <meta name="theme-color" content="#0d1117">
   <title>MSFS Randomizer</title>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/globe.gl@2.27.1/dist/globe.gl.min.js"></script>
   <script src="airports.js" defer></script>
   <style>
 :root {
   --bg: #0d1117;
   --surf: #161b22;
   --surf2: #21262d;
-  --surf3: #30363d;
   --bdr: #30363d;
-  --bdr2: #484f58;
   --txt: #e6edf3;
   --txt2: #8b949e;
   --txt3: #6e7681;
@@ -24,14 +23,12 @@
   --acc2: #a78bfa;
   --green: #3fb950;
   --orange: #f0883e;
-  --red: #f85149;
   --blue: #58a6ff;
   --r: 12px;
-  --ff: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --ff: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
 }
-
 * { box-sizing: border-box; margin: 0; padding: 0; }
 html, body { 
   height: 100%; 
@@ -40,111 +37,122 @@ html, body {
   color: var(--txt); 
   font-family: var(--ff);
   -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
 }
-
 .app {
   display: flex;
   flex-direction: column;
   height: 100%;
   padding-top: var(--safe-top);
 }
-
 .header {
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--bdr);
+  padding: 10px 16px;
   background: var(--surf);
+  border-bottom: 1px solid var(--bdr);
+  z-index: 10;
 }
-.header-title { font-size: 17px; font-weight: 600; }
-.header-status { font-size: 12px; color: var(--green); }
+.header-title { font-size: 16px; font-weight: 600; }
+.header-status { font-size: 11px; color: var(--green); }
 
-.main {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-}
+.main { flex: 1; overflow: hidden; position: relative; }
 .tab-content {
-  position: absolute;
-  inset: 0;
-  overflow-y: auto;
-  -webkit-overflow-scrolling: touch;
+  position: absolute; inset: 0;
   display: none;
+  flex-direction: column;
 }
-.tab-content.active { display: flex; flex-direction: column; }
+.tab-content.active { display: flex; }
 
 .bottom-nav {
   flex-shrink: 0;
   display: flex;
   justify-content: space-around;
-  padding: 8px 0 calc(8px + var(--safe-bottom));
+  padding: 6px 0 calc(6px + var(--safe-bottom));
   background: var(--surf);
   border-top: 1px solid var(--bdr);
+  z-index: 10;
 }
 .nav-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 8px 16px;
+  gap: 3px;
+  padding: 6px 14px;
   border: none;
   background: none;
   color: var(--txt3);
-  font-size: 10px;
+  font-size: 9px;
   font-family: var(--ff);
 }
 .nav-item.active { color: var(--acc2); }
-.nav-item svg { width: 24px; height: 24px; }
+.nav-item svg { width: 22px; height: 22px; }
 
 /* LOGBOOK */
 #globe-container {
   width: 100%;
-  height: 200px;
+  height: 55vh;
   flex-shrink: 0;
-  background: var(--bg);
+  position: relative;
+  background: #000;
 }
-#globe-canvas { width: 100%; height: 100%; display: block; }
+#globe-container canvas { touch-action: none; }
 
-.logbook-stats {
+.logbook-filter {
   display: flex;
-  justify-content: space-around;
-  padding: 12px 16px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
   background: var(--surf);
   border-bottom: 1px solid var(--bdr);
   flex-shrink: 0;
 }
-.stat-item { text-align: center; }
-.stat-value { font-size: 20px; font-weight: 700; color: var(--acc2); }
-.stat-label { font-size: 10px; color: var(--txt3); text-transform: uppercase; }
+.filter-input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--bdr);
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--txt);
+  font-size: 13px;
+  font-family: var(--ff);
+  outline: none;
+}
+.filter-input:focus { border-color: var(--acc); }
+.filter-input::placeholder { color: var(--txt3); }
+.filter-stats {
+  font-size: 11px;
+  color: var(--txt3);
+  white-space: nowrap;
+}
 
 .logbook-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px;
-  padding-bottom: calc(80px + var(--safe-bottom));
+  -webkit-overflow-scrolling: touch;
+  padding: 8px;
+  padding-bottom: calc(70px + var(--safe-bottom));
 }
 
 .flight-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
   background: var(--surf);
   border: 1px solid var(--bdr);
-  border-radius: var(--r);
-  margin-bottom: 8px;
+  border-radius: 10px;
+  margin-bottom: 6px;
 }
 .flight-item.planned { border-left: 3px solid var(--blue); }
-.flight-item.flown { border-left: 3px solid var(--green); }
+.flight-item.flown { border-left: 3px solid #fff; }
 
 .flight-logo {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 6px;
   background: var(--surf2);
   display: flex;
@@ -154,22 +162,22 @@ html, body {
   flex-shrink: 0;
 }
 .flight-logo img { width: 100%; height: 100%; object-fit: contain; }
-.flight-logo-text { font-size: 10px; font-weight: 700; color: var(--txt3); }
+.flight-logo-text { font-size: 9px; font-weight: 700; color: var(--txt3); }
 
 .flight-route { flex: 1; min-width: 0; }
 .flight-icaos {
   font-family: 'SF Mono', monospace;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
-.flight-arrow { color: var(--txt3); font-size: 12px; }
+.flight-arrow { color: var(--txt3); font-size: 10px; }
 .flight-cities {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--txt3);
-  margin-top: 2px;
+  margin-top: 1px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -177,114 +185,109 @@ html, body {
 
 .flight-eqp {
   font-family: 'SF Mono', monospace;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 600;
   color: var(--orange);
   background: rgba(240,136,62,0.15);
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-radius: 4px;
   flex-shrink: 0;
 }
 
 .empty-state {
   text-align: center;
-  padding: 40px 20px;
+  padding: 30px 20px;
   color: var(--txt3);
 }
-.empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.empty-state-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
+.empty-state-text { font-size: 13px; }
 
 /* ROLL */
 .roll-tab-content {
-  padding: 16px;
-  padding-bottom: calc(80px + var(--safe-bottom));
+  padding: 14px;
+  padding-bottom: calc(70px + var(--safe-bottom));
+  overflow-y: auto;
 }
 .roll-button {
   width: 100%;
-  padding: 18px;
-  margin-bottom: 20px;
+  padding: 16px;
+  margin-bottom: 16px;
   border: none;
   border-radius: var(--r);
   background: linear-gradient(135deg, var(--acc) 0%, #6344c7 100%);
   color: white;
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 600;
   font-family: var(--ff);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  box-shadow: 0 4px 16px rgba(125,94,232,0.3);
 }
 .roll-button:active { transform: scale(0.98); }
-.roll-button svg { width: 24px; height: 24px; }
+.roll-button svg { width: 22px; height: 22px; }
 
-.results-list { display: flex; flex-direction: column; gap: 12px; }
+.results-list { display: flex; flex-direction: column; gap: 10px; }
 .result-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
   border-radius: var(--r);
-  padding: 14px 16px;
+  padding: 12px 14px;
 }
-.result-card:active { background: var(--surf2); }
-.result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.result-dot { width: 8px; height: 8px; border-radius: 50%; }
-.result-cat-name { font-size: 11px; font-weight: 600; color: var(--txt2); text-transform: uppercase; }
-.result-icao { font-size: 22px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--acc2); }
-.result-iata { color: var(--blue); font-size: 16px; margin-left: 6px; }
-.result-city { font-size: 15px; margin-top: 2px; }
-.result-country { font-size: 13px; color: var(--txt2); }
+.result-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.result-dot { width: 7px; height: 7px; border-radius: 50%; }
+.result-cat-name { font-size: 10px; font-weight: 600; color: var(--txt2); text-transform: uppercase; }
+.result-icao { font-size: 20px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--acc2); }
+.result-iata { color: var(--blue); font-size: 14px; margin-left: 5px; }
+.result-city { font-size: 14px; margin-top: 2px; }
+.result-country { font-size: 12px; color: var(--txt2); }
 .result-badge {
   display: inline-block;
-  margin-top: 8px;
-  padding: 4px 10px;
-  border-radius: 20px;
-  font-size: 11px;
+  margin-top: 6px;
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 10px;
   font-weight: 600;
   background: rgba(240,136,62,0.15);
   color: var(--orange);
-  border: 1px solid rgba(240,136,62,0.3);
 }
 
 /* DATA */
-.data-tab-content { padding: 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
-.cat-section { margin-bottom: 24px; }
-.cat-section-title { font-size: 13px; font-weight: 600; color: var(--txt2); text-transform: uppercase; margin-bottom: 12px; }
-.cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.data-tab-content { padding: 14px; padding-bottom: calc(70px + var(--safe-bottom)); overflow-y: auto; }
+.cat-section { margin-bottom: 20px; }
+.cat-section-title { font-size: 12px; font-weight: 600; color: var(--txt2); text-transform: uppercase; margin-bottom: 10px; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .cat-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 14px;
+  display: flex; align-items: center; gap: 5px;
+  padding: 8px 12px;
   background: var(--surf);
   border: 1px solid var(--bdr);
-  border-radius: 20px;
-  font-size: 13px;
+  border-radius: 16px;
+  font-size: 12px;
 }
-.cat-chip:active { background: var(--surf2); }
-.cat-chip-dot { width: 8px; height: 8px; border-radius: 50%; }
-.cat-chip-count { font-size: 11px; color: var(--txt3); }
+.cat-chip-dot { width: 6px; height: 6px; border-radius: 50%; }
+.cat-chip-count { font-size: 10px; color: var(--txt3); }
 
-.cat-detail { display: none; padding: 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
+.cat-detail { display: none; padding: 14px; padding-bottom: calc(70px + var(--safe-bottom)); overflow-y: auto; }
 .cat-detail.active { display: block; }
-.cat-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.cat-detail-header { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .cat-back-btn {
-  width: 36px; height: 36px;
+  width: 32px; height: 32px;
   display: flex; align-items: center; justify-content: center;
   border: none; background: var(--surf); border-radius: 50%; color: var(--txt);
 }
-.cat-detail-title { font-size: 18px; font-weight: 600; }
-.cat-items-list { display: flex; flex-direction: column; gap: 8px; }
+.cat-detail-title { font-size: 16px; font-weight: 600; }
+.cat-items-list { display: flex; flex-direction: column; gap: 6px; }
 .cat-item {
-  display: flex;
-  align-items: center;
-  padding: 12px;
+  display: flex; align-items: center;
+  padding: 10px;
   background: var(--surf);
   border: 1px solid var(--bdr);
-  border-radius: var(--r);
+  border-radius: 8px;
 }
-.cat-item-icao { font-family: 'SF Mono', monospace; font-size: 14px; font-weight: 600; color: var(--acc2); width: 55px; }
-.cat-item-name { flex: 1; font-size: 14px; }
-.cat-item-country { font-size: 12px; color: var(--txt3); }
+.cat-item-icao { font-family: 'SF Mono', monospace; font-size: 12px; font-weight: 600; color: var(--acc2); width: 50px; }
+.cat-item-name { flex: 1; font-size: 12px; }
+.cat-item-country { font-size: 10px; color: var(--txt3); }
 
 /* LOADING */
 .loading-overlay {
@@ -293,18 +296,17 @@ html, body {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   z-index: 9999;
-  transition: opacity 0.3s;
 }
-.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.loading-overlay.hidden { display: none; }
 .loading-spinner {
-  width: 40px; height: 40px;
+  width: 36px; height: 36px;
   border: 3px solid var(--surf2);
   border-top-color: var(--acc);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text { margin-top: 16px; font-size: 14px; color: var(--txt2); }
+.loading-text { margin-top: 14px; font-size: 13px; color: var(--txt2); }
   </style>
 </head>
 <body>
@@ -322,11 +324,10 @@ html, body {
     <main class="main">
       <!-- LOGBOOK -->
       <div class="tab-content active" id="tab-logbook">
-        <div id="globe-container"><canvas id="globe-canvas"></canvas></div>
-        <div class="logbook-stats">
-          <div class="stat-item"><div class="stat-value" id="stat-flown">0</div><div class="stat-label">Flown</div></div>
-          <div class="stat-item"><div class="stat-value" id="stat-planned">0</div><div class="stat-label">Planned</div></div>
-          <div class="stat-item"><div class="stat-value" id="stat-total">0</div><div class="stat-label">Total</div></div>
+        <div id="globe-container"></div>
+        <div class="logbook-filter">
+          <input type="text" class="filter-input" id="filter-input" placeholder="Filter: ICAO, IATA, city..." oninput="applyFilter()">
+          <div class="filter-stats" id="filter-stats">0 flights</div>
         </div>
         <div class="logbook-list" id="logbook-list"></div>
       </div>
@@ -355,7 +356,7 @@ html, body {
         <div class="cat-detail" id="cat-detail">
           <div class="cat-detail-header">
             <button class="cat-back-btn" onclick="closeCatDetail()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div class="cat-detail-title" id="cat-detail-title">Category</div>
           </div>
@@ -386,7 +387,7 @@ html, body {
 
   <script>
 const COLORS = ['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
-const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',CA:'Canada',JP:'Japan',AU:'Australia',NZ:'New Zealand',BR:'Brazil',MX:'Mexico',CN:'China',IN:'India',SG:'Singapore',AE:'UAE',QA:'Qatar',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',IS:'Iceland',GR:'Greece',TR:'Turkey',PT:'Portugal',PL:'Poland',CZ:'Czechia',HU:'Hungary',IE:'Ireland',LU:'Luxembourg',HR:'Croatia',RU:'Russia',UA:'Ukraine',IL:'Israel',EG:'Egypt',ZA:'South Africa',KR:'South Korea',TW:'Taiwan',HK:'Hong Kong',TH:'Thailand',MY:'Malaysia',ID:'Indonesia',PH:'Philippines',VN:'Vietnam'};
+const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',CA:'Canada',JP:'Japan',AU:'Australia',NZ:'New Zealand',BR:'Brazil',MX:'Mexico',CN:'China',IN:'India',SG:'Singapore',AE:'UAE',QA:'Qatar',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',IS:'Iceland',GR:'Greece',TR:'Turkey',PT:'Portugal',PL:'Poland',CZ:'Czechia',HU:'Hungary',IE:'Ireland',LU:'Luxembourg',HR:'Croatia',RU:'Russia'};
 function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
 
 let CATEGORIES = [
@@ -405,7 +406,8 @@ let schedByCode = {};
 let logbookFlights = [];
 let lastResults = [];
 let airlineLogos = {};
-let globe = { canvas: null, ctx: null, rotation: 0, isDragging: false, lastX: 0, width: 0, height: 0 };
+let filterText = '';
+let myGlobe = null;
 
 // SUPABASE
 const SUPA_URL = 'https://pvsvpkquoqffprmrlvbv.supabase.co';
@@ -430,10 +432,8 @@ async function loadAllFromCloud() {
       CATEGORIES.forEach(cat => { if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; });
       const existingIds = new Set(CATEGORIES.map(c => c.id));
       data.forEach(row => {
-        if (!existingIds.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0) {
-          if (row.items[0] && row.items[0].theme !== undefined) {
-            CATEGORIES.push({ id: row.name, name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), group: 'custom', colorIdx: CATEGORIES.length % 12, type: 'list-themed', items: row.items });
-          }
+        if (!existingIds.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0 && row.items[0]?.theme !== undefined) {
+          CATEGORIES.push({ id: row.name, name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), group: 'custom', colorIdx: CATEGORIES.length % 12, type: 'list-themed', items: row.items });
         }
       });
       setCloudStatus('✓ Synced', 'ok');
@@ -443,108 +443,113 @@ async function loadAllFromCloud() {
 
 // NAV
 function switchTab(tabId) {
-  document.querySelectorAll('.nav-item').forEach((btn, i) => {
-    btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId);
-  });
-  document.querySelectorAll('.tab-content').forEach(tab => {
-    tab.classList.toggle('active', tab.id === 'tab-' + tabId);
-  });
-  if (tabId === 'logbook') { renderLogbook(); requestAnimationFrame(drawGlobe); }
+  document.querySelectorAll('.nav-item').forEach((btn, i) => btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId));
+  document.querySelectorAll('.tab-content').forEach(tab => tab.classList.toggle('active', tab.id === 'tab-' + tabId));
+  if (tabId === 'logbook') { renderLogbook(); updateGlobeArcs(); }
   if (tabId === 'data') renderCatsList();
 }
 
 // GLOBE
 function initGlobe() {
-  globe.canvas = document.getElementById('globe-canvas');
-  globe.ctx = globe.canvas.getContext('2d');
-  function resize() {
-    const c = document.getElementById('globe-container');
-    const dpr = window.devicePixelRatio || 1;
-    globe.canvas.width = c.offsetWidth * dpr;
-    globe.canvas.height = c.offsetHeight * dpr;
-    globe.ctx.scale(dpr, dpr);
-    globe.width = c.offsetWidth;
-    globe.height = c.offsetHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
-  globe.canvas.addEventListener('touchstart', e => { globe.isDragging = true; globe.lastX = e.touches[0].clientX; });
-  globe.canvas.addEventListener('touchmove', e => {
-    if (!globe.isDragging) return;
-    globe.rotation += (e.touches[0].clientX - globe.lastX) * 0.5;
-    globe.lastX = e.touches[0].clientX;
-    drawGlobe();
-  });
-  globe.canvas.addEventListener('touchend', () => { globe.isDragging = false; });
-  drawGlobe();
+  const container = document.getElementById('globe-container');
+  const w = container.offsetWidth;
+  const h = container.offsetHeight;
+  
+  myGlobe = Globe()
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
+    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+    .width(w)
+    .height(h)
+    .arcColor(d => d.planned ? '#58a6ff' : '#ffffff')
+    .arcStroke(1.5)
+    .arcDashLength(0.5)
+    .arcDashGap(0.1)
+    .arcDashAnimateTime(2000)
+    .arcsTransitionDuration(0)
+    .pointColor(d => d.planned ? '#58a6ff' : '#ffffff')
+    .pointAltitude(0.01)
+    .pointRadius(0.3)
+    .atmosphereColor('#58a6ff')
+    .atmosphereAltitude(0.15)
+    (container);
+  
+  // Initial position over Europe
+  myGlobe.pointOfView({ lat: 48, lng: 10, altitude: 2 }, 0);
+  
+  // Enable rotation controls
+  myGlobe.controls().enableZoom = true;
+  myGlobe.controls().enablePan = false;
+  myGlobe.controls().autoRotate = false;
+  myGlobe.controls().minDistance = 120;
+  myGlobe.controls().maxDistance = 500;
 }
 
-function latLonToGlobe(lat, lon, cx, cy, r) {
-  const phi = (90 - lat) * Math.PI / 180;
-  const theta = (lon + globe.rotation) * Math.PI / 180;
-  const x = r * Math.sin(phi) * Math.cos(theta);
-  const y = r * Math.cos(phi);
-  const z = r * Math.sin(phi) * Math.sin(theta);
-  if (z < 0) return null;
-  return { x: cx + x, y: cy - y };
+function updateGlobeArcs() {
+  if (!myGlobe) return;
+  
+  const flights = getFilteredFlights();
+  
+  // Build arcs
+  const arcs = flights.filter(f => f.dep_lat && f.arr_lat).map(f => ({
+    startLat: f.dep_lat,
+    startLng: f.dep_lon,
+    endLat: f.arr_lat,
+    endLng: f.arr_lon,
+    planned: f.planned
+  }));
+  
+  // Build points
+  const pointSet = new Map();
+  flights.forEach(f => {
+    if (f.dep_lat) pointSet.set(f.dep_icao, { lat: f.dep_lat, lng: f.dep_lon, planned: f.planned });
+    if (f.arr_lat) pointSet.set(f.arr_icao, { lat: f.arr_lat, lng: f.arr_lon, planned: f.planned });
+  });
+  const points = Array.from(pointSet.values());
+  
+  myGlobe.arcsData(arcs).pointsData(points);
 }
 
-function drawGlobe() {
-  const ctx = globe.ctx, w = globe.width, h = globe.height;
-  const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.4;
-  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, w, h);
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.fillStyle = '#161b22'; ctx.fill();
-  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1; ctx.stroke();
-  
-  // Grid
-  ctx.strokeStyle = 'rgba(48,54,61,0.5)'; ctx.lineWidth = 0.5;
-  for (let lon = -180; lon < 180; lon += 30) {
-    ctx.beginPath(); let s = false;
-    for (let lat = -90; lat <= 90; lat += 5) {
-      const p = latLonToGlobe(lat, lon, cx, cy, r);
-      if (p) { if (!s) { ctx.moveTo(p.x, p.y); s = true; } else ctx.lineTo(p.x, p.y); }
-    }
-    ctx.stroke();
-  }
-  for (let lat = -60; lat <= 60; lat += 30) {
-    ctx.beginPath(); let s = false;
-    for (let lon = -180; lon <= 180; lon += 5) {
-      const p = latLonToGlobe(lat, lon, cx, cy, r);
-      if (p) { if (!s) { ctx.moveTo(p.x, p.y); s = true; } else ctx.lineTo(p.x, p.y); }
-    }
-    ctx.stroke();
-  }
-  
-  // Flights
-  logbookFlights.forEach(f => {
-    if (!f.dep_lat || !f.arr_lat) return;
-    const p1 = latLonToGlobe(f.dep_lat, f.dep_lon, cx, cy, r);
-    const p2 = latLonToGlobe(f.arr_lat, f.arr_lon, cx, cy, r);
-    if (!p1 || !p2) return;
-    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
-    ctx.strokeStyle = f.planned ? 'rgba(88,166,255,0.7)' : 'rgba(63,185,80,0.7)';
-    ctx.lineWidth = 2; ctx.stroke();
-    [p1, p2].forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = f.planned ? '#58a6ff' : '#3fb950'; ctx.fill(); });
-  });
+function getFilteredFlights() {
+  if (!filterText) return logbookFlights;
+  const q = filterText.toLowerCase();
+  return logbookFlights.filter(f => 
+    (f.dep_icao && f.dep_icao.toLowerCase().includes(q)) ||
+    (f.arr_icao && f.arr_icao.toLowerCase().includes(q)) ||
+    (f.dep_iata && f.dep_iata.toLowerCase().includes(q)) ||
+    (f.arr_iata && f.arr_iata.toLowerCase().includes(q)) ||
+    (f.dep && f.dep.toLowerCase().includes(q)) ||
+    (f.arr && f.arr.toLowerCase().includes(q)) ||
+    (f.airline && f.airline.toLowerCase().includes(q))
+  );
+}
+
+function applyFilter() {
+  filterText = document.getElementById('filter-input').value.trim();
+  renderLogbook();
+  updateGlobeArcs();
 }
 
 // LOGBOOK
 function renderLogbook() {
-  const planned = logbookFlights.filter(f => f.planned).length;
-  const flown = logbookFlights.length - planned;
-  document.getElementById('stat-flown').textContent = flown;
-  document.getElementById('stat-planned').textContent = planned;
-  document.getElementById('stat-total').textContent = logbookFlights.length;
+  const flights = getFilteredFlights();
+  const planned = flights.filter(f => f.planned).length;
+  const flown = flights.length - planned;
+  
+  document.getElementById('filter-stats').textContent = `${flights.length} flight${flights.length !== 1 ? 's' : ''}`;
   
   const c = document.getElementById('logbook-list');
-  if (!logbookFlights.length) {
-    c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📖</div><div class="empty-state-text">No flights yet.</div></div>';
+  if (!flights.length) {
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📖</div><div class="empty-state-text">${filterText ? 'No matching flights' : 'No flights yet'}</div></div>`;
     return;
   }
-  c.innerHTML = [...logbookFlights].reverse().map(f => {
-    const logo = airlineLogos[f.airline];
-    const logoHtml = logo ? `<img src="${logo}" alt="${f.airline}">` : `<span class="flight-logo-text">${f.airline || '–'}</span>`;
+  
+  c.innerHTML = [...flights].reverse().map(f => {
+    const logoUrl = airlineLogos[f.airline];
+    const logoHtml = logoUrl 
+      ? `<img src="${logoUrl}" alt="${f.airline}">`
+      : `<span class="flight-logo-text">${f.airline || '–'}</span>`;
+    
     return `<div class="flight-item ${f.planned ? 'planned' : 'flown'}">
       <div class="flight-logo">${logoHtml}</div>
       <div class="flight-route">
@@ -554,13 +559,13 @@ function renderLogbook() {
       ${f.aircraft ? `<div class="flight-eqp">${f.aircraft}</div>` : ''}
     </div>`;
   }).join('');
-  drawGlobe();
 }
 
 // ROLL
 function rollAll() {
   if (typeof DB_SCHED === 'undefined') { setTimeout(rollAll, 500); return; }
   if (navigator.vibrate) navigator.vibrate(10);
+  
   lastResults = CATEGORIES.filter(c => c.items && c.items.length > 0).map(cat => {
     let result = {icao:'',city:'',country:'',iata:'',diff:'',itemName:'',lat:null,lon:null};
     if (['list','list-simple','list-themed'].includes(cat.type)) {
@@ -631,7 +636,7 @@ function openCatDetail(catId) {
     const country = item.country || (db ? countryName(db[6]) : '');
     return `<div class="cat-item"><div class="cat-item-icao">${item.icao || '–'}</div><div class="cat-item-name">${name}</div><div class="cat-item-country">${country}</div></div>`;
   }).join('');
-  if (cat.items.length > 50) list.innerHTML += `<div style="text-align:center;padding:12px;color:var(--txt3);">+${cat.items.length - 50} more</div>`;
+  if (cat.items.length > 50) list.innerHTML += `<div style="text-align:center;padding:10px;color:var(--txt3);font-size:11px;">+${cat.items.length - 50} more</div>`;
 }
 
 function closeCatDetail() {
@@ -644,11 +649,16 @@ async function init() {
   let a = 0;
   while (typeof DB_SCHED === 'undefined' && a < 50) { await new Promise(r => setTimeout(r, 100)); a++; }
   if (typeof DB_SCHED !== 'undefined') DB_SCHED.forEach(r => { schedByCode[r[0]] = r; });
+  
   await loadAllFromCloud();
+  
   initGlobe();
   renderLogbook();
+  updateGlobeArcs();
+  
   document.getElementById('loading').classList.add('hidden');
 }
+
 init();
   </script>
 </body>
