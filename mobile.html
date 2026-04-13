@@ -24,7 +24,7 @@
   --green: #3fb950;
   --orange: #f0883e;
   --blue: #58a6ff;
-  --r: 12px;
+  --r: 10px;
   --ff: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-top: env(safe-area-inset-top, 0px);
@@ -91,23 +91,57 @@ html, body {
 .nav-item.active { color: var(--acc2); }
 .nav-item svg { width: 22px; height: 22px; }
 
-/* LOGBOOK */
+/* LOGBOOK LAYOUT */
+#logbook-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
 #globe-container {
   width: 100%;
-  height: 55vh;
   flex-shrink: 0;
   position: relative;
   background: #000;
+  transition: height 0.3s ease;
 }
 #globe-container canvas { touch-action: none; }
+
+/* Swipeable Panel */
+#logbook-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  margin-top: -16px;
+  position: relative;
+  z-index: 5;
+  min-height: 180px;
+  max-height: calc(100% - 100px);
+}
+
+.panel-handle {
+  width: 100%;
+  padding: 10px 0 6px;
+  display: flex;
+  justify-content: center;
+  cursor: grab;
+}
+.panel-handle-bar {
+  width: 36px;
+  height: 4px;
+  background: var(--bdr);
+  border-radius: 2px;
+}
 
 .logbook-filter {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
-  background: var(--surf);
-  border-bottom: 1px solid var(--bdr);
+  padding: 6px 12px 10px;
   flex-shrink: 0;
 }
 .filter-input {
@@ -115,7 +149,7 @@ html, body {
   padding: 8px 12px;
   border: 1px solid var(--bdr);
   border-radius: 20px;
-  background: var(--bg);
+  background: var(--surf);
   color: var(--txt);
   font-size: 13px;
   font-family: var(--ff);
@@ -124,7 +158,7 @@ html, body {
 .filter-input:focus { border-color: var(--acc); }
 .filter-input::placeholder { color: var(--txt3); }
 .filter-stats {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--txt3);
   white-space: nowrap;
 }
@@ -133,27 +167,26 @@ html, body {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 8px;
-  padding-bottom: calc(70px + var(--safe-bottom));
+  padding: 0 10px 10px;
+  padding-bottom: calc(10px + var(--safe-bottom));
 }
 
 .flight-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 10px;
+  padding: 8px 10px;
   background: var(--surf);
-  border: 1px solid var(--bdr);
-  border-radius: 10px;
+  border-radius: 8px;
   margin-bottom: 6px;
 }
 .flight-item.planned { border-left: 3px solid var(--blue); }
 .flight-item.flown { border-left: 3px solid #fff; }
 
 .flight-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
   background: var(--surf2);
   display: flex;
   align-items: center;
@@ -162,20 +195,20 @@ html, body {
   flex-shrink: 0;
 }
 .flight-logo img { width: 100%; height: 100%; object-fit: contain; }
-.flight-logo-text { font-size: 9px; font-weight: 700; color: var(--txt3); }
+.flight-logo-text { font-size: 8px; font-weight: 700; color: var(--txt3); }
 
 .flight-route { flex: 1; min-width: 0; }
 .flight-icaos {
   font-family: 'SF Mono', monospace;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
-.flight-arrow { color: var(--txt3); font-size: 10px; }
+.flight-arrow { color: var(--txt3); font-size: 9px; }
 .flight-cities {
-  font-size: 10px;
+  font-size: 9px;
   color: var(--txt3);
   margin-top: 1px;
   white-space: nowrap;
@@ -185,22 +218,22 @@ html, body {
 
 .flight-eqp {
   font-family: 'SF Mono', monospace;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: var(--orange);
   background: rgba(240,136,62,0.15);
-  padding: 3px 6px;
-  border-radius: 4px;
+  padding: 2px 5px;
+  border-radius: 3px;
   flex-shrink: 0;
 }
 
 .empty-state {
   text-align: center;
-  padding: 30px 20px;
+  padding: 24px 16px;
   color: var(--txt3);
 }
-.empty-state-icon { font-size: 40px; margin-bottom: 10px; opacity: 0.5; }
-.empty-state-text { font-size: 13px; }
+.empty-state-icon { font-size: 32px; margin-bottom: 8px; opacity: 0.5; }
+.empty-state-text { font-size: 12px; }
 
 /* ROLL */
 .roll-tab-content {
@@ -324,12 +357,19 @@ html, body {
     <main class="main">
       <!-- LOGBOOK -->
       <div class="tab-content active" id="tab-logbook">
-        <div id="globe-container"></div>
-        <div class="logbook-filter">
-          <input type="text" class="filter-input" id="filter-input" placeholder="Filter: ICAO, IATA, city..." oninput="applyFilter()">
-          <div class="filter-stats" id="filter-stats">0 flights</div>
+        <div id="logbook-wrapper">
+          <div id="globe-container"></div>
+          <div id="logbook-panel">
+            <div class="panel-handle" id="panel-handle">
+              <div class="panel-handle-bar"></div>
+            </div>
+            <div class="logbook-filter">
+              <input type="text" class="filter-input" id="filter-input" placeholder="Filter: ICAO, IATA, city..." oninput="applyFilter()">
+              <div class="filter-stats" id="filter-stats">0</div>
+            </div>
+            <div class="logbook-list" id="logbook-list"></div>
+          </div>
         </div>
-        <div class="logbook-list" id="logbook-list"></div>
       </div>
 
       <!-- ROLL -->
@@ -408,6 +448,8 @@ let lastResults = [];
 let airlineLogos = {};
 let filterText = '';
 let myGlobe = null;
+let globeHeight = 0;
+let panelMinHeight = 180;
 
 // SUPABASE
 const SUPA_URL = 'https://pvsvpkquoqffprmrlvbv.supabase.co';
@@ -445,44 +487,103 @@ async function loadAllFromCloud() {
 function switchTab(tabId) {
   document.querySelectorAll('.nav-item').forEach((btn, i) => btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId));
   document.querySelectorAll('.tab-content').forEach(tab => tab.classList.toggle('active', tab.id === 'tab-' + tabId));
-  if (tabId === 'logbook') { renderLogbook(); updateGlobeArcs(); }
+  if (tabId === 'logbook') { renderLogbook(); updateGlobeArcs(); resizeGlobe(); }
   if (tabId === 'data') renderCatsList();
+}
+
+// PANEL SWIPE
+function initPanelSwipe() {
+  const handle = document.getElementById('panel-handle');
+  const panel = document.getElementById('logbook-panel');
+  const globeContainer = document.getElementById('globe-container');
+  const wrapper = document.getElementById('logbook-wrapper');
+  
+  let startY = 0;
+  let startHeight = 0;
+  let isDragging = false;
+  
+  handle.addEventListener('touchstart', e => {
+    isDragging = true;
+    startY = e.touches[0].clientY;
+    startHeight = globeContainer.offsetHeight;
+    panel.style.transition = 'none';
+    globeContainer.style.transition = 'none';
+  });
+  
+  document.addEventListener('touchmove', e => {
+    if (!isDragging) return;
+    const dy = e.touches[0].clientY - startY;
+    const wrapperHeight = wrapper.offsetHeight;
+    let newGlobeHeight = startHeight + dy;
+    
+    // Constraints
+    const minGlobeHeight = 100;
+    const maxGlobeHeight = wrapperHeight - panelMinHeight;
+    newGlobeHeight = Math.max(minGlobeHeight, Math.min(maxGlobeHeight, newGlobeHeight));
+    
+    globeContainer.style.height = newGlobeHeight + 'px';
+    globeHeight = newGlobeHeight;
+  });
+  
+  document.addEventListener('touchend', () => {
+    if (!isDragging) return;
+    isDragging = false;
+    panel.style.transition = '';
+    globeContainer.style.transition = '';
+    resizeGlobe();
+  });
 }
 
 // GLOBE
 function initGlobe() {
   const container = document.getElementById('globe-container');
+  const wrapper = document.getElementById('logbook-wrapper');
+  
+  // Initial height: 55% of wrapper
+  globeHeight = Math.round(wrapper.offsetHeight * 0.55);
+  container.style.height = globeHeight + 'px';
+  
   const w = container.offsetWidth;
-  const h = container.offsetHeight;
+  const h = globeHeight;
   
   myGlobe = Globe()
-    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
-    .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-    .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+    // Clean map texture - no satellite imagery
+    .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-dark.jpg')
+    .backgroundColor('#000000')
     .width(w)
     .height(h)
+    // Simple static arcs - no animation
     .arcColor(d => d.planned ? '#58a6ff' : '#ffffff')
-    .arcStroke(1.5)
-    .arcDashLength(0.5)
-    .arcDashGap(0.1)
-    .arcDashAnimateTime(2000)
+    .arcStroke(0.8)
+    .arcDashLength(1)
+    .arcDashGap(0)
+    .arcDashAnimateTime(0)
     .arcsTransitionDuration(0)
+    // Points at airports
     .pointColor(d => d.planned ? '#58a6ff' : '#ffffff')
-    .pointAltitude(0.01)
-    .pointRadius(0.3)
-    .atmosphereColor('#58a6ff')
-    .atmosphereAltitude(0.15)
+    .pointAltitude(0.005)
+    .pointRadius(0.25)
+    // Subtle atmosphere
+    .atmosphereColor('#304878')
+    .atmosphereAltitude(0.12)
     (container);
   
-  // Initial position over Europe
-  myGlobe.pointOfView({ lat: 48, lng: 10, altitude: 2 }, 0);
+  // Start over Europe
+  myGlobe.pointOfView({ lat: 48, lng: 10, altitude: 2.2 }, 0);
   
-  // Enable rotation controls
+  // Controls
   myGlobe.controls().enableZoom = true;
   myGlobe.controls().enablePan = false;
   myGlobe.controls().autoRotate = false;
   myGlobe.controls().minDistance = 120;
-  myGlobe.controls().maxDistance = 500;
+  myGlobe.controls().maxDistance = 400;
+}
+
+function resizeGlobe() {
+  if (!myGlobe) return;
+  const container = document.getElementById('globe-container');
+  myGlobe.width(container.offsetWidth);
+  myGlobe.height(container.offsetHeight);
 }
 
 function updateGlobeArcs() {
@@ -490,7 +591,7 @@ function updateGlobeArcs() {
   
   const flights = getFilteredFlights();
   
-  // Build arcs
+  // Arcs
   const arcs = flights.filter(f => f.dep_lat && f.arr_lat).map(f => ({
     startLat: f.dep_lat,
     startLng: f.dep_lon,
@@ -499,15 +600,14 @@ function updateGlobeArcs() {
     planned: f.planned
   }));
   
-  // Build points
+  // Points
   const pointSet = new Map();
   flights.forEach(f => {
     if (f.dep_lat) pointSet.set(f.dep_icao, { lat: f.dep_lat, lng: f.dep_lon, planned: f.planned });
     if (f.arr_lat) pointSet.set(f.arr_icao, { lat: f.arr_lat, lng: f.arr_lon, planned: f.planned });
   });
-  const points = Array.from(pointSet.values());
   
-  myGlobe.arcsData(arcs).pointsData(points);
+  myGlobe.arcsData(arcs).pointsData(Array.from(pointSet.values()));
 }
 
 function getFilteredFlights() {
@@ -533,22 +633,24 @@ function applyFilter() {
 // LOGBOOK
 function renderLogbook() {
   const flights = getFilteredFlights();
-  const planned = flights.filter(f => f.planned).length;
-  const flown = flights.length - planned;
   
-  document.getElementById('filter-stats').textContent = `${flights.length} flight${flights.length !== 1 ? 's' : ''}`;
+  document.getElementById('filter-stats').textContent = flights.length;
   
   const c = document.getElementById('logbook-list');
   if (!flights.length) {
-    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📖</div><div class="empty-state-text">${filterText ? 'No matching flights' : 'No flights yet'}</div></div>`;
+    c.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📖</div><div class="empty-state-text">${filterText ? 'No matches' : 'No flights'}</div></div>`;
     return;
   }
   
   c.innerHTML = [...flights].reverse().map(f => {
-    const logoUrl = airlineLogos[f.airline];
-    const logoHtml = logoUrl 
-      ? `<img src="${logoUrl}" alt="${f.airline}">`
-      : `<span class="flight-logo-text">${f.airline || '–'}</span>`;
+    // Try logos/ folder first, then Supabase airlineLogos
+    const code = f.airline || '';
+    const logoUrl = code ? `logos/${code}.png` : null;
+    const fallbackUrl = airlineLogos[code];
+    
+    const logoHtml = code
+      ? `<img src="${logoUrl}" onerror="this.onerror=null;${fallbackUrl ? `this.src='${fallbackUrl}'` : `this.style.display='none';this.parentNode.innerHTML='<span class=flight-logo-text>${code}</span>'`}" alt="${code}">`
+      : `<span class="flight-logo-text">–</span>`;
     
     return `<div class="flight-item ${f.planned ? 'planned' : 'flown'}">
       <div class="flight-logo">${logoHtml}</div>
@@ -653,8 +755,11 @@ async function init() {
   await loadAllFromCloud();
   
   initGlobe();
+  initPanelSwipe();
   renderLogbook();
   updateGlobeArcs();
+  
+  window.addEventListener('resize', resizeGlobe);
   
   document.getElementById('loading').classList.add('hidden');
 }
