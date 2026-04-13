@@ -580,15 +580,14 @@ function initGlobe() {
     .backgroundColor('rgba(0,0,0,0)')
     .width(w)
     .height(h)
-    // Thin, subtle arcs - white for flown, blue for planned
-    .arcColor(d => d.planned ? 'rgba(88,166,255,0.6)' : 'rgba(255,255,255,0.7)')
-    .arcStroke(0.4)
-    .arcAltitude(0)
-    .arcAltitudeAutoScale(0)
-    .arcDashLength(1)
-    .arcDashGap(0)
-    .arcDashAnimateTime(0)
-    .arcsTransitionDuration(0)
+    // Use paths instead of arcs - draws ON the surface
+    .pathsData([])
+    .pathPoints(d => d.coords)
+    .pathPointLat(p => p[0])
+    .pathPointLng(p => p[1])
+    .pathColor(d => d.planned ? 'rgba(88,166,255,0.7)' : 'rgba(255,255,255,0.8)')
+    .pathStroke(1.5)
+    .pathTransitionDuration(0)
     // Small points at airports
     .pointColor(d => d.planned ? '#58a6ff' : '#ffffff')
     .pointAltitude(0.005)
@@ -621,12 +620,12 @@ function updateGlobeArcs() {
   
   const flights = getFilteredFlights();
   
-  // Arcs
-  const arcs = flights.filter(f => f.dep_lat && f.arr_lat).map(f => ({
-    startLat: f.dep_lat,
-    startLng: f.dep_lon,
-    endLat: f.arr_lat,
-    endLng: f.arr_lon,
+  // Build paths - each path is an array of [lat, lng] coordinates
+  const paths = flights.filter(f => f.dep_lat && f.arr_lat).map(f => ({
+    coords: [
+      [f.dep_lat, f.dep_lon],
+      [f.arr_lat, f.arr_lon]
+    ],
     planned: f.planned
   }));
   
@@ -637,7 +636,7 @@ function updateGlobeArcs() {
     if (f.arr_lat) pointSet.set(f.arr_icao, { lat: f.arr_lat, lng: f.arr_lon, planned: f.planned });
   });
   
-  myGlobe.arcsData(arcs).pointsData(Array.from(pointSet.values()));
+  myGlobe.pathsData(paths).pointsData(Array.from(pointSet.values()));
 }
 
 function getFilteredFlights() {
