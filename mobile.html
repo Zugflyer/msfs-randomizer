@@ -654,6 +654,12 @@ html, body {
   color: var(--txt2);
   margin-top: 2px;
 }
+.leg-airport-utc {
+  font-size: 9px;
+  color: var(--blue);
+  margin-top: 2px;
+  font-family: 'SF Mono', monospace;
+}
 .leg-time-input {
   width: 60px;
   background: transparent;
@@ -1362,6 +1368,82 @@ function showFlightOnMap() {
 }
 
 // ═══════════════════════════════════════════════════════════
+// TIMEZONE FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+let scheduleDate = '';
+
+function initScheduleDate() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  scheduleDate = yyyy + '-' + mm + '-' + dd;
+}
+
+function nthSundayOfMonth(year, month, n) {
+  const d = new Date(Date.UTC(year, month - 1, 1));
+  const dayOfWeek = d.getUTCDay();
+  const firstSun = dayOfWeek === 0 ? 1 : (8 - dayOfWeek);
+  return firstSun + (n - 1) * 7;
+}
+
+function lastSundayOfMonth(year, month) {
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const d = new Date(Date.UTC(year, month - 1, daysInMonth));
+  const dayOfWeek = d.getUTCDay();
+  return daysInMonth - dayOfWeek;
+}
+
+function isDSTActive(region, dateStr) {
+  if (!region || !dateStr) return false;
+  const parts = dateStr.split('-');
+  const year = parseInt(parts[0]);
+  const month = parseInt(parts[1]);
+  const day = parseInt(parts[2]);
+  const md = month * 100 + day;
+
+  if (region === 'EU') {
+    const startDay = lastSundayOfMonth(year, 3);
+    const endDay = lastSundayOfMonth(year, 10);
+    return md >= (3 * 100 + startDay) && md < (10 * 100 + endDay);
+  }
+  if (region === 'NA') {
+    const startDay = nthSundayOfMonth(year, 3, 2);
+    const endDay = nthSundayOfMonth(year, 11, 1);
+    return md >= (3 * 100 + startDay) && md < (11 * 100 + endDay);
+  }
+  if (region === 'AU') {
+    const startDay = nthSundayOfMonth(year, 10, 1);
+    const endDay = nthSundayOfMonth(year, 4, 1);
+    return md >= (10 * 100 + startDay) || md < (4 * 100 + endDay);
+  }
+  if (region === 'NZ') {
+    const startDay = lastSundayOfMonth(year, 9);
+    const endDay = nthSundayOfMonth(year, 4, 1);
+    return md >= (9 * 100 + startDay) || md < (4 * 100 + endDay);
+  }
+  return false;
+}
+
+function getUtcOffset(ap, dateOverride) {
+  if (!ap || ap[8] === undefined) return 0;
+  const dateStr = dateOverride || scheduleDate;
+  const region = (ap.length > 10) ? ap[10] : null;
+  if (region && ap[9] !== null && ap[9] !== undefined && isDSTActive(region, dateStr)) {
+    return ap[9];
+  }
+  return ap[8];
+}
+
+function formatUtcOffset(ap) {
+  if (!ap) return '';
+  const offset = getUtcOffset(ap);
+  const region = (ap.length > 10) ? ap[10] : null;
+  const isDst = region && isDSTActive(region, scheduleDate);
+  return 'UTC' + (offset >= 0 ? '+' : '') + offset + (isDst ? ' ☀' : '');
+}
+
+// ═══════════════════════════════════════════════════════════
 // PLAN LEGS
 // ═══════════════════════════════════════════════════════════
 let legs = [];
@@ -1439,6 +1521,9 @@ function renderLegs() {
   const container = document.getElementById('legs-list');
   const footer = document.getElementById('plan-footer');
   
+  // Initialize schedule date if not set
+  if (!scheduleDate) initScheduleDate();
+  
   if (!legs || legs.length === 0) {
     container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">✈️</div><div class="empty-state-text">No legs planned. Use "Plan Legs" in the Next tab.</div></div>';
     footer.style.display = 'none';
@@ -1452,9 +1537,11 @@ function renderLegs() {
     const depIcao = leg.dep ? leg.dep[0] : '????';
     const depIata = leg.dep ? (leg.dep[1] || '') : '';
     const depCity = leg.dep ? (leg.dep[7] || leg.dep[2] || '') : '';
+    const depUtc = leg.dep ? formatUtcOffset(leg.dep) : '';
     const arrIcao = leg.arr ? leg.arr[0] : '????';
     const arrIata = leg.arr ? (leg.arr[1] || '') : '';
     const arrCity = leg.arr ? (leg.arr[7] || leg.arr[2] || '') : '';
+    const arrUtc = leg.arr ? formatUtcOffset(leg.arr) : '';
     
     const logoUrl = leg.airline ? getLogoUrl(leg.airline) : null;
     const logoHtml = logoUrl 
@@ -1479,6 +1566,7 @@ function renderLegs() {
         <div class="leg-airport-info">
           <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-iata">/ ${depIata}</span>` : ''}
           <div class="leg-airport-city">${depCity}</div>
+          ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
         </div>
         <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)">
         <button class="leg-charts-btn" onclick="openCharts('${depIcao}')">Charts</button>
@@ -1493,6 +1581,7 @@ function renderLegs() {
         <div class="leg-airport-info">
           <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-iata">/ ${arrIata}</span>` : ''}
           <div class="leg-airport-city">${arrCity}</div>
+          ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
         </div>
         <input type="text" class="leg-time-input" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" oninput="updateLegArrTime(${i}, this.value)">
         <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')">Charts</button>
