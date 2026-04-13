@@ -45,9 +45,6 @@ html, body {
   user-select: none;
 }
 
-/* ══════════════════════════════════════════════════════════════════
-   LAYOUT
-   ══════════════════════════════════════════════════════════════════ */
 .app {
   display: flex;
   flex-direction: column;
@@ -55,7 +52,6 @@ html, body {
   padding-top: var(--safe-top);
 }
 
-/* Header */
 .header {
   flex-shrink: 0;
   display: flex;
@@ -65,17 +61,9 @@ html, body {
   border-bottom: 1px solid var(--bdr);
   background: var(--surf);
 }
-.header-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: var(--txt);
-}
-.header-status {
-  font-size: 12px;
-  color: var(--green);
-}
+.header-title { font-size: 17px; font-weight: 600; }
+.header-status { font-size: 12px; color: var(--green); }
 
-/* Main Content */
 .main {
   flex: 1;
   overflow: hidden;
@@ -85,22 +73,16 @@ html, body {
   position: absolute;
   inset: 0;
   overflow-y: auto;
-  overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   display: none;
-  padding: 16px;
-  padding-bottom: calc(80px + var(--safe-bottom));
 }
-.tab-content.active { display: block; }
+.tab-content.active { display: flex; flex-direction: column; }
 
-/* Bottom Nav */
 .bottom-nav {
   flex-shrink: 0;
   display: flex;
   justify-content: space-around;
-  align-items: center;
-  padding: 8px 0;
-  padding-bottom: calc(8px + var(--safe-bottom));
+  padding: 8px 0 calc(8px + var(--safe-bottom));
   background: var(--surf);
   border-top: 1px solid var(--bdr);
 }
@@ -115,15 +97,107 @@ html, body {
   color: var(--txt3);
   font-size: 10px;
   font-family: var(--ff);
-  cursor: pointer;
-  transition: color 0.15s;
 }
 .nav-item.active { color: var(--acc2); }
 .nav-item svg { width: 24px; height: 24px; }
 
-/* ══════════════════════════════════════════════════════════════════
-   ROLL TAB
-   ══════════════════════════════════════════════════════════════════ */
+/* LOGBOOK */
+#globe-container {
+  width: 100%;
+  height: 200px;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+#globe-canvas { width: 100%; height: 100%; display: block; }
+
+.logbook-stats {
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 16px;
+  background: var(--surf);
+  border-bottom: 1px solid var(--bdr);
+  flex-shrink: 0;
+}
+.stat-item { text-align: center; }
+.stat-value { font-size: 20px; font-weight: 700; color: var(--acc2); }
+.stat-label { font-size: 10px; color: var(--txt3); text-transform: uppercase; }
+
+.logbook-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+
+.flight-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  margin-bottom: 8px;
+}
+.flight-item.planned { border-left: 3px solid var(--blue); }
+.flight-item.flown { border-left: 3px solid var(--green); }
+
+.flight-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: var(--surf2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.flight-logo img { width: 100%; height: 100%; object-fit: contain; }
+.flight-logo-text { font-size: 10px; font-weight: 700; color: var(--txt3); }
+
+.flight-route { flex: 1; min-width: 0; }
+.flight-icaos {
+  font-family: 'SF Mono', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.flight-arrow { color: var(--txt3); font-size: 12px; }
+.flight-cities {
+  font-size: 11px;
+  color: var(--txt3);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.flight-eqp {
+  font-family: 'SF Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--orange);
+  background: rgba(240,136,62,0.15);
+  padding: 4px 8px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--txt3);
+}
+.empty-state-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+
+/* ROLL */
+.roll-tab-content {
+  padding: 16px;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
 .roll-button {
   width: 100%;
   padding: 18px;
@@ -135,80 +209,30 @@ html, body {
   font-size: 18px;
   font-weight: 600;
   font-family: var(--ff);
-  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  box-shadow: 0 4px 16px rgba(125, 94, 232, 0.3);
-  transition: transform 0.1s, box-shadow 0.1s;
+  box-shadow: 0 4px 16px rgba(125,94,232,0.3);
 }
-.roll-button:active {
-  transform: scale(0.98);
-  box-shadow: 0 2px 8px rgba(125, 94, 232, 0.2);
-}
+.roll-button:active { transform: scale(0.98); }
 .roll-button svg { width: 24px; height: 24px; }
 
-/* Result Cards */
-.results-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
+.results-list { display: flex; flex-direction: column; gap: 12px; }
 .result-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
   border-radius: var(--r);
   padding: 14px 16px;
-  cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
 }
-.result-card:active {
-  background: var(--surf2);
-  border-color: var(--bdr2);
-}
-.result-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-.result-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.result-cat-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--txt2);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-.result-icao {
-  font-size: 22px;
-  font-weight: 700;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  color: var(--acc2);
-  letter-spacing: 0.02em;
-}
-.result-iata {
-  color: var(--blue);
-  font-size: 16px;
-  font-weight: 500;
-  margin-left: 6px;
-}
-.result-city {
-  font-size: 15px;
-  color: var(--txt);
-  margin-top: 2px;
-}
-.result-country {
-  font-size: 13px;
-  color: var(--txt2);
-  margin-top: 1px;
-}
+.result-card:active { background: var(--surf2); }
+.result-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.result-dot { width: 8px; height: 8px; border-radius: 50%; }
+.result-cat-name { font-size: 11px; font-weight: 600; color: var(--txt2); text-transform: uppercase; }
+.result-icao { font-size: 22px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--acc2); }
+.result-iata { color: var(--blue); font-size: 16px; margin-left: 6px; }
+.result-city { font-size: 15px; margin-top: 2px; }
+.result-country { font-size: 13px; color: var(--txt2); }
 .result-badge {
   display: inline-block;
   margin-top: 8px;
@@ -216,57 +240,16 @@ html, body {
   border-radius: 20px;
   font-size: 11px;
   font-weight: 600;
-  background: rgba(240, 136, 62, 0.15);
+  background: rgba(240,136,62,0.15);
   color: var(--orange);
-  border: 1px solid rgba(240, 136, 62, 0.3);
-}
-.result-text {
-  font-size: 14px;
-  color: var(--txt);
-  line-height: 1.5;
-}
-.result-coord {
-  font-size: 11px;
-  color: var(--txt3);
-  font-family: 'SF Mono', monospace;
-  margin-bottom: 4px;
+  border: 1px solid rgba(240,136,62,0.3);
 }
 
-/* Empty State */
-.empty-state {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--txt3);
-}
-.empty-state-icon {
-  font-size: 48px;
-  margin-bottom: 12px;
-  opacity: 0.5;
-}
-.empty-state-text {
-  font-size: 15px;
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   CATEGORIES TAB
-   ══════════════════════════════════════════════════════════════════ */
-.cat-section {
-  margin-bottom: 24px;
-}
-.cat-section-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--txt2);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 12px;
-  padding-left: 4px;
-}
-.cat-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
+/* DATA */
+.data-tab-content { padding: 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
+.cat-section { margin-bottom: 24px; }
+.cat-section-title { font-size: 13px; font-weight: 600; color: var(--txt2); text-transform: uppercase; margin-bottom: 12px; }
+.cat-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .cat-chip {
   display: flex;
   align-items: center;
@@ -276,354 +259,162 @@ html, body {
   border: 1px solid var(--bdr);
   border-radius: 20px;
   font-size: 13px;
-  color: var(--txt);
-  cursor: pointer;
-  transition: all 0.15s;
 }
-.cat-chip:active {
-  background: var(--surf2);
-  border-color: var(--acc);
-}
-.cat-chip-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-.cat-chip-count {
-  font-size: 11px;
-  color: var(--txt3);
-  margin-left: 2px;
-}
+.cat-chip:active { background: var(--surf2); }
+.cat-chip-dot { width: 8px; height: 8px; border-radius: 50%; }
+.cat-chip-count { font-size: 11px; color: var(--txt3); }
 
-/* Category Detail */
-.cat-detail {
-  display: none;
-}
-.cat-detail.active {
-  display: block;
-}
-.cat-detail-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
+.cat-detail { display: none; padding: 16px; padding-bottom: calc(80px + var(--safe-bottom)); }
+.cat-detail.active { display: block; }
+.cat-detail-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .cat-back-btn {
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: var(--surf);
-  border-radius: 50%;
-  color: var(--txt);
-  cursor: pointer;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  border: none; background: var(--surf); border-radius: 50%; color: var(--txt);
 }
-.cat-detail-title {
-  font-size: 18px;
-  font-weight: 600;
-}
-.cat-items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
+.cat-detail-title { font-size: 18px; font-weight: 600; }
+.cat-items-list { display: flex; flex-direction: column; gap: 8px; }
 .cat-item {
   display: flex;
   align-items: center;
-  padding: 12px 14px;
+  padding: 12px;
   background: var(--surf);
   border: 1px solid var(--bdr);
   border-radius: var(--r);
 }
-.cat-item-icao {
-  font-family: 'SF Mono', monospace;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--acc2);
-  width: 60px;
-}
-.cat-item-name {
-  flex: 1;
-  font-size: 14px;
-  color: var(--txt);
-}
-.cat-item-country {
-  font-size: 12px;
-  color: var(--txt3);
-}
+.cat-item-icao { font-family: 'SF Mono', monospace; font-size: 14px; font-weight: 600; color: var(--acc2); width: 55px; }
+.cat-item-name { flex: 1; font-size: 14px; }
+.cat-item-country { font-size: 12px; color: var(--txt3); }
 
-/* ══════════════════════════════════════════════════════════════════
-   MAP TAB
-   ══════════════════════════════════════════════════════════════════ */
-#mobile-map {
-  width: 100%;
-  height: calc(100vh - 180px);
-  border-radius: var(--r);
-  background: var(--surf);
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   LEGS TAB
-   ══════════════════════════════════════════════════════════════════ */
-.legs-empty {
-  text-align: center;
-  padding: 60px 20px;
-  color: var(--txt3);
-}
-.leg-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px;
-  background: var(--surf);
-  border: 1px solid var(--bdr);
-  border-radius: var(--r);
-  margin-bottom: 10px;
-}
-.leg-number {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--acc);
-  color: white;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 50%;
-}
-.leg-airports {
-  flex: 1;
-}
-.leg-route {
-  font-size: 16px;
-  font-weight: 600;
-  font-family: 'SF Mono', monospace;
-  color: var(--acc2);
-}
-.leg-cities {
-  font-size: 12px;
-  color: var(--txt2);
-  margin-top: 2px;
-}
-.leg-delete {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: none;
-  color: var(--txt3);
-  cursor: pointer;
-}
-
-/* Add leg button */
-.add-leg-btn {
-  width: 100%;
-  padding: 14px;
-  border: 2px dashed var(--bdr2);
-  border-radius: var(--r);
-  background: none;
-  color: var(--txt2);
-  font-size: 14px;
-  font-family: var(--ff);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-}
-
-/* ══════════════════════════════════════════════════════════════════
-   LOADING
-   ══════════════════════════════════════════════════════════════════ */
+/* LOADING */
 .loading-overlay {
-  position: fixed;
-  inset: 0;
+  position: fixed; inset: 0;
   background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
   z-index: 9999;
   transition: opacity 0.3s;
 }
-.loading-overlay.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
 .loading-spinner {
-  width: 40px;
-  height: 40px;
+  width: 40px; height: 40px;
   border: 3px solid var(--surf2);
   border-top-color: var(--acc);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.loading-text {
-  margin-top: 16px;
-  font-size: 14px;
-  color: var(--txt2);
-}
+.loading-text { margin-top: 16px; font-size: 14px; color: var(--txt2); }
   </style>
 </head>
 <body>
-  <!-- Loading Overlay -->
   <div class="loading-overlay" id="loading">
     <div class="loading-spinner"></div>
-    <div class="loading-text">Loading airports...</div>
+    <div class="loading-text">Loading...</div>
   </div>
 
   <div class="app">
-    <!-- Header -->
     <header class="header">
       <div class="header-title">✈️ MSFS Randomizer</div>
       <div class="header-status" id="cloud-status">Loading…</div>
     </header>
 
-    <!-- Main Content -->
     <main class="main">
-      <!-- Roll Tab -->
-      <div class="tab-content active" id="tab-roll">
-        <button class="roll-button" onclick="rollAll()">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="2" y="2" width="20" height="20" rx="4"/>
-            <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
-            <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
-            <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
-            <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
-            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
-          </svg>
-          Next Flight
-        </button>
-        <div class="results-list" id="results-list">
-          <div class="empty-state">
-            <div class="empty-state-icon">🎲</div>
-            <div class="empty-state-text">Tap "Next Flight" to roll</div>
+      <!-- LOGBOOK -->
+      <div class="tab-content active" id="tab-logbook">
+        <div id="globe-container"><canvas id="globe-canvas"></canvas></div>
+        <div class="logbook-stats">
+          <div class="stat-item"><div class="stat-value" id="stat-flown">0</div><div class="stat-label">Flown</div></div>
+          <div class="stat-item"><div class="stat-value" id="stat-planned">0</div><div class="stat-label">Planned</div></div>
+          <div class="stat-item"><div class="stat-value" id="stat-total">0</div><div class="stat-label">Total</div></div>
+        </div>
+        <div class="logbook-list" id="logbook-list"></div>
+      </div>
+
+      <!-- ROLL -->
+      <div class="tab-content" id="tab-roll">
+        <div class="roll-tab-content">
+          <button class="roll-button" onclick="rollAll()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="2" width="20" height="20" rx="4"/>
+              <circle cx="8" cy="8" r="1.5" fill="currentColor"/><circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+              <circle cx="8" cy="16" r="1.5" fill="currentColor"/><circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+              <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            </svg>
+            Next Flight
+          </button>
+          <div class="results-list" id="results-list">
+            <div class="empty-state"><div class="empty-state-icon">🎲</div><div class="empty-state-text">Tap "Next Flight" to roll</div></div>
           </div>
         </div>
       </div>
 
-      <!-- Categories Tab -->
-      <div class="tab-content" id="tab-cats">
-        <div id="cats-list">
-          <!-- Filled by JS -->
-        </div>
+      <!-- DATA -->
+      <div class="tab-content" id="tab-data">
+        <div class="data-tab-content" id="cats-list"></div>
         <div class="cat-detail" id="cat-detail">
           <div class="cat-detail-header">
             <button class="cat-back-btn" onclick="closeCatDetail()">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M15 18l-6-6 6-6"/>
-              </svg>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
             </button>
             <div class="cat-detail-title" id="cat-detail-title">Category</div>
           </div>
           <div class="cat-items-list" id="cat-items-list"></div>
         </div>
       </div>
-
-      <!-- Map Tab -->
-      <div class="tab-content" id="tab-map">
-        <div id="mobile-map"></div>
-      </div>
-
-      <!-- Legs Tab -->
-      <div class="tab-content" id="tab-legs">
-        <div id="legs-list">
-          <div class="legs-empty">
-            <div class="empty-state-icon">🛫</div>
-            <div class="empty-state-text">No legs planned yet.<br>Tap a result card to add it.</div>
-          </div>
-        </div>
-      </div>
     </main>
 
-    <!-- Bottom Navigation -->
     <nav class="bottom-nav">
-      <button class="nav-item active" onclick="switchTab('roll')">
+      <button class="nav-item active" onclick="switchTab('logbook')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <rect x="2" y="2" width="20" height="20" rx="4"/>
-          <circle cx="8" cy="8" r="1" fill="currentColor"/>
-          <circle cx="16" cy="16" r="1" fill="currentColor"/>
+          <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
+        </svg>
+        Logbook
+      </button>
+      <button class="nav-item" onclick="switchTab('roll')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="20" rx="4"/><circle cx="8" cy="8" r="1" fill="currentColor"/><circle cx="16" cy="16" r="1" fill="currentColor"/>
         </svg>
         Roll
       </button>
-      <button class="nav-item" onclick="switchTab('cats')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M4 6h16M4 12h16M4 18h10"/>
-        </svg>
+      <button class="nav-item" onclick="switchTab('data')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
         Data
-      </button>
-      <button class="nav-item" onclick="switchTab('map')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
-          <circle cx="12" cy="10" r="3"/>
-        </svg>
-        Map
-      </button>
-      <button class="nav-item" onclick="switchTab('legs')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M5 12h14M12 5l7 7-7 7"/>
-        </svg>
-        Legs
       </button>
     </nav>
   </div>
 
-  <!-- Leaflet for Map -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <script>
-// ═══════════════════════════════════════════════════════════════════════════
-// CONSTANTS & STATE
-// ═══════════════════════════════════════════════════════════════════════════
 const COLORS = ['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
-
-const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',NZ:'New Zealand',AU:'Australia',NP:'Nepal',BT:'Bhutan',IN:'India',JP:'Japan',CN:'China',SG:'Singapore',TH:'Thailand',MY:'Malaysia',BR:'Brazil',AR:'Argentina',CO:'Colombia',PE:'Peru',EC:'Ecuador',VE:'Venezuela',MX:'Mexico',HN:'Honduras',CR:'Costa Rica',CA:'Canada',IS:'Iceland',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',GR:'Greece',HR:'Croatia',ME:'Montenegro',PH:'Philippines',ID:'Indonesia',ZA:'South Africa',EG:'Egypt',GI:'Gibraltar',MT:'Malta',PT:'Portugal',LU:'Luxembourg',PL:'Poland',CZ:'Czechia',HU:'Hungary',RO:'Romania',TR:'Turkey',IL:'Israel',AE:'UAE',SA:'Saudi Arabia',QA:'Qatar',KR:'South Korea',TW:'Taiwan',HK:'Hong Kong',RU:'Russia'};
+const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',CA:'Canada',JP:'Japan',AU:'Australia',NZ:'New Zealand',BR:'Brazil',MX:'Mexico',CN:'China',IN:'India',SG:'Singapore',AE:'UAE',QA:'Qatar',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',IS:'Iceland',GR:'Greece',TR:'Turkey',PT:'Portugal',PL:'Poland',CZ:'Czechia',HU:'Hungary',IE:'Ireland',LU:'Luxembourg',HR:'Croatia',RU:'Russia',UA:'Ukraine',IL:'Israel',EG:'Egypt',ZA:'South Africa',KR:'South Korea',TW:'Taiwan',HK:'Hong Kong',TH:'Thailand',MY:'Malaysia',ID:'Indonesia',PH:'Philippines',VN:'Vietnam'};
 function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
 
-// Categories - same structure as desktop
 let CATEGORIES = [
   {id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,type:'list',items:[]},
   {id:'interesting',name:'Interesting Airports',group:'themes',colorIdx:1,type:'list-simple',items:[]},
   {id:'mountain',name:'Mountain Climbing',group:'themes',colorIdx:2,type:'list-simple',items:[]},
-  {id:'routings',name:'Routings',group:'themes',colorIdx:3,type:'text',items:[]},
   {id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[]},
   {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
   {id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
-  {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
-  {id:'rand_europe',name:'Random Europe',group:'randoms',colorIdx:8,type:'rand-coord',region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
   {id:'british',name:'British Isles',group:'networks',colorIdx:0,type:'list-simple',items:[]},
   {id:'nordics',name:'Nordics',group:'networks',colorIdx:1,type:'list-simple',items:[]},
   {id:'central_eu',name:'Central Europe',group:'networks',colorIdx:2,type:'list-simple',items:[]},
-  {id:'france_belux',name:'France / Belux',group:'networks',colorIdx:3,type:'list-simple',items:[]},
-  {id:'iberia',name:'Iberia',group:'networks',colorIdx:4,type:'list-simple',items:[]},
-  {id:'eastern_med',name:'Eastern Med',group:'networks',colorIdx:5,type:'list-simple',items:[]},
 ];
 
 let schedByCode = {};
+let logbookFlights = [];
 let lastResults = [];
-let legs = [];
-let mobileMap = null;
-let mapMarkers = [];
+let airlineLogos = {};
+let globe = { canvas: null, ctx: null, rotation: 0, isDragging: false, lastX: 0, width: 0, height: 0 };
 
-// ═══════════════════════════════════════════════════════════════════════════
 // SUPABASE
-// ═══════════════════════════════════════════════════════════════════════════
 const SUPA_URL = 'https://pvsvpkquoqffprmrlvbv.supabase.co';
 const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2c3Zwa3F1b3FmZnBybXJsdmJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NDg1NjUsImV4cCI6MjA5MTAyNDU2NX0.XTwueIlgbtkK56GJq-gPfjueOKTw1b6YtLLjQwx19pc';
 const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 function setCloudStatus(msg, cls) {
   const el = document.getElementById('cloud-status');
-  if (!el) return;
-  el.textContent = msg;
-  el.style.color = cls === 'ok' ? '#3fb950' : cls === 'err' ? '#f85149' : '#d29922';
+  if (el) { el.textContent = msg; el.style.color = cls === 'ok' ? '#3fb950' : cls === 'err' ? '#f85149' : '#d29922'; }
 }
 
 async function loadAllFromCloud() {
@@ -634,239 +425,213 @@ async function loadAllFromCloud() {
     if (data && data.length > 0) {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
-      
-      // Update existing categories
-      CATEGORIES.forEach(cat => { 
-        if (byId[cat.id] && Array.isArray(byId[cat.id])) {
-          cat.items = byId[cat.id];
-        }
-      });
-      
-      // Load custom themed categories
+      if (byId['__logbook__']) logbookFlights = byId['__logbook__'];
+      if (byId['__airline_logos__']) byId['__airline_logos__'].forEach(l => { airlineLogos[l.code] = l.url; });
+      CATEGORIES.forEach(cat => { if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; });
       const existingIds = new Set(CATEGORIES.map(c => c.id));
       data.forEach(row => {
-        if (!existingIds.has(row.name) && Array.isArray(row.items) && row.items.length > 0) {
+        if (!existingIds.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0) {
           if (row.items[0] && row.items[0].theme !== undefined) {
-            CATEGORIES.push({
-              id: row.name,
-              name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-              group: 'custom',
-              colorIdx: CATEGORIES.length % 12,
-              type: 'list-themed',
-              items: row.items
-            });
+            CATEGORIES.push({ id: row.name, name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), group: 'custom', colorIdx: CATEGORIES.length % 12, type: 'list-themed', items: row.items });
           }
         }
       });
-      
       setCloudStatus('✓ Synced', 'ok');
-    } else {
-      setCloudStatus('No data', 'ing');
     }
-  } catch(e) {
-    console.error('Load error:', e);
-    setCloudStatus('⚠ Offline', 'err');
-  }
+  } catch(e) { console.error(e); setCloudStatus('⚠ Offline', 'err'); }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════════════════════════
+// NAV
 function switchTab(tabId) {
-  // Update nav items
   document.querySelectorAll('.nav-item').forEach((btn, i) => {
-    const tabs = ['roll', 'cats', 'map', 'legs'];
-    btn.classList.toggle('active', tabs[i] === tabId);
+    btn.classList.toggle('active', ['logbook','roll','data'][i] === tabId);
   });
-  
-  // Update tab content
   document.querySelectorAll('.tab-content').forEach(tab => {
     tab.classList.toggle('active', tab.id === 'tab-' + tabId);
   });
-  
-  // Initialize map if needed
-  if (tabId === 'map' && !mobileMap) {
-    setTimeout(initMap, 100);
-  }
-  
-  // Refresh categories list
-  if (tabId === 'cats') {
-    renderCatsList();
-  }
+  if (tabId === 'logbook') { renderLogbook(); requestAnimationFrame(drawGlobe); }
+  if (tabId === 'data') renderCatsList();
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// ROLL / RESULTS
-// ═══════════════════════════════════════════════════════════════════════════
-function nearestScheduled(lat, lon) {
-  let best = null, bestD = Infinity;
-  for (const r of DB_SCHED) {
-    const d = Math.hypot(r[3] - lat, r[4] - lon);
-    if (d < bestD) { bestD = d; best = r; }
+// GLOBE
+function initGlobe() {
+  globe.canvas = document.getElementById('globe-canvas');
+  globe.ctx = globe.canvas.getContext('2d');
+  function resize() {
+    const c = document.getElementById('globe-container');
+    const dpr = window.devicePixelRatio || 1;
+    globe.canvas.width = c.offsetWidth * dpr;
+    globe.canvas.height = c.offsetHeight * dpr;
+    globe.ctx.scale(dpr, dpr);
+    globe.width = c.offsetWidth;
+    globe.height = c.offsetHeight;
   }
-  return best;
+  resize();
+  window.addEventListener('resize', resize);
+  globe.canvas.addEventListener('touchstart', e => { globe.isDragging = true; globe.lastX = e.touches[0].clientX; });
+  globe.canvas.addEventListener('touchmove', e => {
+    if (!globe.isDragging) return;
+    globe.rotation += (e.touches[0].clientX - globe.lastX) * 0.5;
+    globe.lastX = e.touches[0].clientX;
+    drawGlobe();
+  });
+  globe.canvas.addEventListener('touchend', () => { globe.isDragging = false; });
+  drawGlobe();
 }
 
-function rollAll() {
-  if (typeof DB_SCHED === 'undefined' || !DB_SCHED.length) {
-    setTimeout(rollAll, 500);
+function latLonToGlobe(lat, lon, cx, cy, r) {
+  const phi = (90 - lat) * Math.PI / 180;
+  const theta = (lon + globe.rotation) * Math.PI / 180;
+  const x = r * Math.sin(phi) * Math.cos(theta);
+  const y = r * Math.cos(phi);
+  const z = r * Math.sin(phi) * Math.sin(theta);
+  if (z < 0) return null;
+  return { x: cx + x, y: cy - y };
+}
+
+function drawGlobe() {
+  const ctx = globe.ctx, w = globe.width, h = globe.height;
+  const cx = w / 2, cy = h / 2, r = Math.min(w, h) * 0.4;
+  ctx.fillStyle = '#0d1117'; ctx.fillRect(0, 0, w, h);
+  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = '#161b22'; ctx.fill();
+  ctx.strokeStyle = '#30363d'; ctx.lineWidth = 1; ctx.stroke();
+  
+  // Grid
+  ctx.strokeStyle = 'rgba(48,54,61,0.5)'; ctx.lineWidth = 0.5;
+  for (let lon = -180; lon < 180; lon += 30) {
+    ctx.beginPath(); let s = false;
+    for (let lat = -90; lat <= 90; lat += 5) {
+      const p = latLonToGlobe(lat, lon, cx, cy, r);
+      if (p) { if (!s) { ctx.moveTo(p.x, p.y); s = true; } else ctx.lineTo(p.x, p.y); }
+    }
+    ctx.stroke();
+  }
+  for (let lat = -60; lat <= 60; lat += 30) {
+    ctx.beginPath(); let s = false;
+    for (let lon = -180; lon <= 180; lon += 5) {
+      const p = latLonToGlobe(lat, lon, cx, cy, r);
+      if (p) { if (!s) { ctx.moveTo(p.x, p.y); s = true; } else ctx.lineTo(p.x, p.y); }
+    }
+    ctx.stroke();
+  }
+  
+  // Flights
+  logbookFlights.forEach(f => {
+    if (!f.dep_lat || !f.arr_lat) return;
+    const p1 = latLonToGlobe(f.dep_lat, f.dep_lon, cx, cy, r);
+    const p2 = latLonToGlobe(f.arr_lat, f.arr_lon, cx, cy, r);
+    if (!p1 || !p2) return;
+    ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+    ctx.strokeStyle = f.planned ? 'rgba(88,166,255,0.7)' : 'rgba(63,185,80,0.7)';
+    ctx.lineWidth = 2; ctx.stroke();
+    [p1, p2].forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3, 0, Math.PI * 2); ctx.fillStyle = f.planned ? '#58a6ff' : '#3fb950'; ctx.fill(); });
+  });
+}
+
+// LOGBOOK
+function renderLogbook() {
+  const planned = logbookFlights.filter(f => f.planned).length;
+  const flown = logbookFlights.length - planned;
+  document.getElementById('stat-flown').textContent = flown;
+  document.getElementById('stat-planned').textContent = planned;
+  document.getElementById('stat-total').textContent = logbookFlights.length;
+  
+  const c = document.getElementById('logbook-list');
+  if (!logbookFlights.length) {
+    c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📖</div><div class="empty-state-text">No flights yet.</div></div>';
     return;
   }
-  
-  // Haptic feedback if available
+  c.innerHTML = [...logbookFlights].reverse().map(f => {
+    const logo = airlineLogos[f.airline];
+    const logoHtml = logo ? `<img src="${logo}" alt="${f.airline}">` : `<span class="flight-logo-text">${f.airline || '–'}</span>`;
+    return `<div class="flight-item ${f.planned ? 'planned' : 'flown'}">
+      <div class="flight-logo">${logoHtml}</div>
+      <div class="flight-route">
+        <div class="flight-icaos"><span>${f.dep_icao}</span><span class="flight-arrow">→</span><span>${f.arr_icao}</span></div>
+        <div class="flight-cities">${f.dep || ''} → ${f.arr || ''}</div>
+      </div>
+      ${f.aircraft ? `<div class="flight-eqp">${f.aircraft}</div>` : ''}
+    </div>`;
+  }).join('');
+  drawGlobe();
+}
+
+// ROLL
+function rollAll() {
+  if (typeof DB_SCHED === 'undefined') { setTimeout(rollAll, 500); return; }
   if (navigator.vibrate) navigator.vibrate(10);
-  
-  lastResults = CATEGORIES.filter(cat => 
-    cat.type !== 'rand-coord' || ['rand_world', 'rand_europe'].includes(cat.id)
-  ).map(cat => {
-    let result = {icao:'',name:'',city:'',country:'',lat:null,lon:null,coord:false,diff:'',text:'',itemName:''};
-    
-    if (cat.type === 'list' || cat.type === 'list-simple' || cat.type === 'list-themed') {
-      if (!cat.items || !cat.items.length) return {cat, result};
+  lastResults = CATEGORIES.filter(c => c.items && c.items.length > 0).map(cat => {
+    let result = {icao:'',city:'',country:'',iata:'',diff:'',itemName:'',lat:null,lon:null};
+    if (['list','list-simple','list-themed'].includes(cat.type)) {
       const item = cat.items[Math.floor(Math.random() * cat.items.length)];
-      const db = item.icao ? (schedByCode[item.icao] || null) : null;
+      const db = item.icao ? schedByCode[item.icao] : null;
       result.icao = item.icao || '';
       result.iata = item.iata || (db ? db[1] : '') || '';
-      
-      if (cat.type === 'list-themed') {
-        result.city = item.city || (db ? db[7] || db[2] : '');
-        result.country = item.country || (db ? countryName(db[6]) : '');
-        result.itemName = item.theme || '';
-      } else if (cat.id === 'formula1') {
-        result.city = item.city || (db ? db[7] || db[2] : '');
-        result.country = item.country || (db ? countryName(db[6]) : '');
-        result.itemName = item.name || '';
-      } else {
-        result.city = item.name || (db ? db[7] || db[2] : '');
-        result.country = item.country || (db ? countryName(db[6]) : '');
-      }
+      result.city = item.city || item.name || (db ? db[7] || db[2] : '');
+      result.country = item.country || (db ? countryName(db[6]) : '');
       result.diff = item.diff || '';
+      result.itemName = item.theme || (cat.id === 'formula1' ? item.name : '') || '';
       if (db) { result.lat = db[3]; result.lon = db[4]; }
-    }
-    else if (cat.type === 'text') {
-      if (!cat.items || !cat.items.length) return {cat, result};
-      result.text = cat.items[Math.floor(Math.random() * cat.items.length)].name || '';
-    }
-    else if (cat.type === 'rand-icao' || cat.type === 'rand-iata') {
+    } else if (cat.type === 'rand-icao' || cat.type === 'rand-iata') {
       const pool = cat.type === 'rand-iata' ? DB_SCHED.filter(r => r[1]) : DB_SCHED;
-      if (!pool.length) return {cat, result};
       const ap = pool[Math.floor(Math.random() * pool.length)];
-      result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2];
-      result.name = ap[2]; result.country = countryName(ap[6]);
-      result.lat = ap[3]; result.lon = ap[4];
+      result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
     }
-    else if (cat.type === 'rand-coord') {
-      const reg = cat.region;
-      const lat = reg.latMin + Math.random()*(reg.latMax-reg.latMin);
-      const lon = reg.lonMin + Math.random()*(reg.lonMax-reg.lonMin);
-      const ap = nearestScheduled(lat, lon);
-      result.coord = true; result.coordLat = lat.toFixed(2); result.coordLon = lon.toFixed(2);
-      if (ap) {
-        result.icao = ap[0]; result.iata = ap[1]||''; result.name = ap[2];
-        result.city = ap[7] || ap[2]; result.country = countryName(ap[6]);
-        result.lat = ap[3]; result.lon = ap[4];
-      }
-    }
-    return {cat, result};
+    return { cat, result };
   });
-  
   renderResults();
-  updateMapMarkers();
 }
 
 function renderResults() {
-  const container = document.getElementById('results-list');
-  if (!lastResults.length) {
-    container.innerHTML = `<div class="empty-state">
-      <div class="empty-state-icon">🎲</div>
-      <div class="empty-state-text">Tap "Next Flight" to roll</div>
-    </div>`;
+  const c = document.getElementById('results-list');
+  if (!lastResults.some(r => r.result.icao)) {
+    c.innerHTML = '<div class="empty-state"><div class="empty-state-icon">🎲</div><div class="empty-state-text">Tap "Next Flight" to roll</div></div>';
     return;
   }
-  
-  container.innerHTML = lastResults.filter(r => r.result.icao || r.result.text).map(({cat, result}) => {
+  c.innerHTML = lastResults.filter(r => r.result.icao).map(({cat, result}) => {
     const col = COLORS[cat.colorIdx % COLORS.length];
-    let content = '';
-    
-    if (result.text) {
-      content = `<div class="result-text">${result.text}</div>`;
-    } else {
-      const iataHtml = result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : '';
-      content = `
-        ${result.coord ? `<div class="result-coord">${result.coordLat}°, ${result.coordLon}°</div>` : ''}
-        <div class="result-icao">${result.icao}${iataHtml}</div>
-        <div class="result-city">${result.city || result.name}</div>
-        <div class="result-country">${result.country}</div>
-        ${result.diff ? `<div class="result-badge">${result.diff}</div>` : ''}
-        ${result.itemName ? `<div class="result-badge">${result.itemName}</div>` : ''}
-      `;
-    }
-    
-    return `<div class="result-card" onclick="addToLegs('${cat.id}')">
-      <div class="result-header">
-        <div class="result-dot" style="background:${col}"></div>
-        <div class="result-cat-name">${cat.name}</div>
-      </div>
-      ${content}
+    return `<div class="result-card">
+      <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
+      <div class="result-icao">${result.icao}${result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : ''}</div>
+      <div class="result-city">${result.city}</div>
+      <div class="result-country">${result.country}</div>
+      ${result.diff ? `<div class="result-badge">${result.diff}</div>` : ''}
+      ${result.itemName ? `<div class="result-badge">${result.itemName}</div>` : ''}
     </div>`;
   }).join('');
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// CATEGORIES
-// ═══════════════════════════════════════════════════════════════════════════
+// DATA
 function renderCatsList() {
-  const container = document.getElementById('cats-list');
-  const groups = {themes: 'Themes', randoms: 'Random', networks: 'Networks', custom: 'Custom'};
-  
+  const c = document.getElementById('cats-list');
+  const groups = {themes:'Themes', randoms:'Random', networks:'Networks', custom:'Custom'};
   let html = '';
-  for (const [groupId, groupName] of Object.entries(groups)) {
-    const cats = CATEGORIES.filter(c => c.group === groupId && c.items && c.items.length > 0);
+  for (const [gid, gname] of Object.entries(groups)) {
+    const cats = CATEGORIES.filter(x => x.group === gid && x.items && x.items.length > 0);
     if (!cats.length) continue;
-    
-    html += `<div class="cat-section">
-      <div class="cat-section-title">${groupName}</div>
-      <div class="cat-chips">
-        ${cats.map(cat => {
-          const col = COLORS[cat.colorIdx % COLORS.length];
-          return `<div class="cat-chip" onclick="openCatDetail('${cat.id}')">
-            <div class="cat-chip-dot" style="background:${col}"></div>
-            ${cat.name}
-            <span class="cat-chip-count">${cat.items.length}</span>
-          </div>`;
-        }).join('')}
-      </div>
-    </div>`;
+    html += `<div class="cat-section"><div class="cat-section-title">${gname}</div><div class="cat-chips">
+      ${cats.map(cat => `<div class="cat-chip" onclick="openCatDetail('${cat.id}')"><div class="cat-chip-dot" style="background:${COLORS[cat.colorIdx % COLORS.length]}"></div>${cat.name}<span class="cat-chip-count">${cat.items.length}</span></div>`).join('')}
+    </div></div>`;
   }
-  
-  container.innerHTML = html || '<div class="empty-state">No categories loaded</div>';
+  c.innerHTML = html || '<div class="empty-state">No categories</div>';
   document.getElementById('cat-detail').classList.remove('active');
-  container.style.display = '';
+  c.style.display = '';
 }
 
 function openCatDetail(catId) {
-  const cat = CATEGORIES.find(c => c.id === catId);
-  if (!cat) return;
-  
+  const cat = CATEGORIES.find(c => c.id === catId); if (!cat) return;
   document.getElementById('cats-list').style.display = 'none';
   document.getElementById('cat-detail').classList.add('active');
   document.getElementById('cat-detail-title').textContent = cat.name;
-  
   const list = document.getElementById('cat-items-list');
   list.innerHTML = cat.items.slice(0, 50).map(item => {
     const db = item.icao ? schedByCode[item.icao] : null;
     const name = item.name || item.city || (db ? db[7] || db[2] : '');
     const country = item.country || (db ? countryName(db[6]) : '');
-    return `<div class="cat-item">
-      <div class="cat-item-icao">${item.icao || '–'}</div>
-      <div class="cat-item-name">${name}</div>
-      <div class="cat-item-country">${country}</div>
-    </div>`;
+    return `<div class="cat-item"><div class="cat-item-icao">${item.icao || '–'}</div><div class="cat-item-name">${name}</div><div class="cat-item-country">${country}</div></div>`;
   }).join('');
-  
-  if (cat.items.length > 50) {
-    list.innerHTML += `<div style="text-align:center;padding:12px;color:var(--txt3);">+${cat.items.length - 50} more</div>`;
-  }
+  if (cat.items.length > 50) list.innerHTML += `<div style="text-align:center;padding:12px;color:var(--txt3);">+${cat.items.length - 50} more</div>`;
 }
 
 function closeCatDetail() {
@@ -874,145 +639,16 @@ function closeCatDetail() {
   document.getElementById('cats-list').style.display = '';
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// MAP
-// ═══════════════════════════════════════════════════════════════════════════
-function initMap() {
-  if (mobileMap) return;
-  
-  mobileMap = L.map('mobile-map', {
-    zoomControl: false,
-    attributionControl: false
-  }).setView([48, 10], 4);
-  
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    maxZoom: 19
-  }).addTo(mobileMap);
-  
-  updateMapMarkers();
-}
-
-function updateMapMarkers() {
-  if (!mobileMap) return;
-  
-  // Clear existing
-  mapMarkers.forEach(m => mobileMap.removeLayer(m));
-  mapMarkers = [];
-  
-  // Add new markers
-  lastResults.filter(r => r.result.lat && r.result.lon).forEach(({cat, result}) => {
-    const col = COLORS[cat.colorIdx % COLORS.length];
-    const marker = L.circleMarker([result.lat, result.lon], {
-      radius: 8,
-      fillColor: col,
-      fillOpacity: 0.9,
-      color: '#fff',
-      weight: 2
-    }).addTo(mobileMap);
-    
-    marker.bindPopup(`<b>${result.icao}</b><br>${result.city}`);
-    mapMarkers.push(marker);
-  });
-  
-  // Fit bounds if markers exist
-  if (mapMarkers.length > 0) {
-    const group = L.featureGroup(mapMarkers);
-    mobileMap.fitBounds(group.getBounds(), { padding: [30, 30] });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// LEGS
-// ═══════════════════════════════════════════════════════════════════════════
-function addToLegs(catId) {
-  const r = lastResults.find(x => x.cat.id === catId);
-  if (!r || !r.result.icao) return;
-  
-  // Haptic feedback
-  if (navigator.vibrate) navigator.vibrate(5);
-  
-  legs.push({
-    icao: r.result.icao,
-    iata: r.result.iata,
-    city: r.result.city,
-    country: r.result.country,
-    lat: r.result.lat,
-    lon: r.result.lon
-  });
-  
-  renderLegs();
-  
-  // Show feedback
-  alert(`Added ${r.result.icao} to legs!`);
-}
-
-function renderLegs() {
-  const container = document.getElementById('legs-list');
-  
-  if (!legs.length) {
-    container.innerHTML = `<div class="legs-empty">
-      <div class="empty-state-icon">🛫</div>
-      <div class="empty-state-text">No legs planned yet.<br>Tap a result card to add it.</div>
-    </div>`;
-    return;
-  }
-  
-  container.innerHTML = legs.map((leg, i) => `
-    <div class="leg-item">
-      <div class="leg-number">${i + 1}</div>
-      <div class="leg-airports">
-        <div class="leg-route">${leg.icao}${leg.iata ? ' / ' + leg.iata : ''}</div>
-        <div class="leg-cities">${leg.city}, ${leg.country}</div>
-      </div>
-      <button class="leg-delete" onclick="removeLeg(${i})">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18 6L6 18M6 6l12 12"/>
-        </svg>
-      </button>
-    </div>
-  `).join('') + `
-    <button class="add-leg-btn" onclick="switchTab('roll')">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <circle cx="12" cy="12" r="10"/>
-        <path d="M12 8v8M8 12h8"/>
-      </svg>
-      Add another leg
-    </button>
-  `;
-}
-
-function removeLeg(index) {
-  if (navigator.vibrate) navigator.vibrate(5);
-  legs.splice(index, 1);
-  renderLegs();
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
 // INIT
-// ═══════════════════════════════════════════════════════════════════════════
 async function init() {
-  // Wait for airports.js
-  let attempts = 0;
-  while (typeof DB_SCHED === 'undefined' && attempts < 50) {
-    await new Promise(r => setTimeout(r, 100));
-    attempts++;
-  }
-  
-  if (typeof DB_SCHED !== 'undefined') {
-    // Build lookup
-    DB_SCHED.forEach(r => { schedByCode[r[0]] = r; });
-  }
-  
-  // Load from cloud
+  let a = 0;
+  while (typeof DB_SCHED === 'undefined' && a < 50) { await new Promise(r => setTimeout(r, 100)); a++; }
+  if (typeof DB_SCHED !== 'undefined') DB_SCHED.forEach(r => { schedByCode[r[0]] = r; });
   await loadAllFromCloud();
-  
-  // Hide loading
+  initGlobe();
+  renderLogbook();
   document.getElementById('loading').classList.add('hidden');
-  
-  // Render categories
-  renderCatsList();
 }
-
 init();
   </script>
 </body>
