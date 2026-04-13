@@ -176,8 +176,8 @@ html, body {
 .flight-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 8px 8px;
   background: var(--surf);
   border-radius: 8px;
   margin-bottom: 6px;
@@ -187,8 +187,8 @@ html, body {
 
 /* Logo container with light background for visibility */
 .flight-logo {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 4px;
   background: #f0f0f0;
   display: flex;
@@ -203,23 +203,34 @@ html, body {
   object-fit: contain;
 }
 .flight-logo-text { 
-  font-size: 8px; 
+  font-size: 7px; 
   font-weight: 700; 
   color: #666;
+}
+
+.flight-eqp {
+  font-family: 'SF Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  color: var(--orange);
+  background: rgba(240,136,62,0.15);
+  padding: 2px 4px;
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .flight-route { flex: 1; min-width: 0; }
 .flight-icaos {
   font-family: 'SF Mono', monospace;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
-.flight-arrow { color: var(--txt3); font-size: 9px; }
+.flight-arrow { color: var(--txt3); font-size: 8px; }
 .flight-cities {
-  font-size: 9px;
+  font-size: 8px;
   color: var(--txt3);
   margin-top: 1px;
   white-space: nowrap;
@@ -227,15 +238,41 @@ html, body {
   text-overflow: ellipsis;
 }
 
-.flight-eqp {
-  font-family: 'SF Mono', monospace;
+.flight-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.flight-landed-btn {
+  padding: 4px 8px;
   font-size: 9px;
   font-weight: 600;
-  color: var(--orange);
-  background: rgba(240,136,62,0.15);
-  padding: 2px 5px;
-  border-radius: 3px;
-  flex-shrink: 0;
+  font-family: var(--ff);
+  color: var(--blue);
+  background: rgba(88,166,255,0.15);
+  border: none;
+  border-radius: 4px;
+}
+.flight-landed-btn:active {
+  background: rgba(88,166,255,0.3);
+}
+
+.flight-delete-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--txt3);
+  border-radius: 4px;
+}
+.flight-delete-btn:active {
+  background: rgba(255,255,255,0.1);
+  color: #f85149;
 }
 
 .empty-state {
@@ -405,7 +442,11 @@ html, body {
 }
 .roll-button:active { transform: scale(0.98); }
 
-.results-list { display: flex; flex-direction: column; gap: 8px; }
+.results-list { 
+  display: grid; 
+  grid-template-columns: 1fr 1fr; 
+  gap: 8px; 
+}
 .result-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
@@ -416,13 +457,13 @@ html, body {
 .result-card:active {
   background: var(--surf2);
 }
-.result-header { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; }
-.result-dot { width: 6px; height: 6px; border-radius: 50%; }
-.result-cat-name { font-size: 9px; font-weight: 600; color: var(--txt3); text-transform: uppercase; }
-.result-icao { font-size: 18px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--acc2); }
-.result-iata { color: var(--blue); font-size: 12px; margin-left: 4px; }
-.result-city { font-size: 12px; margin-top: 2px; }
-.result-country { font-size: 10px; color: var(--txt2); }
+.result-header { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+.result-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+.result-cat-name { font-size: 8px; font-weight: 600; color: var(--txt3); text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-icao { font-size: 15px; font-weight: 700; font-family: 'SF Mono', monospace; color: var(--acc2); }
+.result-iata { color: var(--blue); font-size: 11px; margin-left: 3px; }
+.result-city { font-size: 11px; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.result-country { font-size: 9px; color: var(--txt2); }
 .result-badge {
   display: inline-block;
   margin-top: 4px;
@@ -1049,6 +1090,39 @@ function applyFilter() {
   updateMapRoutes();
 }
 
+// Mark flight as landed (planned -> flown)
+async function markAsLanded(idx) {
+  if (idx < 0 || idx >= logbookFlights.length) return;
+  
+  logbookFlights[idx].planned = false;
+  
+  // Save to Supabase
+  try {
+    await sb.from('categories').upsert({ name: '__logbook__', items: logbookFlights }, { onConflict: 'name' });
+  } catch(e) { console.error('Save failed:', e); }
+  
+  renderLogbook();
+  updateMapRoutes();
+}
+
+// Delete flight from logbook
+async function deleteFlight(idx) {
+  if (idx < 0 || idx >= logbookFlights.length) return;
+  
+  const f = logbookFlights[idx];
+  if (!confirm(`Delete flight ${f.dep_icao} → ${f.arr_icao}?`)) return;
+  
+  logbookFlights.splice(idx, 1);
+  
+  // Save to Supabase
+  try {
+    await sb.from('categories').upsert({ name: '__logbook__', items: logbookFlights }, { onConflict: 'name' });
+  } catch(e) { console.error('Save failed:', e); }
+  
+  renderLogbook();
+  updateMapRoutes();
+}
+
 // LOGBOOK
 function renderLogbook() {
   const flights = getFilteredFlights();
@@ -1061,22 +1135,39 @@ function renderLogbook() {
     return;
   }
   
-  c.innerHTML = [...flights].reverse().map(f => {
+  c.innerHTML = [...flights].reverse().map((f, idx) => {
     const code = f.airline || '';
     const logoUrl = getLogoUrl(code);
+    const realIdx = logbookFlights.length - 1 - idx; // Index in original array
     
     // If we have a logo URL, show image with onerror fallback to text
     const logoHtml = logoUrl
       ? `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${code}"><span class="flight-logo-text" style="display:none;">${code || '–'}</span>`
       : `<span class="flight-logo-text">${code || '–'}</span>`;
     
+    // Landed button only for planned flights
+    const landedBtn = f.planned 
+      ? `<button class="flight-landed-btn" onclick="markAsLanded(${realIdx});event.stopPropagation();">Landed</button>` 
+      : '';
+    
+    // Delete button for all flights
+    const deleteBtn = `<button class="flight-delete-btn" onclick="deleteFlight(${realIdx});event.stopPropagation();">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+      </svg>
+    </button>`;
+    
     return `<div class="flight-item ${f.planned ? 'planned' : 'flown'}">
       <div class="flight-logo">${logoHtml}</div>
+      ${f.aircraft ? `<div class="flight-eqp">${f.aircraft}</div>` : ''}
       <div class="flight-route">
         <div class="flight-icaos"><span>${f.dep_icao}</span><span class="flight-arrow">→</span><span>${f.arr_icao}</span></div>
         <div class="flight-cities">${f.dep || ''} → ${f.arr || ''}</div>
       </div>
-      ${f.aircraft ? `<div class="flight-eqp">${f.aircraft}</div>` : ''}
+      <div class="flight-actions">
+        ${landedBtn}
+        ${deleteBtn}
+      </div>
     </div>`;
   }).join('');
 }
@@ -1116,13 +1207,14 @@ function renderResults() {
   }
   c.innerHTML = lastResults.filter(r => r.result.icao).map(({cat, result}) => {
     const col = COLORS[cat.colorIdx % COLORS.length];
+    // Badge zeigt theme/itemName (z.B. "Monaco Grand Prix") oder diff (z.B. "Challenging")
+    const badge = result.itemName || result.diff || '';
     return `<div class="result-card" onclick="selectResult('${result.icao}')">
       <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
       <div class="result-icao">${result.icao}${result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : ''}</div>
       <div class="result-city">${result.city}</div>
       <div class="result-country">${result.country}</div>
-      ${result.diff ? `<div class="result-badge">${result.diff}</div>` : ''}
-      ${result.itemName ? `<div class="result-badge">${result.itemName}</div>` : ''}
+      ${badge ? `<div class="result-badge">${badge}</div>` : ''}
     </div>`;
   }).join('');
 }
