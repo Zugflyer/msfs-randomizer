@@ -840,8 +840,11 @@ async function loadAllFromCloud() {
         console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' logos from Supabase');
       }
       
-      // Update categories
-      CATEGORIES.forEach(cat => { if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; });
+      // Update categories - but NOT rand types (they have no cloud data)
+      CATEGORIES.forEach(cat => { 
+        if (cat.type && cat.type.startsWith('rand-')) return; // Skip rand types
+        if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; 
+      });
       
       // Load custom themed categories
       const existingIds = new Set(CATEGORIES.map(c => c.id));
