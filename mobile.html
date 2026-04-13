@@ -110,6 +110,43 @@ html, body {
 }
 #map-container .leaflet-container { background: var(--bg); }
 
+/* ROLL/NEXT FLIGHT LAYOUT */
+#roll-wrapper {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+}
+
+#roll-map-container {
+  width: 100%;
+  height: 0;
+  flex-shrink: 0;
+  position: relative;
+  background: var(--bg);
+  transition: height 0.3s ease;
+}
+#roll-map-container .leaflet-container { background: var(--bg); }
+
+#roll-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  position: relative;
+  z-index: 5;
+  overflow: hidden;
+}
+#roll-panel .roll-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 14px 14px;
+  padding-bottom: calc(70px + var(--safe-bottom));
+}
+
 /* Swipeable Panel */
 #logbook-panel {
   flex: 1;
@@ -572,59 +609,67 @@ html, body {
 
       <!-- ROLL -->
       <div class="tab-content" id="tab-roll">
-        <div class="roll-tab-content">
-          <!-- DEP/ARR Fields -->
-          <div class="flight-planning">
-            <div class="airport-field">
-              <label class="airport-label">DEP</label>
-              <div class="airport-input-wrapper">
-                <input type="text" id="dep-input" class="airport-input" placeholder="Search..." autocomplete="off" oninput="onAirportInput('dep')">
-                <div class="airport-dropdown" id="dep-dropdown"></div>
-              </div>
-              <div class="airport-info" id="dep-info"></div>
+        <div id="roll-wrapper">
+          <div id="roll-map-container"></div>
+          <div id="roll-panel">
+            <div class="panel-handle" id="roll-panel-handle">
+              <div class="panel-handle-bar"></div>
             </div>
-            <div class="airport-arrow">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-            </div>
-            <div class="airport-field">
-              <label class="airport-label">ARR</label>
-              <div class="airport-input-wrapper">
-                <input type="text" id="arr-input" class="airport-input" placeholder="Search..." autocomplete="off" oninput="onAirportInput('arr')">
-                <div class="airport-dropdown" id="arr-dropdown"></div>
+            <div class="roll-tab-content">
+              <!-- DEP/ARR Fields -->
+              <div class="flight-planning">
+                <div class="airport-field">
+                  <label class="airport-label">DEP</label>
+                  <div class="airport-input-wrapper">
+                    <input type="text" id="dep-input" class="airport-input" placeholder="Search..." autocomplete="off" oninput="onAirportInput('dep')">
+                    <div class="airport-dropdown" id="dep-dropdown"></div>
+                  </div>
+                  <div class="airport-info" id="dep-info"></div>
+                </div>
+                <div class="airport-arrow">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                </div>
+                <div class="airport-field">
+                  <label class="airport-label">ARR</label>
+                  <div class="airport-input-wrapper">
+                    <input type="text" id="arr-input" class="airport-input" placeholder="Search..." autocomplete="off" oninput="onAirportInput('arr')">
+                    <div class="airport-dropdown" id="arr-dropdown"></div>
+                  </div>
+                  <div class="airport-info" id="arr-info"></div>
+                </div>
               </div>
-              <div class="airport-info" id="arr-info"></div>
+              
+              <!-- Action Buttons -->
+              <div class="planning-buttons">
+                <button class="btn-planning" onclick="showFlightOnMap()">
+                  <svg width="16" height="16" viewBox="0 0 180 180" fill="none" stroke="currentColor" stroke-width="12">
+                    <circle cx="90" cy="90" r="50"/><ellipse cx="90" cy="90" rx="20" ry="50"/>
+                    <line x1="40" y1="90" x2="140" y2="90"/>
+                  </svg>
+                  Show on Map
+                </button>
+                <button class="btn-planning" onclick="planLegs()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
+                    <rect x="9" y="3" width="6" height="4" rx="1"/>
+                    <path d="M9 12h6M9 16h6"/>
+                  </svg>
+                  Plan Legs
+                </button>
+              </div>
+              
+              <!-- Roll Button - Pfeil Icon wie Desktop -->
+              <button class="roll-button" onclick="rollAll()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                Next Flight
+              </button>
+              
+              <!-- Results -->
+              <div class="results-list" id="results-list"></div>
             </div>
           </div>
-          
-          <!-- Action Buttons -->
-          <div class="planning-buttons">
-            <button class="btn-planning" onclick="showFlightOnMap()">
-              <svg width="16" height="16" viewBox="0 0 180 180" fill="none" stroke="currentColor" stroke-width="12">
-                <circle cx="90" cy="90" r="50"/><ellipse cx="90" cy="90" rx="20" ry="50"/>
-                <line x1="40" y1="90" x2="140" y2="90"/>
-              </svg>
-              Show on Map
-            </button>
-            <button class="btn-planning" onclick="planLegs()">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
-                <rect x="9" y="3" width="6" height="4" rx="1"/>
-                <path d="M9 12h6M9 16h6"/>
-              </svg>
-              Plan Legs
-            </button>
-          </div>
-          
-          <!-- Roll Button - Pfeil Icon wie Desktop -->
-          <button class="roll-button" onclick="rollAll()">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-            Next Flight
-          </button>
-          
-          <!-- Results -->
-          <div class="results-list" id="results-list"></div>
         </div>
       </div>
 
@@ -984,16 +1029,102 @@ function selectResult(icao) {
   }
 }
 
-// Show flight on map (placeholder)
+// Show results on map
+let rollMap = null;
+let rollMarkerLayer = null;
+
 function showFlightOnMap() {
-  const dep = document.getElementById('dep-input').value.toUpperCase().trim();
-  const arr = document.getElementById('arr-input').value.toUpperCase().trim();
-  if (!dep || !arr) {
-    alert('Please enter both DEP and ARR airports');
+  // Collect all airports from results + manual ARR input
+  const points = [];
+  
+  // Add all result airports
+  if (lastResults && lastResults.length > 0) {
+    lastResults.forEach(({cat, result}) => {
+      if (result.icao && result.lat && result.lon) {
+        points.push({
+          icao: result.icao,
+          iata: result.iata || '',
+          city: result.city || '',
+          lat: result.lat,
+          lon: result.lon,
+          cat: cat.name
+        });
+      }
+    });
+  }
+  
+  // Add manual ARR if entered and not already in points
+  const arrIcao = document.getElementById('arr-input').value.toUpperCase().trim();
+  if (arrIcao && schedByCode[arrIcao]) {
+    const ap = schedByCode[arrIcao];
+    if (!points.find(p => p.icao === arrIcao)) {
+      points.push({
+        icao: arrIcao,
+        iata: ap[1] || '',
+        city: ap[7] || ap[2] || '',
+        lat: ap[3],
+        lon: ap[4],
+        cat: 'Selected'
+      });
+    }
+  }
+  
+  if (points.length === 0) {
+    alert('No airports to show. Roll destinations first!');
     return;
   }
-  // TODO: Open mapview or show route
-  alert('Show on map: ' + dep + ' → ' + arr);
+  
+  // Show map in roll-map-container
+  const mapContainer = document.getElementById('roll-map-container');
+  const wrapper = document.getElementById('roll-wrapper');
+  
+  // Set map height to 50%
+  const wrapperHeight = wrapper.offsetHeight;
+  mapContainer.style.height = Math.floor(wrapperHeight * 0.5) + 'px';
+  
+  // Initialize map if not exists
+  if (!rollMap) {
+    rollMap = L.map('roll-map-container', {
+      zoomControl: true,
+      attributionControl: false
+    });
+    
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(rollMap);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19
+    }).addTo(rollMap);
+    
+    rollMarkerLayer = L.layerGroup().addTo(rollMap);
+  }
+  
+  // Clear old markers
+  rollMarkerLayer.clearLayers();
+  
+  // Add markers
+  const bounds = [];
+  points.forEach(pt => {
+    const marker = L.circleMarker([pt.lat, pt.lon], {
+      radius: 5,
+      fillColor: '#58a6ff',
+      fillOpacity: 0.8,
+      color: '#fff',
+      weight: 1.5,
+      opacity: 0.9
+    }).addTo(rollMarkerLayer);
+    
+    marker.bindPopup(`<b>${pt.icao}</b>${pt.iata ? ' / ' + pt.iata : ''}<br>${pt.city}<br><small>${pt.cat}</small>`);
+    bounds.push([pt.lat, pt.lon]);
+  });
+  
+  // Fit bounds and invalidate size
+  setTimeout(() => {
+    rollMap.invalidateSize();
+    if (bounds.length > 0) {
+      rollMap.fitBounds(bounds, { padding: [30, 30], maxZoom: 5 });
+    }
+  }, 100);
 }
 
 // Plan legs (placeholder)
