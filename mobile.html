@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d1117">
+  <title>MSFS Randomizer</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="airports.js" defer></script>
+  <style>
+:root {
+  --bg: #0d1117;
+  --surf: #161b22;
+  --surf2: #21262d;
+  --surf3: #30363d;
+  --bdr: #30363d;
+  --bdr2: #484f58;
+  --txt: #e6edf3;
+  --txt2: #8b949e;
+  --txt3: #6e7681;
+  --acc: #7d5ee8;
+  --acc2: #a78bfa;
+  --green: #3fb950;
+  --orange: #f0883e;
+  --red: #f85149;
+  --blue: #58a6ff;
+  --r: 12px;
+  --ff: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', sans-serif;
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-top: env(safe-area-inset-top, 0px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { 
+  height: 100%; 
+  overflow: hidden;
+  background: var(--bg); 
+  color: var(--txt); 
+  font-family: var(--ff);
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LAYOUT
+   ══════════════════════════════════════════════════════════════════ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-top: var(--safe-top);
+}
+
+/* Header */
+.header {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--bdr);
+  background: var(--surf);
+}
+.header-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--txt);
+}
+.header-status {
+  font-size: 12px;
+  color: var(--green);
+}
+
+/* Main Content */
+.main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.tab-content {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  display: none;
+  padding: 16px;
+  padding-bottom: calc(80px + var(--safe-bottom));
+}
+.tab-content.active { display: block; }
+
+/* Bottom Nav */
+.bottom-nav {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px 0;
+  padding-bottom: calc(8px + var(--safe-bottom));
+  background: var(--surf);
+  border-top: 1px solid var(--bdr);
+}
+.nav-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: none;
+  background: none;
+  color: var(--txt3);
+  font-size: 10px;
+  font-family: var(--ff);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.nav-item.active { color: var(--acc2); }
+.nav-item svg { width: 24px; height: 24px; }
+
+/* ══════════════════════════════════════════════════════════════════
+   ROLL TAB
+   ══════════════════════════════════════════════════════════════════ */
+.roll-button {
+  width: 100%;
+  padding: 18px;
+  margin-bottom: 20px;
+  border: none;
+  border-radius: var(--r);
+  background: linear-gradient(135deg, var(--acc) 0%, #6344c7 100%);
+  color: white;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: var(--ff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  box-shadow: 0 4px 16px rgba(125, 94, 232, 0.3);
+  transition: transform 0.1s, box-shadow 0.1s;
+}
+.roll-button:active {
+  transform: scale(0.98);
+  box-shadow: 0 2px 8px rgba(125, 94, 232, 0.2);
+}
+.roll-button svg { width: 24px; height: 24px; }
+
+/* Result Cards */
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.result-card {
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.result-card:active {
+  background: var(--surf2);
+  border-color: var(--bdr2);
+}
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.result-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.result-cat-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--txt2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.result-icao {
+  font-size: 22px;
+  font-weight: 700;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  color: var(--acc2);
+  letter-spacing: 0.02em;
+}
+.result-iata {
+  color: var(--blue);
+  font-size: 16px;
+  font-weight: 500;
+  margin-left: 6px;
+}
+.result-city {
+  font-size: 15px;
+  color: var(--txt);
+  margin-top: 2px;
+}
+.result-country {
+  font-size: 13px;
+  color: var(--txt2);
+  margin-top: 1px;
+}
+.result-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 11px;
+  font-weight: 600;
+  background: rgba(240, 136, 62, 0.15);
+  color: var(--orange);
+  border: 1px solid rgba(240, 136, 62, 0.3);
+}
+.result-text {
+  font-size: 14px;
+  color: var(--txt);
+  line-height: 1.5;
+}
+.result-coord {
+  font-size: 11px;
+  color: var(--txt3);
+  font-family: 'SF Mono', monospace;
+  margin-bottom: 4px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--txt3);
+}
+.empty-state-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+.empty-state-text {
+  font-size: 15px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   CATEGORIES TAB
+   ══════════════════════════════════════════════════════════════════ */
+.cat-section {
+  margin-bottom: 24px;
+}
+.cat-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--txt2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  padding-left: 4px;
+}
+.cat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.cat-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 20px;
+  font-size: 13px;
+  color: var(--txt);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cat-chip:active {
+  background: var(--surf2);
+  border-color: var(--acc);
+}
+.cat-chip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+.cat-chip-count {
+  font-size: 11px;
+  color: var(--txt3);
+  margin-left: 2px;
+}
+
+/* Category Detail */
+.cat-detail {
+  display: none;
+}
+.cat-detail.active {
+  display: block;
+}
+.cat-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.cat-back-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: var(--surf);
+  border-radius: 50%;
+  color: var(--txt);
+  cursor: pointer;
+}
+.cat-detail-title {
+  font-size: 18px;
+  font-weight: 600;
+}
+.cat-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.cat-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+}
+.cat-item-icao {
+  font-family: 'SF Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--acc2);
+  width: 60px;
+}
+.cat-item-name {
+  flex: 1;
+  font-size: 14px;
+  color: var(--txt);
+}
+.cat-item-country {
+  font-size: 12px;
+  color: var(--txt3);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   MAP TAB
+   ══════════════════════════════════════════════════════════════════ */
+#mobile-map {
+  width: 100%;
+  height: calc(100vh - 180px);
+  border-radius: var(--r);
+  background: var(--surf);
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LEGS TAB
+   ══════════════════════════════════════════════════════════════════ */
+.legs-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--txt3);
+}
+.leg-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: var(--r);
+  margin-bottom: 10px;
+}
+.leg-number {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--acc);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 50%;
+}
+.leg-airports {
+  flex: 1;
+}
+.leg-route {
+  font-size: 16px;
+  font-weight: 600;
+  font-family: 'SF Mono', monospace;
+  color: var(--acc2);
+}
+.leg-cities {
+  font-size: 12px;
+  color: var(--txt2);
+  margin-top: 2px;
+}
+.leg-delete {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: none;
+  color: var(--txt3);
+  cursor: pointer;
+}
+
+/* Add leg button */
+.add-leg-btn {
+  width: 100%;
+  padding: 14px;
+  border: 2px dashed var(--bdr2);
+  border-radius: var(--r);
+  background: none;
+  color: var(--txt2);
+  font-size: 14px;
+  font-family: var(--ff);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   LOADING
+   ══════════════════════════════════════════════════════════════════ */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 0.3s;
+}
+.loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+.loading-spinner {
+  width: 40px;
+  height: 40px;
+  border: 3px solid var(--surf2);
+  border-top-color: var(--acc);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text {
+  margin-top: 16px;
+  font-size: 14px;
+  color: var(--txt2);
+}
+  </style>
+</head>
+<body>
+  <!-- Loading Overlay -->
+  <div class="loading-overlay" id="loading">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">Loading airports...</div>
+  </div>
+
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <div class="header-title">✈️ MSFS Randomizer</div>
+      <div class="header-status" id="cloud-status">Loading…</div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main">
+      <!-- Roll Tab -->
+      <div class="tab-content active" id="tab-roll">
+        <button class="roll-button" onclick="rollAll()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="2" y="2" width="20" height="20" rx="4"/>
+            <circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+            <circle cx="16" cy="8" r="1.5" fill="currentColor"/>
+            <circle cx="8" cy="16" r="1.5" fill="currentColor"/>
+            <circle cx="16" cy="16" r="1.5" fill="currentColor"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+          </svg>
+          Next Flight
+        </button>
+        <div class="results-list" id="results-list">
+          <div class="empty-state">
+            <div class="empty-state-icon">🎲</div>
+            <div class="empty-state-text">Tap "Next Flight" to roll</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Categories Tab -->
+      <div class="tab-content" id="tab-cats">
+        <div id="cats-list">
+          <!-- Filled by JS -->
+        </div>
+        <div class="cat-detail" id="cat-detail">
+          <div class="cat-detail-header">
+            <button class="cat-back-btn" onclick="closeCatDetail()">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M15 18l-6-6 6-6"/>
+              </svg>
+            </button>
+            <div class="cat-detail-title" id="cat-detail-title">Category</div>
+          </div>
+          <div class="cat-items-list" id="cat-items-list"></div>
+        </div>
+      </div>
+
+      <!-- Map Tab -->
+      <div class="tab-content" id="tab-map">
+        <div id="mobile-map"></div>
+      </div>
+
+      <!-- Legs Tab -->
+      <div class="tab-content" id="tab-legs">
+        <div id="legs-list">
+          <div class="legs-empty">
+            <div class="empty-state-icon">🛫</div>
+            <div class="empty-state-text">No legs planned yet.<br>Tap a result card to add it.</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bottom Navigation -->
+    <nav class="bottom-nav">
+      <button class="nav-item active" onclick="switchTab('roll')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="2" width="20" height="20" rx="4"/>
+          <circle cx="8" cy="8" r="1" fill="currentColor"/>
+          <circle cx="16" cy="16" r="1" fill="currentColor"/>
+        </svg>
+        Roll
+      </button>
+      <button class="nav-item" onclick="switchTab('cats')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M4 6h16M4 12h16M4 18h10"/>
+        </svg>
+        Data
+      </button>
+      <button class="nav-item" onclick="switchTab('map')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/>
+          <circle cx="12" cy="10" r="3"/>
+        </svg>
+        Map
+      </button>
+      <button class="nav-item" onclick="switchTab('legs')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M5 12h14M12 5l7 7-7 7"/>
+        </svg>
+        Legs
+      </button>
+    </nav>
+  </div>
+
+  <!-- Leaflet for Map -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+// ═══════════════════════════════════════════════════════════════════════════
+// CONSTANTS & STATE
+// ═══════════════════════════════════════════════════════════════════════════
+const COLORS = ['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
+
+const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',NZ:'New Zealand',AU:'Australia',NP:'Nepal',BT:'Bhutan',IN:'India',JP:'Japan',CN:'China',SG:'Singapore',TH:'Thailand',MY:'Malaysia',BR:'Brazil',AR:'Argentina',CO:'Colombia',PE:'Peru',EC:'Ecuador',VE:'Venezuela',MX:'Mexico',HN:'Honduras',CR:'Costa Rica',CA:'Canada',IS:'Iceland',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',GR:'Greece',HR:'Croatia',ME:'Montenegro',PH:'Philippines',ID:'Indonesia',ZA:'South Africa',EG:'Egypt',GI:'Gibraltar',MT:'Malta',PT:'Portugal',LU:'Luxembourg',PL:'Poland',CZ:'Czechia',HU:'Hungary',RO:'Romania',TR:'Turkey',IL:'Israel',AE:'UAE',SA:'Saudi Arabia',QA:'Qatar',KR:'South Korea',TW:'Taiwan',HK:'Hong Kong',RU:'Russia'};
+function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
+
+// Categories - same structure as desktop
+let CATEGORIES = [
+  {id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,type:'list',items:[]},
+  {id:'interesting',name:'Interesting Airports',group:'themes',colorIdx:1,type:'list-simple',items:[]},
+  {id:'mountain',name:'Mountain Climbing',group:'themes',colorIdx:2,type:'list-simple',items:[]},
+  {id:'routings',name:'Routings',group:'themes',colorIdx:3,type:'text',items:[]},
+  {id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[]},
+  {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
+  {id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
+  {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
+  {id:'rand_europe',name:'Random Europe',group:'randoms',colorIdx:8,type:'rand-coord',region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
+  {id:'british',name:'British Isles',group:'networks',colorIdx:0,type:'list-simple',items:[]},
+  {id:'nordics',name:'Nordics',group:'networks',colorIdx:1,type:'list-simple',items:[]},
+  {id:'central_eu',name:'Central Europe',group:'networks',colorIdx:2,type:'list-simple',items:[]},
+  {id:'france_belux',name:'France / Belux',group:'networks',colorIdx:3,type:'list-simple',items:[]},
+  {id:'iberia',name:'Iberia',group:'networks',colorIdx:4,type:'list-simple',items:[]},
+  {id:'eastern_med',name:'Eastern Med',group:'networks',colorIdx:5,type:'list-simple',items:[]},
+];
+
+let schedByCode = {};
+let lastResults = [];
+let legs = [];
+let mobileMap = null;
+let mapMarkers = [];
+
+// ═══════════════════════════════════════════════════════════════════════════
+// SUPABASE
+// ═══════════════════════════════════════════════════════════════════════════
+const SUPA_URL = 'https://pvsvpkquoqffprmrlvbv.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2c3Zwa3F1b3FmZnBybXJsdmJ2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NDg1NjUsImV4cCI6MjA5MTAyNDU2NX0.XTwueIlgbtkK56GJq-gPfjueOKTw1b6YtLLjQwx19pc';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+function setCloudStatus(msg, cls) {
+  const el = document.getElementById('cloud-status');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = cls === 'ok' ? '#3fb950' : cls === 'err' ? '#f85149' : '#d29922';
+}
+
+async function loadAllFromCloud() {
+  setCloudStatus('Loading…', 'ing');
+  try {
+    const { data, error } = await sb.from('categories').select('name, items');
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const byId = {};
+      data.forEach(row => { byId[row.name] = row.items; });
+      
+      // Update existing categories
+      CATEGORIES.forEach(cat => { 
+        if (byId[cat.id] && Array.isArray(byId[cat.id])) {
+          cat.items = byId[cat.id];
+        }
+      });
+      
+      // Load custom themed categories
+      const existingIds = new Set(CATEGORIES.map(c => c.id));
+      data.forEach(row => {
+        if (!existingIds.has(row.name) && Array.isArray(row.items) && row.items.length > 0) {
+          if (row.items[0] && row.items[0].theme !== undefined) {
+            CATEGORIES.push({
+              id: row.name,
+              name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+              group: 'custom',
+              colorIdx: CATEGORIES.length % 12,
+              type: 'list-themed',
+              items: row.items
+            });
+          }
+        }
+      });
+      
+      setCloudStatus('✓ Synced', 'ok');
+    } else {
+      setCloudStatus('No data', 'ing');
+    }
+  } catch(e) {
+    console.error('Load error:', e);
+    setCloudStatus('⚠ Offline', 'err');
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════
+function switchTab(tabId) {
+  // Update nav items
+  document.querySelectorAll('.nav-item').forEach((btn, i) => {
+    const tabs = ['roll', 'cats', 'map', 'legs'];
+    btn.classList.toggle('active', tabs[i] === tabId);
+  });
+  
+  // Update tab content
+  document.querySelectorAll('.tab-content').forEach(tab => {
+    tab.classList.toggle('active', tab.id === 'tab-' + tabId);
+  });
+  
+  // Initialize map if needed
+  if (tabId === 'map' && !mobileMap) {
+    setTimeout(initMap, 100);
+  }
+  
+  // Refresh categories list
+  if (tabId === 'cats') {
+    renderCatsList();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROLL / RESULTS
+// ═══════════════════════════════════════════════════════════════════════════
+function nearestScheduled(lat, lon) {
+  let best = null, bestD = Infinity;
+  for (const r of DB_SCHED) {
+    const d = Math.hypot(r[3] - lat, r[4] - lon);
+    if (d < bestD) { bestD = d; best = r; }
+  }
+  return best;
+}
+
+function rollAll() {
+  if (typeof DB_SCHED === 'undefined' || !DB_SCHED.length) {
+    setTimeout(rollAll, 500);
+    return;
+  }
+  
+  // Haptic feedback if available
+  if (navigator.vibrate) navigator.vibrate(10);
+  
+  lastResults = CATEGORIES.filter(cat => 
+    cat.type !== 'rand-coord' || ['rand_world', 'rand_europe'].includes(cat.id)
+  ).map(cat => {
+    let result = {icao:'',name:'',city:'',country:'',lat:null,lon:null,coord:false,diff:'',text:'',itemName:''};
+    
+    if (cat.type === 'list' || cat.type === 'list-simple' || cat.type === 'list-themed') {
+      if (!cat.items || !cat.items.length) return {cat, result};
+      const item = cat.items[Math.floor(Math.random() * cat.items.length)];
+      const db = item.icao ? (schedByCode[item.icao] || null) : null;
+      result.icao = item.icao || '';
+      result.iata = item.iata || (db ? db[1] : '') || '';
+      
+      if (cat.type === 'list-themed') {
+        result.city = item.city || (db ? db[7] || db[2] : '');
+        result.country = item.country || (db ? countryName(db[6]) : '');
+        result.itemName = item.theme || '';
+      } else if (cat.id === 'formula1') {
+        result.city = item.city || (db ? db[7] || db[2] : '');
+        result.country = item.country || (db ? countryName(db[6]) : '');
+        result.itemName = item.name || '';
+      } else {
+        result.city = item.name || (db ? db[7] || db[2] : '');
+        result.country = item.country || (db ? countryName(db[6]) : '');
+      }
+      result.diff = item.diff || '';
+      if (db) { result.lat = db[3]; result.lon = db[4]; }
+    }
+    else if (cat.type === 'text') {
+      if (!cat.items || !cat.items.length) return {cat, result};
+      result.text = cat.items[Math.floor(Math.random() * cat.items.length)].name || '';
+    }
+    else if (cat.type === 'rand-icao' || cat.type === 'rand-iata') {
+      const pool = cat.type === 'rand-iata' ? DB_SCHED.filter(r => r[1]) : DB_SCHED;
+      if (!pool.length) return {cat, result};
+      const ap = pool[Math.floor(Math.random() * pool.length)];
+      result.icao = ap[0]; result.iata = ap[1]||''; result.city = ap[7] || ap[2];
+      result.name = ap[2]; result.country = countryName(ap[6]);
+      result.lat = ap[3]; result.lon = ap[4];
+    }
+    else if (cat.type === 'rand-coord') {
+      const reg = cat.region;
+      const lat = reg.latMin + Math.random()*(reg.latMax-reg.latMin);
+      const lon = reg.lonMin + Math.random()*(reg.lonMax-reg.lonMin);
+      const ap = nearestScheduled(lat, lon);
+      result.coord = true; result.coordLat = lat.toFixed(2); result.coordLon = lon.toFixed(2);
+      if (ap) {
+        result.icao = ap[0]; result.iata = ap[1]||''; result.name = ap[2];
+        result.city = ap[7] || ap[2]; result.country = countryName(ap[6]);
+        result.lat = ap[3]; result.lon = ap[4];
+      }
+    }
+    return {cat, result};
+  });
+  
+  renderResults();
+  updateMapMarkers();
+}
+
+function renderResults() {
+  const container = document.getElementById('results-list');
+  if (!lastResults.length) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-state-icon">🎲</div>
+      <div class="empty-state-text">Tap "Next Flight" to roll</div>
+    </div>`;
+    return;
+  }
+  
+  container.innerHTML = lastResults.filter(r => r.result.icao || r.result.text).map(({cat, result}) => {
+    const col = COLORS[cat.colorIdx % COLORS.length];
+    let content = '';
+    
+    if (result.text) {
+      content = `<div class="result-text">${result.text}</div>`;
+    } else {
+      const iataHtml = result.iata ? `<span class="result-iata">/ ${result.iata}</span>` : '';
+      content = `
+        ${result.coord ? `<div class="result-coord">${result.coordLat}°, ${result.coordLon}°</div>` : ''}
+        <div class="result-icao">${result.icao}${iataHtml}</div>
+        <div class="result-city">${result.city || result.name}</div>
+        <div class="result-country">${result.country}</div>
+        ${result.diff ? `<div class="result-badge">${result.diff}</div>` : ''}
+        ${result.itemName ? `<div class="result-badge">${result.itemName}</div>` : ''}
+      `;
+    }
+    
+    return `<div class="result-card" onclick="addToLegs('${cat.id}')">
+      <div class="result-header">
+        <div class="result-dot" style="background:${col}"></div>
+        <div class="result-cat-name">${cat.name}</div>
+      </div>
+      ${content}
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATEGORIES
+// ═══════════════════════════════════════════════════════════════════════════
+function renderCatsList() {
+  const container = document.getElementById('cats-list');
+  const groups = {themes: 'Themes', randoms: 'Random', networks: 'Networks', custom: 'Custom'};
+  
+  let html = '';
+  for (const [groupId, groupName] of Object.entries(groups)) {
+    const cats = CATEGORIES.filter(c => c.group === groupId && c.items && c.items.length > 0);
+    if (!cats.length) continue;
+    
+    html += `<div class="cat-section">
+      <div class="cat-section-title">${groupName}</div>
+      <div class="cat-chips">
+        ${cats.map(cat => {
+          const col = COLORS[cat.colorIdx % COLORS.length];
+          return `<div class="cat-chip" onclick="openCatDetail('${cat.id}')">
+            <div class="cat-chip-dot" style="background:${col}"></div>
+            ${cat.name}
+            <span class="cat-chip-count">${cat.items.length}</span>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>`;
+  }
+  
+  container.innerHTML = html || '<div class="empty-state">No categories loaded</div>';
+  document.getElementById('cat-detail').classList.remove('active');
+  container.style.display = '';
+}
+
+function openCatDetail(catId) {
+  const cat = CATEGORIES.find(c => c.id === catId);
+  if (!cat) return;
+  
+  document.getElementById('cats-list').style.display = 'none';
+  document.getElementById('cat-detail').classList.add('active');
+  document.getElementById('cat-detail-title').textContent = cat.name;
+  
+  const list = document.getElementById('cat-items-list');
+  list.innerHTML = cat.items.slice(0, 50).map(item => {
+    const db = item.icao ? schedByCode[item.icao] : null;
+    const name = item.name || item.city || (db ? db[7] || db[2] : '');
+    const country = item.country || (db ? countryName(db[6]) : '');
+    return `<div class="cat-item">
+      <div class="cat-item-icao">${item.icao || '–'}</div>
+      <div class="cat-item-name">${name}</div>
+      <div class="cat-item-country">${country}</div>
+    </div>`;
+  }).join('');
+  
+  if (cat.items.length > 50) {
+    list.innerHTML += `<div style="text-align:center;padding:12px;color:var(--txt3);">+${cat.items.length - 50} more</div>`;
+  }
+}
+
+function closeCatDetail() {
+  document.getElementById('cat-detail').classList.remove('active');
+  document.getElementById('cats-list').style.display = '';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// MAP
+// ═══════════════════════════════════════════════════════════════════════════
+function initMap() {
+  if (mobileMap) return;
+  
+  mobileMap = L.map('mobile-map', {
+    zoomControl: false,
+    attributionControl: false
+  }).setView([48, 10], 4);
+  
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    maxZoom: 19
+  }).addTo(mobileMap);
+  
+  updateMapMarkers();
+}
+
+function updateMapMarkers() {
+  if (!mobileMap) return;
+  
+  // Clear existing
+  mapMarkers.forEach(m => mobileMap.removeLayer(m));
+  mapMarkers = [];
+  
+  // Add new markers
+  lastResults.filter(r => r.result.lat && r.result.lon).forEach(({cat, result}) => {
+    const col = COLORS[cat.colorIdx % COLORS.length];
+    const marker = L.circleMarker([result.lat, result.lon], {
+      radius: 8,
+      fillColor: col,
+      fillOpacity: 0.9,
+      color: '#fff',
+      weight: 2
+    }).addTo(mobileMap);
+    
+    marker.bindPopup(`<b>${result.icao}</b><br>${result.city}`);
+    mapMarkers.push(marker);
+  });
+  
+  // Fit bounds if markers exist
+  if (mapMarkers.length > 0) {
+    const group = L.featureGroup(mapMarkers);
+    mobileMap.fitBounds(group.getBounds(), { padding: [30, 30] });
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// LEGS
+// ═══════════════════════════════════════════════════════════════════════════
+function addToLegs(catId) {
+  const r = lastResults.find(x => x.cat.id === catId);
+  if (!r || !r.result.icao) return;
+  
+  // Haptic feedback
+  if (navigator.vibrate) navigator.vibrate(5);
+  
+  legs.push({
+    icao: r.result.icao,
+    iata: r.result.iata,
+    city: r.result.city,
+    country: r.result.country,
+    lat: r.result.lat,
+    lon: r.result.lon
+  });
+  
+  renderLegs();
+  
+  // Show feedback
+  alert(`Added ${r.result.icao} to legs!`);
+}
+
+function renderLegs() {
+  const container = document.getElementById('legs-list');
+  
+  if (!legs.length) {
+    container.innerHTML = `<div class="legs-empty">
+      <div class="empty-state-icon">🛫</div>
+      <div class="empty-state-text">No legs planned yet.<br>Tap a result card to add it.</div>
+    </div>`;
+    return;
+  }
+  
+  container.innerHTML = legs.map((leg, i) => `
+    <div class="leg-item">
+      <div class="leg-number">${i + 1}</div>
+      <div class="leg-airports">
+        <div class="leg-route">${leg.icao}${leg.iata ? ' / ' + leg.iata : ''}</div>
+        <div class="leg-cities">${leg.city}, ${leg.country}</div>
+      </div>
+      <button class="leg-delete" onclick="removeLeg(${i})">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 6L6 18M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+  `).join('') + `
+    <button class="add-leg-btn" onclick="switchTab('roll')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v8M8 12h8"/>
+      </svg>
+      Add another leg
+    </button>
+  `;
+}
+
+function removeLeg(index) {
+  if (navigator.vibrate) navigator.vibrate(5);
+  legs.splice(index, 1);
+  renderLegs();
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════════════════
+async function init() {
+  // Wait for airports.js
+  let attempts = 0;
+  while (typeof DB_SCHED === 'undefined' && attempts < 50) {
+    await new Promise(r => setTimeout(r, 100));
+    attempts++;
+  }
+  
+  if (typeof DB_SCHED !== 'undefined') {
+    // Build lookup
+    DB_SCHED.forEach(r => { schedByCode[r[0]] = r; });
+  }
+  
+  // Load from cloud
+  await loadAllFromCloud();
+  
+  // Hide loading
+  document.getElementById('loading').classList.add('hidden');
+  
+  // Render categories
+  renderCatsList();
+}
+
+init();
+  </script>
+</body>
+</html>
