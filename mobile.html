@@ -716,6 +716,18 @@ async function loadAllFromCloud() {
         console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' logos from Supabase');
       }
       
+      // Check for deleted categories list
+      const deletedCats = byId['__deleted_categories__'] || [];
+      
+      // Remove deleted categories from CATEGORIES array
+      if (deletedCats.length > 0) {
+        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
+          if (deletedCats.includes(CATEGORIES[i].id)) {
+            CATEGORIES.splice(i, 1);
+          }
+        }
+      }
+      
       // Update categories
       CATEGORIES.forEach(cat => { if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; });
       

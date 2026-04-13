@@ -416,16 +416,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <label class="region-item"><input type="checkbox" value="OC" onchange="updateRegionFilter()"> Oceania</label>
               <label class="region-item"><input type="checkbox" value="AN" onchange="updateRegionFilter()"> Antarctica</label>
             </div>
-            <!-- Airport Map Viewer link -->
-            <a href="mapview.html" target="_blank" title="Open Airport Map Viewer — plot XLSX files on a map"
-              style="display:flex;align-items:center;justify-content:center;height:38px;margin-top:6px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);cursor:pointer;text-decoration:none;font-size:12px;font-weight:600;font-family:var(--ff);gap:6px;transition:border-color .15s,color .15s;">
-              <span style="font-size:15px;">🗺</span> Airport Map Viewer
-            </a>
-            <!-- FlightConnections quick link -->
+            <!-- FlightConnections quick link - full width, no border -->
             <a id="dash-fc-btn" href="https://www.flightconnections.com/" target="_blank"
               onclick="dashOpenFC(event)" title="Open in FlightConnections"
-              style="display:flex;align-items:center;justify-content:center;height:38px;margin-top:6px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);cursor:pointer;text-decoration:none;">
-              <img src="" id="dash-fc-logo" style="max-height:24px;max-width:130px;object-fit:contain;" alt="FlightConnections">
+              style="display:flex;align-items:center;justify-content:center;height:44px;margin-top:8px;border-radius:var(--r);background:var(--bg);cursor:pointer;text-decoration:none;">
+              <img src="" id="dash-fc-logo" style="max-height:28px;max-width:100%;object-fit:contain;" alt="FlightConnections">
             </a>
           </div>
         </div>
@@ -1081,6 +1076,18 @@ async function loadAllFromCloud() {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
       
+      // Check for deleted categories list
+      const deletedCats = byId['__deleted_categories__'] || [];
+      
+      // Remove deleted categories from CATEGORIES array
+      if (deletedCats.length > 0) {
+        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
+          if (deletedCats.includes(CATEGORIES[i].id)) {
+            CATEGORIES.splice(i, 1);
+          }
+        }
+      }
+      
       // Update existing categories
       CATEGORIES.forEach(cat => { 
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
@@ -1724,17 +1731,33 @@ function clearAllItems() {
 async function deleteActiveCategory() {
   const cat = CATEGORIES.find(c => c.id===activeCatId); if (!cat) return;
   // Confirm deletion
-  if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud\n\nThis cannot be undone!`)) return;
+  if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud on all devices\n\nThis cannot be undone!`)) return;
+  
+  const catIdToDelete = activeCatId;
   
   // Remove from CATEGORIES array
-  const idx = CATEGORIES.findIndex(c => c.id === activeCatId);
+  const idx = CATEGORIES.findIndex(c => c.id === catIdToDelete);
   if (idx !== -1) CATEGORIES.splice(idx, 1);
   
-  // Delete from cloud
+  // Delete from cloud and add to deleted list
   try {
     setCloudStatus('Deleting…', 'ing');
-    const { error } = await sb.from('categories').delete().eq('name', activeCatId);
-    if (error) throw error;
+    
+    // Get current deleted list
+    const { data: existing } = await sb.from('categories').select('items').eq('name', '__deleted_categories__').single();
+    let deletedList = (existing && Array.isArray(existing.items)) ? existing.items : [];
+    
+    // Add this category ID to deleted list (if not already there)
+    if (!deletedList.includes(catIdToDelete)) {
+      deletedList.push(catIdToDelete);
+    }
+    
+    // Save deleted list to cloud
+    await sb.from('categories').upsert({ name: '__deleted_categories__', items: deletedList }, { onConflict: 'name' });
+    
+    // Also delete the category's data from cloud
+    await sb.from('categories').delete().eq('name', catIdToDelete);
+    
     setCloudStatus('✓ Synced', 'ok');
   } catch(e) {
     console.error('Delete error:', e);
