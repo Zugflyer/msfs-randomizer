@@ -674,6 +674,10 @@ html, body {
 .leg-time-input::placeholder {
   color: var(--txt3);
 }
+.leg-arr-time {
+  color: var(--blue);
+  background: rgba(88,166,255,0.1);
+}
 .leg-charts-btn {
   padding: 6px 10px;
   font-size: 10px;
@@ -685,9 +689,25 @@ html, body {
 }
 .leg-arrow {
   display: flex;
+  flex-direction: column;
+  align-items: center;
   justify-content: center;
-  padding: 4px 0;
+  padding: 6px 0;
   color: var(--txt3);
+  cursor: pointer;
+  gap: 2px;
+}
+.leg-block-time {
+  font-size: 11px;
+  font-family: 'SF Mono', monospace;
+  color: var(--txt3);
+}
+.leg-block-time.real {
+  color: #3fb950;
+  font-weight: 600;
+}
+.leg-block-time.estimate {
+  font-style: italic;
 }
 .leg-insert-btns {
   display: flex;
@@ -1452,25 +1472,33 @@ function planLegs() {
   const depIcao = document.getElementById('dep-input').value.toUpperCase().trim();
   const arrIcao = document.getElementById('arr-input').value.toUpperCase().trim();
   
-  if (!depIcao || !arrIcao) {
-    alert('Please enter both DEP and ARR airports');
+  if (!depIcao) {
+    alert('Please enter DEP airport');
     return;
   }
   
   const depAp = schedByCode[depIcao] || null;
-  const arrAp = schedByCode[arrIcao] || null;
+  const arrAp = arrIcao ? (schedByCode[arrIcao] || null) : null;
   
-  // Create leg from DEP to ARR
-  legs = [{
-    dep: depAp,
-    arr: arrAp,
-    airline: '',
-    aircraft: '',
-    depTime: '',
-    arrTime: ''
-  }];
+  // If ARR is filled: create single leg DEP → ARR
+  if (arrIcao && arrAp) {
+    legs = [{
+      dep: depAp,
+      arr: arrAp,
+      airline: '',
+      aircraft: '',
+      depTime: '',
+      arrTime: '',
+      blockTime: '',
+      blockTimeReal: false
+    }];
+    switchTab('plan');
+    // Fetch block time for new leg
+    setTimeout(() => fetchBlockTime(0), 300);
+    return;
+  }
   
-  // Check if there's a Routings result with multiple legs
+  // If ARR is empty: check for Routings result
   if (lastResults) {
     const routingsResult = lastResults.find(r => r.cat.type === 'text' && r.result.itemName);
     if (routingsResult && routingsResult.result.itemName) {
@@ -1482,14 +1510,24 @@ function planLegs() {
           airline: parsed.airline || '',
           aircraft: parsed.aircraft || '',
           depTime: '',
-          arrTime: ''
+          arrTime: '',
+          blockTime: '',
+          blockTimeReal: false
         }));
+        switchTab('plan');
+        // Fetch block times for all legs
+        legs.forEach((leg, i) => {
+          if (leg.dep && leg.arr) {
+            setTimeout(() => fetchBlockTime(i), i * 2000 + 300);
+          }
+        });
+        return;
       }
     }
   }
   
-  // Switch to Plan tab
-  switchTab('plan');
+  // Neither ARR nor Routings - show error
+  alert('Please enter ARR airport or roll a Routing first');
 }
 
 // Parse routing string like "LH B747 // EDDF-KJFK-KLAX"
@@ -1568,13 +1606,14 @@ function renderLegs() {
           <div class="leg-airport-city">${depCity}</div>
           ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
         </div>
-        <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)">
+        <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)" onblur="formatDepTimeOnBlur(${i})">
         <button class="leg-charts-btn" onclick="openCharts('${depIcao}')">Charts</button>
       </div>
-      <div class="leg-arrow">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="leg-arrow" onclick="fetchBlockTime(${i})" title="Click to refresh">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12l7 7 7-7"/>
         </svg>
+        <span class="leg-block-time ${leg.blockTimeReal ? 'real' : 'estimate'}">${leg.blockTime || (leg.dep && leg.arr ? '…' : '')}</span>
       </div>
       <div class="leg-airport">
         <div class="leg-airport-label">ARR</div>
@@ -1583,7 +1622,7 @@ function renderLegs() {
           <div class="leg-airport-city">${arrCity}</div>
           ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
         </div>
-        <input type="text" class="leg-time-input" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" oninput="updateLegArrTime(${i}, this.value)">
+        <input type="text" class="leg-time-input leg-arr-time" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" readonly>
         <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')">Charts</button>
       </div>
     </div>
@@ -1610,14 +1649,6 @@ function updateLegAirline(i, val) {
 
 function updateLegAircraft(i, val) {
   legs[i].aircraft = val.toUpperCase().trim();
-}
-
-function updateLegDepTime(i, val) {
-  legs[i].depTime = val;
-}
-
-function updateLegArrTime(i, val) {
-  legs[i].arrTime = val;
 }
 
 function deleteLeg(i) {
@@ -1658,6 +1689,141 @@ function addLegAtEnd() {
     arrTime: ''
   };
   legs.push(newLeg);
+  renderLegs();
+}
+
+// ═══════════════════════════════════════════════════════════
+// TIME FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+
+// Parse "1145" → {h:11,m:45}, "2330" → {h:23,m:30}
+function parseTime(raw) {
+  const s = String(raw || '').replace(/[^0-9]/g, '');
+  if (!s.length) return null;
+  if (s.length <= 2) return { h: parseInt(s), m: 0 };
+  if (s.length === 3) return { h: parseInt(s[0]), m: parseInt(s.slice(1)) };
+  return { h: parseInt(s.slice(0,2)), m: parseInt(s.slice(2,4)) };
+}
+
+function fmtTime(h, m) {
+  return String(((h%24)+24)%24).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+}
+
+function updateLegDepTime(i, val) {
+  const parsed = parseTime(val);
+  if (parsed && parsed.h >= 0 && parsed.h < 24 && parsed.m >= 0 && parsed.m < 60) {
+    legs[i].depTime = fmtTime(parsed.h, parsed.m);
+    // Format input on blur
+    const input = document.getElementById('leg-dep-time-' + i);
+    if (input && document.activeElement !== input) {
+      input.value = legs[i].depTime;
+    }
+    // Recalculate arrival time
+    calculateArrivalTime(i);
+  } else if (!val) {
+    legs[i].depTime = '';
+    legs[i].arrTime = '';
+    renderLegs();
+  }
+}
+
+function formatDepTimeOnBlur(i) {
+  const input = document.getElementById('leg-dep-time-' + i);
+  if (input && legs[i].depTime) {
+    input.value = legs[i].depTime;
+  }
+}
+
+function updateLegArrTime(i, val) {
+  legs[i].arrTime = val;
+}
+
+function calculateArrivalTime(idx) {
+  const leg = legs[idx];
+  if (!leg.depTime || !leg.blockTime || !leg.dep || !leg.arr) {
+    return;
+  }
+  
+  const [dh, dm] = leg.depTime.split(':').map(Number);
+  const depUtcMins = dh * 60 + dm - Math.round(getUtcOffset(leg.dep) * 60);
+  const bparts = leg.blockTime.split(':');
+  const blockMins = parseInt(bparts[0]) * 60 + parseInt(bparts[1]);
+  const arrUtcMins = depUtcMins + blockMins;
+  const arrLocalMins = arrUtcMins + Math.round(getUtcOffset(leg.arr) * 60);
+  const arrMod = ((arrLocalMins % (24 * 60)) + 24 * 60) % (24 * 60);
+  leg.arrTime = fmtTime(Math.floor(arrMod / 60), arrMod % 60);
+  
+  // Update display
+  const arrInput = document.getElementById('leg-arr-time-' + idx);
+  if (arrInput) arrInput.value = leg.arrTime;
+}
+
+// Fetch block time from web or calculate
+async function fetchBlockTime(idx) {
+  const leg = legs[idx];
+  if (!leg || !leg.dep || !leg.arr) return;
+  if (leg._fetchingBT) return;
+  leg._fetchingBT = true;
+  
+  const depIata = leg.dep[1] || leg.dep[0];
+  const arrIata = leg.arr[1] || leg.arr[0];
+  
+  // Try API if key available
+  const apiKey = localStorage.getItem('anthropic_api_key');
+  if (apiKey) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 100,
+          tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+          messages: [{
+            role: 'user',
+            content: `Search for "flights ${depIata}-${arrIata} nonstop" and find the nonstop flight duration. Reply with ONLY the duration in H:MM format (e.g. 1:05 or 2:35). If no nonstop exists, reply NONE.`
+          }]
+        })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const txt = (data.content || [])
+          .filter(b => b.type === 'text')
+          .map(b => b.text)
+          .join(' ')
+          .trim();
+        const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
+        if (m && !txt.toUpperCase().includes('NONE')) {
+          leg.blockTime = m[0];
+          leg.blockTimeReal = true;
+          leg._fetchingBT = false;
+          calculateArrivalTime(idx);
+          renderLegs();
+          return;
+        }
+      }
+    } catch(e) { /* fall through to estimate */ }
+  }
+  
+  // Fallback: great circle estimate
+  const R = 6371;
+  const φ1 = leg.dep[3] * Math.PI / 180, φ2 = leg.arr[3] * Math.PI / 180;
+  const Δφ = (leg.arr[3] - leg.dep[3]) * Math.PI / 180;
+  const Δλ = (leg.arr[4] - leg.dep[4]) * Math.PI / 180;
+  const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+  const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const spd = dist < 200 ? 400 : dist < 500 ? 580 : dist < 2000 ? 780 : 870;
+  const buf = dist < 500 ? 15 : 25;
+  const mins = Math.round(dist / spd * 60) + buf;
+  leg.blockTime = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
+  leg.blockTimeReal = false;
+  leg._fetchingBT = false;
+  calculateArrivalTime(idx);
   renderLegs();
 }
 
