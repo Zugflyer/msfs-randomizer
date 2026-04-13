@@ -661,15 +661,139 @@ const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Ge
 function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
 
 let CATEGORIES = [
-  {id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,type:'list',items:[]},
-  {id:'interesting',name:'Interesting Airports',group:'themes',colorIdx:1,type:'list-simple',items:[]},
-  {id:'mountain',name:'Mountain Climbing',group:'themes',colorIdx:2,type:'list-simple',items:[]},
-  {id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-simple',items:[]},
-  {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
-  {id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
-  {id:'british',name:'British Isles',group:'networks',colorIdx:0,type:'list-simple',items:[]},
-  {id:'nordics',name:'Nordics',group:'networks',colorIdx:1,type:'list-simple',items:[]},
-  {id:'central_eu',name:'Central Europe',group:'networks',colorIdx:2,type:'list-simple',items:[]},
+{id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,hasDiff:true,type:'list',items:[
+  {icao:'OPGT',diff:'***',region:'AS'},{icao:'RJCH',diff:'**',region:'AS'},{icao:'RPUB',diff:'***',region:'AS'},
+  {icao:'RPVE',diff:'**',region:'AS'},{icao:'VHHX',diff:'***',region:'AS'},{icao:'VILH',diff:'TBD',region:'AS'},
+  {icao:'VNKT',diff:'**',region:'AS'},{icao:'VNLK',diff:'***',region:'AS'},{icao:'VQBT',diff:'***',region:'AS'},
+  {icao:'VQGP',diff:'***',region:'AS'},{icao:'VQPR',diff:'***',region:'AS'},{icao:'VQTY',diff:'***',region:'AS'},
+  {icao:'WAAA',diff:'***',region:'AS'},{icao:'WAMM',diff:'***',region:'AS'},{icao:'WMBT',diff:'***',region:'AS'},
+  {icao:'ZUNZ',diff:'***',region:'AS'},{icao:'MHTG',diff:'***',region:'NA'},{icao:'MMMX',diff:'*',region:'NA'},
+  {icao:'MRGF',diff:'**',region:'NA'},{icao:'MRPJ',diff:'**',region:'NA'},{icao:'MRSI',diff:'**',region:'NA'},
+  {icao:'TFFJ',diff:'***',region:'NA'},{icao:'TNCM',diff:'**',region:'NA'},{icao:'TNCS',diff:'***',region:'NA'},
+  {icao:'BIIS',diff:'***',region:'EU'},{icao:'EDFM',diff:'**',region:'EU'},{icao:'EDXH',diff:'TBD',region:'EU'},
+  {icao:'EGEP',diff:'Scenic',region:'EU'},{icao:'EGEW',diff:'Scenic',region:'EU'},{icao:'EGLC',diff:'**',region:'EU'},
+  {icao:'EGPR',diff:'Scenic',region:'EU'},{icao:'EKVG',diff:'*',region:'EU'},{icao:'ENBV',diff:'***',region:'EU'},
+  {icao:'ENSB',diff:'**',region:'EU'},{icao:'LFHM',diff:'***',region:'EU'},{icao:'LFKB',diff:'***',region:'EU'},
+  {icao:'LFKC',diff:'***',region:'EU'},{icao:'LFKJ',diff:'***',region:'EU'},{icao:'LFLJ',diff:'***',region:'EU'},
+  {icao:'LFTZ',diff:'***',region:'EU'},{icao:'LGKJ',diff:'TBD',region:'EU'},{icao:'LGSK',diff:'**',region:'EU'},
+  {icao:'LGSM',diff:'***',region:'EU'},{icao:'LIBZ',diff:'***',region:'EU'},{icao:'LIRJ',diff:'TBD',region:'EU'},
+  {icao:'LIRQ',diff:'*',region:'EU'},{icao:'LOWI',diff:'***',region:'EU'},{icao:'LPMA',diff:'***',region:'EU'},
+  {icao:'LSGS',diff:'**',region:'EU'},{icao:'LSGK',diff:'***',region:'EU'},{icao:'LSMM',diff:'***',region:'EU'},
+  {icao:'LSZA',diff:'**',region:'EU'},{icao:'LSZS',diff:'**',region:'EU'},{icao:'LXGB',diff:'*',region:'EU'},
+  {icao:'LYTV',diff:'**',region:'EU'},{icao:'KASE',diff:'**',region:'NA'},{icao:'KDCA',diff:'**',region:'NA'},
+  {icao:'KEYW',diff:'*',region:'NA'},{icao:'KJFK',diff:'***',region:'NA'},{icao:'KLGA',diff:'*',region:'NA'},
+  {icao:'PADU',diff:'***',region:'NA'},{icao:'PAJN',diff:'**',region:'NA'},{icao:'PHNL',diff:'***',region:'NA'},
+  {icao:'NZQN',diff:'***',region:'OC'},{icao:'SBRJ',diff:'***',region:'SA'},{icao:'SEQU',diff:'*',region:'SA'},
+  {icao:'SKBG',diff:'*',region:'SA'},{icao:'SKBO',diff:'*',region:'SA'},{icao:'SKMD',diff:'***',region:'SA'},
+  {icao:'SKMZ',diff:'**',region:'SA'},{icao:'SKPS',diff:'***',region:'SA'},{icao:'SECU',diff:'***',region:'SA'},
+  {icao:'SLLP',diff:'*',region:'SA'},{icao:'SPGL',diff:'***',region:'SA'},{icao:'SPZO',diff:'***',region:'SA'},
+  {icao:'SVMD',diff:'***',region:'SA'},{icao:'SKPE',diff:'',region:'SA'},
+]},
+{id:'interesting',name:'Interesting Airports',group:'themes',colorIdx:1,type:'list-simple',items:[
+  {name:'Split',icao:'LDSP'},{name:'Petropavlovsk-Kamchatsky',icao:'UHPP'},{name:'Norilsk',icao:'UOOO'},
+  {name:'Magadan',icao:'UHMM'},{name:'Gilgit',icao:'OPGT'},{name:'Easter Island',icao:'SCIP'},
+  {name:'East Africa – Nairobi',icao:'HKJK'},{name:'Leipzig DHL Hub',icao:'EDDP'},{name:'Toronto Island',icao:'CYTZ'},
+  {name:'Narsarsuaq',icao:'BGBW'},{name:'Port Moresby',icao:'AYPY'},{name:'Kinshasa',icao:'FZAA'},
+]},
+{id:'mountain',name:'Mountain Climbing',group:'themes',colorIdx:2,type:'list-simple',items:[
+  {name:'Kathmandu',icao:'VNKT'},{name:'La Paz',icao:'SLLP'},{name:'Dire Dawa',icao:'HADR'},
+  {name:'Samedan',icao:'LSZS'},{name:'Queenstown',icao:'NZQN'},{name:'Juneau',icao:'PAJN'},
+  {name:'El Calafate',icao:'SAWC'},{name:'Talkeetna',icao:'PATK'},{name:'Nanyuki',icao:'HKNY'},
+  {name:'Zermatt – Sion',icao:'LSGS'},{name:'Mégève',icao:'LFHM'},{name:'Courchevel',icao:'LFLJ'},
+  {name:'Charikot',icao:'VNCG'},{name:'Punta Arenas',icao:'SCCI'},{name:'Skardu',icao:'OPSD'},
+  {name:'Lukla',icao:'VNLK'},{name:'Gilgit',icao:'OPGT'},{name:'Jomsom',icao:'VNJS'},
+  {name:'Yakutat',icao:'PAYA'},{name:'Mineral Waters',icao:'URMM'},{name:'Christchurch',icao:'NZCH'},
+  {name:'Lima',icao:'SPJC'},{name:'Quito',icao:'SEQM'},{name:'Seattle',icao:'KSEA'},
+  {name:'Wamena',icao:'WAJW'},{name:'Jayapura',icao:'WAJJ'},{name:'Union Glacier',icao:'SCGC'},
+]},
+{id:'routings',name:'Routings',group:'themes',colorIdx:3,type:'text',items:[
+  {name:'Lufthansa B747 → La Paz'},{name:'UTA B747 → Nouméa'},{name:'Pan Am 1 round-the-world'},
+  {name:'TBD'},{name:'TBD'},{name:'TBD'},
+]},
+{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-themed',items:[{"icao":"EGBB","iata":"BHX","theme":"Alpine-Mercedes","city":"Birmingham","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Aston Martin Aramco-Honda","city":"Luton","country":"United Kingdom"},{"icao":"EGLL","iata":"LHR","theme":"Atlassian Williams-Mercedes","city":"London","country":"United Kingdom"},{"icao":"LSZH","iata":"ZRH","theme":"Audi","city":"Zurich","country":"Switzerland"},{"icao":"KIND","iata":"IND","theme":"Cadillac-Ferrari","city":"Indianapolis","country":"United States"},{"icao":"EGLL","iata":"LHR","theme":"McLaren-Mercedes","city":"London","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Mercedes","city":"Luton","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Red Bull Racing-Red Bull Ford","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Ferrari","city":"Bologna","country":"Italy"},{"icao":"EGGW","iata":"LTN","theme":"Haas-Ferrari","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Racing Bulls-Red Bull Ford","city":"Bologna","country":"Italy"},{"icao":"YMML","iata":"MEL","theme":"Australian Grand Prix","city":"Melbourne","country":"Australia"},{"icao":"ZSPD","iata":"PVG","theme":"Chinese Grand Prix","city":"Shanghai","country":"China"},{"icao":"RJGG","iata":"NGO","theme":"Japanese Grand Prix","city":"Nagoya","country":"Japan"},{"icao":"KMIA","iata":"MIA","theme":"Miami Grand Prix","city":"Miami","country":"United States"},{"icao":"CYUL","iata":"YUL","theme":"Canadian Grand Prix","city":"Montreal","country":"Canada"},{"icao":"LFMN","iata":"NCE","theme":"Monaco Grand Prix","city":"Nice","country":"France"},{"icao":"LEBL","iata":"BCN","theme":"Barcelona-Catalunya Grand Prix","city":"Barcelona","country":"Spain"},{"icao":"LOWG","iata":"GRZ","theme":"Austrian Grand Prix","city":"Graz","country":"Austria"},{"icao":"EGGW","iata":"LTN","theme":"British Grand Prix","city":"Luton","country":"United Kingdom"},{"icao":"EBLG","iata":"LGG","theme":"Belgian Grand Prix","city":"Liège","country":"Belgium"},{"icao":"LHBP","iata":"BUD","theme":"Hungarian Grand Prix","city":"Budapest","country":"Hungary"},{"icao":"EHAM","iata":"AMS","theme":"Dutch Grand Prix","city":"Amsterdam","country":"Netherlands"},{"icao":"LIML","iata":"LIN","theme":"Italian Grand Prix","city":"Milan","country":"Italy"},{"icao":"LEMD","iata":"MAD","theme":"Spanish Grand Prix","city":"Madrid","country":"Spain"},{"icao":"UBBB","iata":"GYD","theme":"Azerbaijan Grand Prix","city":"Baku","country":"Azerbaijan"},{"icao":"WSSS","iata":"SIN","theme":"Singapore Grand Prix","city":"Singapore","country":"Singapore"},{"icao":"KAUS","iata":"AUS","theme":"United States Grand Prix","city":"Austin","country":"United States"},{"icao":"MMMX","iata":"MEX","theme":"Mexico City Grand Prix","city":"Mexico City","country":"Mexico"},{"icao":"SBGR","iata":"GRU","theme":"São Paulo Grand Prix","city":"São Paulo","country":"Brazil"},{"icao":"KLAS","iata":"LAS","theme":"Las Vegas Grand Prix","city":"Las Vegas","country":"United States"},{"icao":"OTHH","iata":"DOH","theme":"Qatar Grand Prix","city":"Doha","country":"Qatar"},{"icao":"OMAA","iata":"AUH","theme":"Abu Dhabi Grand Prix","city":"Abu Dhabi","country":"UAE"}]},
+{id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
+{id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
+{id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
+{id:'rand_europe',name:'Random Europe',group:'randoms',colorIdx:8,type:'rand-coord',region:{latMin:35,latMax:71,lonMin:-10,lonMax:40},items:[]},
+{id:'rand_namerica',name:'Random N. America',group:'randoms',colorIdx:9,type:'rand-coord',region:{latMin:15,latMax:72,lonMin:-168,lonMax:-52},items:[]},
+{id:'rand_samerica',name:'Random S. America',group:'randoms',colorIdx:10,type:'rand-coord',region:{latMin:-56,latMax:13,lonMin:-82,lonMax:-34},items:[]},
+{id:'rand_australia',name:'Random Oceania',group:'randoms',colorIdx:11,type:'rand-coord',region:{latMin:-47,latMax:-10,lonMin:113,lonMax:178},items:[]},
+{id:'british',name:'British Isles',group:'networks',colorIdx:0,type:'list-simple',items:[
+  {name:'Aberdeen',icao:'EGPD'},{name:'Edinburgh',icao:'EGPH'},{name:'Glasgow',icao:'EGPF'},
+  {name:'London Heathrow',icao:'EGLL'},{name:'London Gatwick',icao:'EGKK'},{name:'London City',icao:'EGLC'},
+  {name:'London Stansted',icao:'EGSS'},{name:'Manchester',icao:'EGCC'},{name:'Birmingham',icao:'EGBB'},
+  {name:'Bristol',icao:'EGGD'},{name:'East Midlands',icao:'EGNX'},{name:'Newcastle',icao:'EGNT'},
+  {name:'Belfast',icao:'EGAA'},{name:'Dublin',icao:'EIDW'},{name:'Cork',icao:'EICK'},
+  {name:'Jersey',icao:'EGJJ'},{name:'Guernsey',icao:'EGJB'},{name:'Isle of Man',icao:'EGNS'},
+  {name:'Inverness',icao:'EGPE'},{name:'Kirkwall',icao:'EGPA'},{name:'Stornoway',icao:'EGPO'},
+  {name:'Barra',icao:'EGPR'},{name:'Islay',icao:'EGPI'},{name:'Tiree',icao:'EGPU'},
+  {name:'Benbecula',icao:'EGPL'},{name:'Papa Westray',icao:'EGEP'},{name:'Westray',icao:'EGEW'},
+  {name:'Lerwick (Sumburgh)',icao:'EGPB'},{name:'Fair Isle',icao:'EGEF'},
+  {name:'Gibraltar',icao:'LXGB'},{name:'Shannon',icao:'EINN'},{name:'Knock',icao:'EIKN'},
+]},
+{id:'nordics',name:'Nordics',group:'networks',colorIdx:1,type:'list-simple',items:[
+  {name:'Oslo',icao:'ENGM'},{name:'Bergen',icao:'ENBR'},{name:'Trondheim',icao:'ENVA'},
+  {name:'Tromsø',icao:'ENTC'},{name:'Stavanger',icao:'ENZV'},{name:'Bodø',icao:'ENBO'},
+  {name:'Longyearbyen',icao:'ENSB'},{name:'Alta',icao:'ENAT'},{name:'Hammerfest',icao:'ENHF'},
+  {name:'Kirkenes',icao:'ENKR'},{name:'Berlevåg',icao:'ENBV'},{name:'Stockholm Arlanda',icao:'ESSA'},
+  {name:'Stockholm Bromma',icao:'ESSB'},{name:'Göteborg',icao:'ESGG'},{name:'Malmö',icao:'ESMS'},
+  {name:'Kiruna',icao:'ESNQ'},{name:'Luleå',icao:'ESPA'},{name:'Umeå',icao:'ESNU'},
+  {name:'Östersund',icao:'ESNZ'},{name:'Copenhagen',icao:'EKCH'},{name:'Aalborg',icao:'EKYT'},
+  {name:'Billund',icao:'EKBI'},{name:'Faroe Islands',icao:'EKVG'},{name:'Helsinki',icao:'EFHK'},
+  {name:'Oulu',icao:'EFOU'},{name:'Rovaniemi',icao:'EFRO'},{name:'Kittilä',icao:'EFKT'},
+  {name:'Reykjavík KEF',icao:'BIKF'},{name:'Reykjavík Domestic',icao:'BIRK'},{name:'Akureyri',icao:'BIAR'},
+  {name:'Ísafjörður',icao:'BIIS'},{name:'Nuuk',icao:'BGGH'},{name:'Ilulissat',icao:'BGJN'},
+]},
+{id:'central_eu',name:'Central Europe',group:'networks',colorIdx:2,type:'list-simple',items:[
+  {name:'Frankfurt',icao:'EDDF'},{name:'Munich',icao:'EDDM'},{name:'Berlin',icao:'EDDB'},
+  {name:'Hamburg',icao:'EDDH'},{name:'Düsseldorf',icao:'EDDL'},{name:'Stuttgart',icao:'EDDS'},
+  {name:'Cologne/Bonn',icao:'EDDK'},{name:'Nuremberg',icao:'EDDN'},{name:'Vienna',icao:'LOWW'},
+  {name:'Salzburg',icao:'LOWS'},{name:'Innsbruck',icao:'LOWI'},{name:'Graz',icao:'LOWG'},
+  {name:'Zurich',icao:'LSZH'},{name:'Geneva',icao:'LSGG'},{name:'Basel',icao:'LFSB'},
+  {name:'Amsterdam',icao:'EHAM'},{name:'Rotterdam',icao:'EHRD'},{name:'Eindhoven',icao:'EHEH'},
+  {name:'Brussels',icao:'EBBR'},{name:'Antwerp',icao:'EBAW'},{name:'Liège',icao:'EBLG'},
+  {name:'Luxembourg',icao:'ELLX'},{name:'Prague',icao:'LKPR'},{name:'Bratislava',icao:'LZIB'},
+  {name:'Budapest',icao:'LHBP'},{name:'Warsaw',icao:'EPWA'},{name:'Kraków',icao:'EPKK'},
+  {name:'Gdansk',icao:'EPGD'},{name:'Helgoland',icao:'EDXH'},{name:'Mannheim',icao:'EDFM'},
+]},
+{id:'france_belux',name:'France / Belux',group:'networks',colorIdx:3,type:'list-simple',items:[
+  {name:'Paris CDG',icao:'LFPG'},{name:'Paris Orly',icao:'LFPO'},{name:'Nice',icao:'LFMN'},
+  {name:'Lyon',icao:'LFLL'},{name:'Toulouse',icao:'LFBO'},{name:'Bordeaux',icao:'LFBD'},
+  {name:'Marseille',icao:'LFML'},{name:'Nantes',icao:'LFRS'},{name:'Rennes',icao:'LFRN'},
+  {name:'Strasbourg',icao:'LFST'},{name:'Montpellier',icao:'LFMT'},{name:'Bastia',icao:'LFKB'},
+  {name:'Ajaccio',icao:'LFKJ'},{name:'Calvi',icao:'LFKC'},{name:'Figari',icao:'LFKG'},
+  {name:'Biarritz',icao:'LFBZ'},{name:'Pau',icao:'LFBP'},{name:'Grenoble',icao:'LFLS'},
+  {name:'Chambéry',icao:'LFLB'},{name:'Brest',icao:'LFRB'},{name:'Caen',icao:'LFRK'},
+  {name:'Pointe-à-Pitre',icao:'TFFR'},{name:'Fort-de-France',icao:'TFFF'},{name:'Cayenne',icao:'SOCA'},
+  {name:'St. Barthélémy',icao:'TFFJ'},{name:'Papeete',icao:'NTAA'},{name:'Nouméa',icao:'NWWW'},
+  {name:'Brussels',icao:'EBBR'},{name:'Charleroi',icao:'EBCI'},{name:'Courchevel',icao:'LFLJ'},
+  {name:'Megève',icao:'LFHM'},{name:'St. Tropez',icao:'LFTZ'},
+]},
+{id:'iberia',name:'Iberia',group:'networks',colorIdx:4,type:'list-simple',items:[
+  {name:'Madrid Barajas',icao:'LEMD'},{name:'Barcelona',icao:'LEBL'},{name:'Sevilla',icao:'LEZL'},
+  {name:'Málaga',icao:'LEMG'},{name:'Valencia',icao:'LEVC'},{name:'Bilbao',icao:'LEBB'},
+  {name:'Alicante',icao:'LEAL'},{name:'Palma de Mallorca',icao:'LEPA'},{name:'Gran Canaria',icao:'GCLP'},
+  {name:'Tenerife South',icao:'GCTS'},{name:'Tenerife North',icao:'GCXO'},{name:'Fuerteventura',icao:'GCFV'},
+  {name:'Lanzarote',icao:'GCRR'},{name:'Ibiza',icao:'LEIB'},{name:'Menorca',icao:'LEMH'},
+  {name:'Faro',icao:'LPFR'},{name:'Lisbon',icao:'LPPT'},{name:'Porto',icao:'LPPR'},
+  {name:'Funchal Madeira',icao:'LPMA'},{name:'Ponta Delgada',icao:'LPPD'},{name:'Santa Cruz da Graciosa',icao:'LPGR'},
+  {name:'Santiago de Compostela',icao:'LEST'},{name:'Asturias',icao:'LEAS'},{name:'San Sebastián',icao:'LESO'},
+  {name:'Jerez',icao:'LEJR'},{name:'Granada',icao:'LEGR'},{name:'Almería',icao:'LEAM'},
+  {name:'Gibraltar',icao:'LXGB'},
+]},
+{id:'eastern_med',name:'Eastern Mediterranean',group:'networks',colorIdx:5,type:'list-simple',items:[
+  {name:'Rome Fiumicino',icao:'LIRF'},{name:'Milan Malpensa',icao:'LIMC'},{name:'Milan Linate',icao:'LIML'},
+  {name:'Venice',icao:'LIPZ'},{name:'Naples',icao:'LIRN'},{name:'Palermo',icao:'LICJ'},
+  {name:'Catania',icao:'LICC'},{name:'Bologna',icao:'LIPE'},{name:'Florence',icao:'LIRQ'},
+  {name:'Bari',icao:'LIBD'},{name:'Turin',icao:'LIMF'},{name:'Bergamo',icao:'LIME'},
+  {name:'Cagliari',icao:'LIEE'},{name:'Olbia',icao:'LIEO'},{name:'Bolzano',icao:'LIBZ'},
+  {name:'Lugano',icao:'LSZA'},{name:'Samedan',icao:'LSZS'},{name:'Sion',icao:'LSGS'},
+  {name:'Athens',icao:'LGAV'},{name:'Thessaloniki',icao:'LGTS'},{name:'Heraklion',icao:'LGIR'},
+  {name:'Rhodes',icao:'LGRP'},{name:'Mykonos',icao:'LGMK'},{name:'Santorini',icao:'LGSR'},
+  {name:'Corfu',icao:'LGKR'},{name:'Kefalonia',icao:'LGKF'},{name:'Samos',icao:'LGSM'},
+  {name:'Skiathos',icao:'LGSK'},{name:'Dubrovnik',icao:'LDDU'},{name:'Split',icao:'LDSP'},
+  {name:'Zagreb',icao:'LDZA'},{name:'Tivat',icao:'LYTV'},{name:'Malta',icao:'LMML'},
+]},
 ];
 
 let schedByCode = {};
@@ -714,18 +838,6 @@ async function loadAllFromCloud() {
       if (byId['__airline_logos__'] && typeof byId['__airline_logos__'] === 'object' && !Array.isArray(byId['__airline_logos__'])) {
         _supabaseLogos = byId['__airline_logos__'];
         console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' logos from Supabase');
-      }
-      
-      // Check for deleted categories list
-      const deletedCats = byId['__deleted_categories__'] || [];
-      
-      // Remove deleted categories from CATEGORIES array
-      if (deletedCats.length > 0) {
-        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
-          if (deletedCats.includes(CATEGORIES[i].id)) {
-            CATEGORIES.splice(i, 1);
-          }
-        }
       }
       
       // Update categories
@@ -1189,7 +1301,13 @@ function rollAll() {
   if (typeof DB_SCHED === 'undefined') { setTimeout(rollAll, 500); return; }
   if (navigator.vibrate) navigator.vibrate(10);
   
-  lastResults = CATEGORIES.filter(c => c.items && c.items.length > 0).map(cat => {
+  lastResults = CATEGORIES.filter(c => {
+    // For list types, need items
+    if (['list','list-simple','list-themed','text'].includes(c.type)) return c.items && c.items.length > 0;
+    // For rand types, always include
+    if (['rand-icao','rand-iata','rand-coord'].includes(c.type)) return true;
+    return false;
+  }).map(cat => {
     let result = {icao:'',city:'',country:'',iata:'',diff:'',itemName:'',lat:null,lon:null};
     if (['list','list-simple','list-themed'].includes(cat.type)) {
       const item = cat.items[Math.floor(Math.random() * cat.items.length)];
@@ -1201,10 +1319,25 @@ function rollAll() {
       result.diff = item.diff || '';
       result.itemName = item.theme || (cat.id === 'formula1' ? item.name : '') || '';
       if (db) { result.lat = db[3]; result.lon = db[4]; }
+    } else if (cat.type === 'text') {
+      // Text type - just pick random text item
+      const item = cat.items[Math.floor(Math.random() * cat.items.length)];
+      result.itemName = item.name || item || '';
     } else if (cat.type === 'rand-icao' || cat.type === 'rand-iata') {
       const pool = cat.type === 'rand-iata' ? DB_SCHED.filter(r => r[1]) : DB_SCHED;
       const ap = pool[Math.floor(Math.random() * pool.length)];
       result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
+    } else if (cat.type === 'rand-coord' && cat.region) {
+      // Random within region bounds
+      const r = cat.region;
+      const pool = DB_SCHED.filter(ap => {
+        const lat = ap[3], lon = ap[4];
+        return lat >= r.latMin && lat <= r.latMax && lon >= r.lonMin && lon <= r.lonMax;
+      });
+      if (pool.length > 0) {
+        const ap = pool[Math.floor(Math.random() * pool.length)];
+        result = { icao: ap[0], iata: ap[1]||'', city: ap[7] || ap[2], country: countryName(ap[6]), lat: ap[3], lon: ap[4] };
+      }
     }
     return { cat, result };
   });
@@ -1213,13 +1346,23 @@ function rollAll() {
 
 function renderResults() {
   const c = document.getElementById('results-list');
-  if (!lastResults.some(r => r.result.icao)) {
+  // Check if we have any results (icao for airports, or itemName for text type)
+  if (!lastResults.some(r => r.result.icao || r.result.itemName)) {
     c.innerHTML = '';
     return;
   }
-  c.innerHTML = lastResults.filter(r => r.result.icao).map(({cat, result}) => {
+  c.innerHTML = lastResults.filter(r => r.result.icao || r.result.itemName).map(({cat, result}) => {
     const col = COLORS[cat.colorIdx % COLORS.length];
-    // Badge zeigt theme/itemName (z.B. "Monaco Grand Prix") oder diff (z.B. "Challenging")
+    
+    // Text type (Routings) - just show the text
+    if (cat.type === 'text') {
+      return `<div class="result-card">
+        <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
+        <div class="result-city" style="font-size:13px;font-weight:500;">${result.itemName}</div>
+      </div>`;
+    }
+    
+    // Airport type - show ICAO, city, country, badge
     const badge = result.itemName || result.diff || '';
     return `<div class="result-card" onclick="selectResult('${result.icao}')">
       <div class="result-header"><div class="result-dot" style="background:${col}"></div><div class="result-cat-name">${cat.name}</div></div>
