@@ -1076,18 +1076,6 @@ async function loadAllFromCloud() {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
       
-      // Check for deleted categories list
-      const deletedCats = byId['__deleted_categories__'] || [];
-      
-      // Remove deleted categories from CATEGORIES array
-      if (deletedCats.length > 0) {
-        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
-          if (deletedCats.includes(CATEGORIES[i].id)) {
-            CATEGORIES.splice(i, 1);
-          }
-        }
-      }
-      
       // Update existing categories
       CATEGORIES.forEach(cat => { 
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
@@ -1731,33 +1719,17 @@ function clearAllItems() {
 async function deleteActiveCategory() {
   const cat = CATEGORIES.find(c => c.id===activeCatId); if (!cat) return;
   // Confirm deletion
-  if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud on all devices\n\nThis cannot be undone!`)) return;
-  
-  const catIdToDelete = activeCatId;
+  if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud\n\nThis cannot be undone!`)) return;
   
   // Remove from CATEGORIES array
-  const idx = CATEGORIES.findIndex(c => c.id === catIdToDelete);
+  const idx = CATEGORIES.findIndex(c => c.id === activeCatId);
   if (idx !== -1) CATEGORIES.splice(idx, 1);
   
-  // Delete from cloud and add to deleted list
+  // Delete from cloud
   try {
     setCloudStatus('Deleting…', 'ing');
-    
-    // Get current deleted list
-    const { data: existing } = await sb.from('categories').select('items').eq('name', '__deleted_categories__').single();
-    let deletedList = (existing && Array.isArray(existing.items)) ? existing.items : [];
-    
-    // Add this category ID to deleted list (if not already there)
-    if (!deletedList.includes(catIdToDelete)) {
-      deletedList.push(catIdToDelete);
-    }
-    
-    // Save deleted list to cloud
-    await sb.from('categories').upsert({ name: '__deleted_categories__', items: deletedList }, { onConflict: 'name' });
-    
-    // Also delete the category's data from cloud
-    await sb.from('categories').delete().eq('name', catIdToDelete);
-    
+    const { error } = await sb.from('categories').delete().eq('name', activeCatId);
+    if (error) throw error;
     setCloudStatus('✓ Synced', 'ok');
   } catch(e) {
     console.error('Delete error:', e);
@@ -2805,16 +2777,15 @@ function renderLegs() {
       + '</div>'
       + '<div id="ls-deputc-'+i+'" style="font-size:9px;color:#4a9eda;text-align:center;width:100%;">' + (leg.schedDepUTC||'') + '</div>';
 
-    // ── Arrow + Block (no extra hyphen) ──
+    // ── Arrow + Block (editable input) ──
     const btCell = document.createElement('div');
-    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;cursor:pointer;padding:0 5px;min-height:54px;gap:2px;';
-    btCell.title = 'Click to refresh block time';
-    btCell.onclick = () => fetchBlockTime(i);
-    const btDisplay = leg.blockTime || (leg.dep && leg.arr ? '…' : '');
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 5px;min-height:54px;gap:2px;';
+    const btDisplay = leg.blockTime || '';
     const btColor = leg.blockTimeReal ? '#3fb950' : '#777';
     const btWeight = leg.blockTimeReal ? '700' : '400';
-    btCell.innerHTML = '<div style="font-size:20px;color:#555;line-height:1;">→</div>'
-      + '<div id="bt-'+i+'" style="font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';">'+btDisplay+'</div>';
+    const btStyle = leg.blockTimeReal ? '' : 'font-style:italic;';
+    btCell.innerHTML = '<div style="font-size:20px;color:#555;line-height:1;cursor:pointer;" onclick="fetchBlockTime('+i+')" title="Click to search">→</div>'
+      + '<input type="text" id="bt-'+i+'" value="'+btDisplay+'" placeholder="H:MM" style="width:50px;font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';'+btStyle+'background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;" oninput="updateBlockTime('+i+', this.value)" onblur="formatBlockTime('+i+')">';
 
     // ── Arrival airport ──
     const arrCell = document.createElement('div');
@@ -3006,8 +2977,9 @@ async function fetchBlockTime(idx) {
   leg._fetchingBT = true;
   const btEl = document.getElementById('bt-' + idx);
   if (!btEl) { leg._fetchingBT = false; return; }
-  btEl.textContent = '🔍';
+  btEl.value = '🔍';
   btEl.style.fontStyle = 'normal';
+  btEl.style.color = '#777';
   btEl.title = 'Searching…';
 
   const depIata = leg.dep[1] || leg.dep[0];
@@ -3047,7 +3019,10 @@ async function fetchBlockTime(idx) {
       const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
       if (m && !txt.toUpperCase().includes('NONE')) {
         leg.blockTime = m[0]; leg.blockTimeReal = true;
-        btEl.textContent = m[0]; btEl.style.fontStyle = 'normal';
+        btEl.value = m[0];
+        btEl.style.fontStyle = 'normal';
+        btEl.style.color = '#3fb950';
+        btEl.style.fontWeight = '700';
         btEl.title = `Nonstop ${depIata}→${arrIata} (web)`;
         leg._fetchingBT = false;
         legSchedUpdateRow(idx);
@@ -3070,10 +3045,75 @@ async function fetchBlockTime(idx) {
   leg.blockTime = Math.floor(mins/60)+':'+String(mins%60).padStart(2,'0');
   leg.blockTimeReal = false;
   leg._fetchingBT = false;
-  btEl.textContent = leg.blockTime; btEl.style.fontStyle = 'italic';
+  btEl.value = leg.blockTime;
+  btEl.style.fontStyle = 'italic';
+  btEl.style.color = '#777';
+  btEl.style.fontWeight = '400';
   btEl.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
   legSchedUpdateRow(idx);
   } // end fallback
+}
+
+// Manual block time update
+function updateBlockTime(idx, val) {
+  const leg = legs[idx];
+  if (!leg) return;
+  // Parse and store raw value for now
+  leg._manualBT = val;
+}
+
+// Format block time on blur and recalculate arrival
+function formatBlockTime(idx) {
+  const leg = legs[idx];
+  if (!leg) return;
+  const btEl = document.getElementById('bt-' + idx);
+  if (!btEl) return;
+  
+  const raw = leg._manualBT || btEl.value || '';
+  const s = String(raw).replace(/[^0-9:]/g, '');
+  
+  if (!s) {
+    leg.blockTime = '';
+    leg.blockTimeReal = false;
+    btEl.value = '';
+    btEl.style.color = '#777';
+    btEl.style.fontWeight = '400';
+    btEl.style.fontStyle = 'italic';
+    legSchedUpdateRow(idx);
+    return;
+  }
+  
+  let h = 0, m = 0;
+  if (s.includes(':')) {
+    const parts = s.split(':');
+    h = parseInt(parts[0]) || 0;
+    m = parseInt(parts[1]) || 0;
+  } else if (s.length <= 2) {
+    h = parseInt(s) || 0;
+    m = 0;
+  } else if (s.length === 3) {
+    h = parseInt(s[0]) || 0;
+    m = parseInt(s.slice(1)) || 0;
+  } else {
+    h = parseInt(s.slice(0, 2)) || 0;
+    m = parseInt(s.slice(2, 4)) || 0;
+  }
+  
+  // Clamp minutes
+  if (m >= 60) { h += Math.floor(m / 60); m = m % 60; }
+  
+  const formatted = h + ':' + String(m).padStart(2, '0');
+  leg.blockTime = formatted;
+  leg.blockTimeReal = true; // Manual entry counts as "real"
+  leg._manualBT = null;
+  
+  btEl.value = formatted;
+  btEl.style.color = '#f0883e'; // Orange for manual
+  btEl.style.fontWeight = '700';
+  btEl.style.fontStyle = 'normal';
+  btEl.title = 'Manual entry';
+  
+  legSchedUpdateRow(idx);
 }
 
 function updateFlightConnectionsBtn() {
