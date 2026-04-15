@@ -1076,6 +1076,22 @@ async function loadAllFromCloud() {
       const byId = {};
       data.forEach(row => { byId[row.name] = row.items; });
       
+      // Load deleted categories list
+      let deletedCats = [];
+      if (byId['__deleted_cats__'] && Array.isArray(byId['__deleted_cats__'])) {
+        deletedCats = byId['__deleted_cats__'];
+      }
+      
+      // Remove builtin categories that user has deleted
+      if (deletedCats.length > 0) {
+        const deletedSet = new Set(deletedCats);
+        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
+          if (deletedSet.has(CATEGORIES[i].id)) {
+            CATEGORIES.splice(i, 1);
+          }
+        }
+      }
+      
       // Update existing categories
       CATEGORIES.forEach(cat => { 
         if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
@@ -1096,8 +1112,9 @@ async function loadAllFromCloud() {
       
       // Load custom themed categories from cloud
       const existingIds = new Set(CATEGORIES.map(c => c.id));
+      const deletedSet = new Set(deletedCats);
       data.forEach(row => {
-        if (!existingIds.has(row.name) && Array.isArray(row.items) && row.items.length > 0) {
+        if (!existingIds.has(row.name) && !deletedSet.has(row.name) && Array.isArray(row.items) && row.items.length > 0) {
           // Check if it looks like a themed category (items have theme field)
           if (row.items[0] && row.items[0].theme !== undefined) {
             const newCat = {
@@ -1721,14 +1738,31 @@ async function deleteActiveCategory() {
   // Confirm deletion
   if (!confirm(`DELETE the entire category "${cat.name}"?\n\nThis will:\n• Remove it from the Data tab\n• Remove its result card from Next Flight\n• Delete it from the cloud\n\nThis cannot be undone!`)) return;
   
+  const catIdToDelete = activeCatId;
+  const isBuiltin = BUILTIN_CAT_IDS.has(catIdToDelete);
+  
   // Remove from CATEGORIES array
   const idx = CATEGORIES.findIndex(c => c.id === activeCatId);
   if (idx !== -1) CATEGORIES.splice(idx, 1);
   
-  // Delete from cloud
+  // Delete from cloud and track if builtin
   try {
     setCloudStatus('Deleting…', 'ing');
-    const { error } = await sb.from('categories').delete().eq('name', activeCatId);
+    
+    // If it's a builtin category, add to deleted list
+    if (isBuiltin) {
+      // Load current deleted list
+      const { data } = await sb.from('categories').select('items').eq('name', '__deleted_cats__').single();
+      let deletedList = (data && Array.isArray(data.items)) ? data.items : [];
+      if (!deletedList.includes(catIdToDelete)) {
+        deletedList.push(catIdToDelete);
+      }
+      // Save updated deleted list
+      await sb.from('categories').upsert({ name: '__deleted_cats__', items: deletedList }, { onConflict: 'name' });
+    }
+    
+    // Delete category data from cloud
+    const { error } = await sb.from('categories').delete().eq('name', catIdToDelete);
     if (error) throw error;
     setCloudStatus('✓ Synced', 'ok');
   } catch(e) {
