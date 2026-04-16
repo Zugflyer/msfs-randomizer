@@ -468,6 +468,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         </button>
       </div>
       <div class="cat-tabs-row" id="cat-tabs"></div>
+      <!-- Show on map row -->
+      <div id="cat-map-row" style="display:none;padding:6px 14px;border-bottom:1px solid var(--bdr);">
+        <button class="btn-toolbar-purple" onclick="showCategoryOnMap()" title="Show all airports from this category on the map" style="display:flex;align-items:center;gap:6px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          Show on map
+        </button>
+      </div>
       <!-- Toolbar row: Clear all + Import XLSX -->
       <div id="cat-toolbar-row" style="display:none;padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;">
         <div style="flex:1;"></div>
@@ -1997,10 +2004,12 @@ function renderCatTable() {
   const addRow = document.getElementById('cat-add-row');
   const filterBar = document.getElementById('cat-filter-bar');
   const toolbarRow = document.getElementById('cat-toolbar-row');
+  const mapRow = document.getElementById('cat-map-row');
   const deleteBtn = document.getElementById('btn-delete-category');
-  if (!cat) { area.innerHTML=''; addRow.style.display='none'; filterBar.style.display='none'; if(toolbarRow) toolbarRow.style.display='none'; if(deleteBtn) deleteBtn.style.display='none'; return; }
+  if (!cat) { area.innerHTML=''; addRow.style.display='none'; filterBar.style.display='none'; if(toolbarRow) toolbarRow.style.display='none'; if(mapRow) mapRow.style.display='none'; if(deleteBtn) deleteBtn.style.display='none'; return; }
   filterBar.style.display = 'flex';
   if(toolbarRow) toolbarRow.style.display = 'flex';
+  if(mapRow) mapRow.style.display = 'block';
   // Show delete button only for custom categories (not built-in)
   if(deleteBtn) deleteBtn.style.display = '';
   const items = getFilteredSortedItems(cat);
@@ -4664,7 +4673,7 @@ function renderCalc() {
 
 function catShowEtops() {
   // Hide normal cat content, show etops
-  ['cat-tabs','cat-toolbar-row','cat-filter-bar','cat-add-row','cat-table-area'].forEach(id => {
+  ['cat-tabs','cat-toolbar-row','cat-filter-bar','cat-add-row','cat-table-area','cat-map-row'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   });
   const es = document.getElementById('cat-etops-section');
@@ -4681,7 +4690,7 @@ function catShowEtops() {
 
 function catShowGates() {
   // Hide normal cat content, show gates
-  ['cat-tabs','cat-toolbar-row','cat-filter-bar','cat-add-row','cat-table-area'].forEach(id => {
+  ['cat-tabs','cat-toolbar-row','cat-filter-bar','cat-add-row','cat-table-area','cat-map-row'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   });
   const es = document.getElementById('cat-etops-section');
@@ -4695,10 +4704,51 @@ function catShowGates() {
   renderGatesTable();
 }
 
+// ═══════════════════════════════════════════════════════════
+// SHOW CATEGORY ON MAP
+// ═══════════════════════════════════════════════════════════
+function showCategoryOnMap() {
+  const cat = CATEGORIES.find(c => c.id === activeCatId);
+  if (!cat || !cat.items || cat.items.length === 0) {
+    alert('No airports to show on map.');
+    return;
+  }
+  
+  // Build payload for map viewer
+  const payload = {
+    title: cat.name,
+    items: cat.items.map(item => {
+      // Handle different category types
+      if (cat.type === 'text' || cat.id === 'routings') {
+        // Routings - extract first ICAO code from text field
+        const text = item.text || '';
+        const match = text.match(/[A-Z]{4}/);
+        return {
+          icao: match ? match[0] : '',
+          name: text,
+          country: ''
+        };
+      } else {
+        // Normal list categories
+        return {
+          icao: item.icao || '',
+          name: item.theme || item.name || '',
+          country: item.country || ''
+        };
+      }
+    }).filter(item => item.icao) // Only items with valid ICAO
+  };
+  
+  // Open map viewer with hash parameter
+  const mapUrl = 'mapview.html#cat=' + encodeURIComponent(JSON.stringify(payload));
+  window.open(mapUrl, '_blank');
+}
+
 function catShowCategories() {
   // Restore normal cat content
   const tabs = document.getElementById('cat-tabs'); if (tabs) tabs.style.display = '';
   const tb = document.getElementById('cat-toolbar-row'); if (tb) tb.style.display = '';
+  const mr = document.getElementById('cat-map-row'); if (mr) mr.style.display = '';
   const fb = document.getElementById('cat-filter-bar'); if (fb) fb.style.display = '';
   const ta = document.getElementById('cat-table-area'); if (ta) ta.style.display = '';
   const es = document.getElementById('cat-etops-section'); if (es) es.style.display = 'none';
