@@ -507,7 +507,7 @@ function renderRoute(payload) {
   
   const points = [];
   const legs = payload.legs || [];
-  const COLORS = ['#f85149','#d29922','#58a6ff','#3fb950','#a78bfa','#ec6547','#79c0ff','#f0883e','#56d364','#d2a8ff'];
+  const ROUTE_COLOR = '#58a6ff'; // Blue for all route elements
   
   // Build airport list HTML
   let listHtml = '';
@@ -517,7 +517,6 @@ function renderRoute(payload) {
     const arrCode = (leg.arr || '').toUpperCase();
     const depAp = schedByCode[depCode];
     const arrAp = schedByCode[arrCode];
-    const color = COLORS[idx % COLORS.length];
     
     // Add departure marker (only for first leg, others share with previous arrival)
     if (idx === 0 && depAp) {
@@ -525,18 +524,18 @@ function renderRoute(payload) {
       points.push([lat, lon]);
       
       const marker = L.circleMarker([lat, lon], {
-        radius: 9, color: '#0e1117', weight: 3,
-        fillColor: '#3fb950', fillOpacity: 0.95
+        radius: 8, color: '#0e1117', weight: 2,
+        fillColor: ROUTE_COLOR, fillOpacity: 0.95
       }).addTo(mapObj);
       
       marker._icao = depCode;
-      marker.bindPopup(`<b style="color:#3fb950;">START</b><br><b>${depCode}</b> ${depAp[1] ? '(' + depAp[1] + ')' : ''}<br>${depAp[2] || ''}<br><span style="color:#888;">${depAp[7] || ''}</span>`, { maxWidth: 320 });
+      marker.bindPopup(`<b style="color:${ROUTE_COLOR};">START</b><br><b>${depCode}</b> ${depAp[1] ? '(' + depAp[1] + ')' : ''}<br>${depAp[2] || ''}<br><span style="color:#888;">${depAp[7] || ''}</span>`, { maxWidth: 320 });
       mapMarkers.push(marker);
       
       listHtml += `<div class="ap-item" data-row="${idx}" onclick="focusPoint(${lat},${lon})">
-        <div class="ap-dot" style="background:#3fb950;"></div>
+        <div class="ap-dot" style="background:${ROUTE_COLOR};"></div>
         <div style="flex:1;min-width:0;">
-          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${depCode}</span><span style="font-size:10px;color:#3fb950;font-weight:600;">START</span></div>
+          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${depCode}</span><span style="font-size:10px;color:${ROUTE_COLOR};font-weight:600;">START</span></div>
           <div class="ap-name">${depAp[2] || ''}</div>
         </div>
       </div>`;
@@ -548,26 +547,22 @@ function renderRoute(payload) {
       points.push([lat, lon]);
       
       const isLast = idx === legs.length - 1;
-      const markerColor = isLast ? '#f85149' : color;
-      const radius = isLast ? 9 : 7;
-      const weight = isLast ? 3 : 2;
       
       const marker = L.circleMarker([lat, lon], {
-        radius: radius, color: '#0e1117', weight: weight,
-        fillColor: markerColor, fillOpacity: 0.95
+        radius: 8, color: '#0e1117', weight: 2,
+        fillColor: ROUTE_COLOR, fillOpacity: 0.95
       }).addTo(mapObj);
       
       marker._icao = arrCode;
-      const label = isLast ? '<b style="color:#f85149;">END</b><br>' : `<span style="color:${color};">Leg ${idx + 1}</span><br>`;
+      const label = isLast ? `<b style="color:${ROUTE_COLOR};">END</b><br>` : `<span style="color:${ROUTE_COLOR};">Leg ${idx + 1}</span><br>`;
       marker.bindPopup(`${label}<b>${arrCode}</b> ${arrAp[1] ? '(' + arrAp[1] + ')' : ''}<br>${arrAp[2] || ''}<br><span style="color:#888;">${arrAp[7] || ''}</span>`, { maxWidth: 320 });
       mapMarkers.push(marker);
       
       const labelText = isLast ? 'END' : `Leg ${idx + 1}`;
-      const labelColor = isLast ? '#f85149' : color;
       listHtml += `<div class="ap-item" data-row="${idx + 1}" onclick="focusPoint(${lat},${lon})">
-        <div class="ap-dot" style="background:${markerColor};"></div>
+        <div class="ap-dot" style="background:${ROUTE_COLOR};"></div>
         <div style="flex:1;min-width:0;">
-          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${arrCode}</span><span style="font-size:10px;color:${labelColor};font-weight:600;">${labelText}</span></div>
+          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${arrCode}</span><span style="font-size:10px;color:${ROUTE_COLOR};font-weight:600;">${labelText}</span></div>
           <div class="ap-name">${arrAp[2] || ''}</div>
         </div>
       </div>`;
@@ -577,10 +572,10 @@ function renderRoute(payload) {
     if (depAp && arrAp) {
       const line = L.polyline(
         [[depAp[3], depAp[4]], [arrAp[3], arrAp[4]]],
-        { color: color, weight: 3, opacity: 0.8 }
+        { color: ROUTE_COLOR, weight: 3, opacity: 0.8 }
       ).addTo(mapObj);
       
-      line.bindPopup(`<b style="color:${color};">Leg ${idx + 1}</b><br>${depCode} → ${arrCode}`, { maxWidth: 200 });
+      line.bindPopup(`<b style="color:${ROUTE_COLOR};">Leg ${idx + 1}</b><br>${depCode} → ${arrCode}`, { maxWidth: 200 });
       mapMarkers.push(line);
     }
   });
