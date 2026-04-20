@@ -8,6 +8,7 @@
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/leaflet.geodesic@2.7.1/dist/leaflet.geodesic.umd.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=DM+Sans:wght@400;500;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -589,11 +590,11 @@ function renderRoute(payload) {
       </div>`;
     }
     
-    // Draw connecting line
+    // Draw connecting geodesic line (great circle)
     if (depAp && arrAp) {
-      const line = L.polyline(
-        [[depAp[3], depAp[4]], [arrAp[3], arrAp[4]]],
-        { color: ROUTE_COLOR, weight: 3, opacity: 0.8 }
+      const line = new L.Geodesic(
+        [[[depAp[3], depAp[4]], [arrAp[3], arrAp[4]]]],
+        { color: ROUTE_COLOR, weight: 3, opacity: 0.8, steps: 50 }
       ).addTo(mapObj);
       
       mapMarkers.push(line);
