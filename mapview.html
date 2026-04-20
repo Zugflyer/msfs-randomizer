@@ -520,15 +520,25 @@ function renderRoute(payload) {
   legs.forEach((leg, idx) => {
     const depCode = (leg.dep || '').toUpperCase();
     const arrCode = (leg.arr || '').toUpperCase();
-    const depAp = schedByCode[depCode];
-    const arrAp = schedByCode[arrCode];
+    
+    // Use coordinates from payload if available, otherwise fall back to local DB
+    const depLat = leg.depLat !== undefined && leg.depLat !== null ? leg.depLat : (schedByCode[depCode] ? schedByCode[depCode][3] : null);
+    const depLon = leg.depLon !== undefined && leg.depLon !== null ? leg.depLon : (schedByCode[depCode] ? schedByCode[depCode][4] : null);
+    const depName = leg.depName || (schedByCode[depCode] ? schedByCode[depCode][2] : '');
+    const depCity = leg.depCity || (schedByCode[depCode] ? schedByCode[depCode][7] : '');
+    const depIata = leg.depIata || (schedByCode[depCode] ? schedByCode[depCode][1] : '');
+    
+    const arrLat = leg.arrLat !== undefined && leg.arrLat !== null ? leg.arrLat : (schedByCode[arrCode] ? schedByCode[arrCode][3] : null);
+    const arrLon = leg.arrLon !== undefined && leg.arrLon !== null ? leg.arrLon : (schedByCode[arrCode] ? schedByCode[arrCode][4] : null);
+    const arrName = leg.arrName || (schedByCode[arrCode] ? schedByCode[arrCode][2] : '');
+    const arrCity = leg.arrCity || (schedByCode[arrCode] ? schedByCode[arrCode][7] : '');
+    const arrIata = leg.arrIata || (schedByCode[arrCode] ? schedByCode[arrCode][1] : '');
     
     // Add departure marker (only for first leg, others share with previous arrival)
-    if (idx === 0 && depAp) {
-      const lat = depAp[3], lon = depAp[4];
-      points.push([lat, lon]);
+    if (idx === 0 && depLat !== null && depLon !== null) {
+      points.push([depLat, depLon]);
       
-      const marker = L.circleMarker([lat, lon], {
+      const marker = L.circleMarker([depLat, depLon], {
         radius: 8, color: '#0e1117', weight: 2,
         fillColor: ROUTE_COLOR, fillOpacity: 0.95
       }).addTo(mapObj);
@@ -543,26 +553,25 @@ function renderRoute(payload) {
         className: 'route-label'
       });
       
-      marker.bindPopup(`<b>${depCode}</b> ${depAp[1] ? '(' + depAp[1] + ')' : ''}<br>${depAp[2] || ''}<br><span style="color:#888;">${depAp[7] || ''}</span>`, { maxWidth: 320 });
+      marker.bindPopup(`<b>${depCode}</b> ${depIata ? '(' + depIata + ')' : ''}<br>${depName}<br><span style="color:#888;">${depCity}</span>`, { maxWidth: 320 });
       mapMarkers.push(marker);
       
-      listHtml += `<div class="ap-item" data-row="${idx}" onclick="focusPoint(${lat},${lon})">
+      listHtml += `<div class="ap-item" data-row="${idx}" onclick="focusPoint(${depLat},${depLon})">
         <div class="ap-dot" style="background:${ROUTE_COLOR};"></div>
         <div style="flex:1;min-width:0;">
           <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${depCode}</span><span style="font-size:10px;color:${ROUTE_COLOR};font-weight:600;">START</span></div>
-          <div class="ap-name">${depAp[2] || ''}</div>
+          <div class="ap-name">${depName}</div>
         </div>
       </div>`;
     }
     
     // Add arrival marker
-    if (arrAp) {
-      const lat = arrAp[3], lon = arrAp[4];
-      points.push([lat, lon]);
+    if (arrLat !== null && arrLon !== null) {
+      points.push([arrLat, arrLon]);
       
       const isLast = idx === legs.length - 1;
       
-      const marker = L.circleMarker([lat, lon], {
+      const marker = L.circleMarker([arrLat, arrLon], {
         radius: 8, color: '#0e1117', weight: 2,
         fillColor: ROUTE_COLOR, fillOpacity: 0.95
       }).addTo(mapObj);
@@ -577,23 +586,23 @@ function renderRoute(payload) {
         className: 'route-label'
       });
       
-      marker.bindPopup(`<b>${arrCode}</b> ${arrAp[1] ? '(' + arrAp[1] + ')' : ''}<br>${arrAp[2] || ''}<br><span style="color:#888;">${arrAp[7] || ''}</span>`, { maxWidth: 320 });
+      marker.bindPopup(`<b>${arrCode}</b> ${arrIata ? '(' + arrIata + ')' : ''}<br>${arrName}<br><span style="color:#888;">${arrCity}</span>`, { maxWidth: 320 });
       mapMarkers.push(marker);
       
       const labelText = isLast ? 'END' : `Leg ${idx + 1}`;
-      listHtml += `<div class="ap-item" data-row="${idx + 1}" onclick="focusPoint(${lat},${lon})">
+      listHtml += `<div class="ap-item" data-row="${idx + 1}" onclick="focusPoint(${arrLat},${arrLon})">
         <div class="ap-dot" style="background:${ROUTE_COLOR};"></div>
         <div style="flex:1;min-width:0;">
           <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${arrCode}</span><span style="font-size:10px;color:${ROUTE_COLOR};font-weight:600;">${labelText}</span></div>
-          <div class="ap-name">${arrAp[2] || ''}</div>
+          <div class="ap-name">${arrName}</div>
         </div>
       </div>`;
     }
     
     // Draw connecting geodesic line (great circle)
-    if (depAp && arrAp) {
+    if (depLat !== null && depLon !== null && arrLat !== null && arrLon !== null) {
       const line = new L.Geodesic(
-        [[[depAp[3], depAp[4]], [arrAp[3], arrAp[4]]]],
+        [[[depLat, depLon], [arrLat, arrLon]]],
         { color: ROUTE_COLOR, weight: 3, opacity: 0.8, steps: 50 }
       ).addTo(mapObj);
       

@@ -4723,8 +4723,8 @@ function showCategoryOnMap() {
     // Parse all routings and let user select one, or show all if only one
     const routings = cat.items.map(item => {
       const text = (item.text || item.name || '').toUpperCase();
-      // Extract all ICAO codes from the routing string
-      const icaos = text.match(/[A-Z]{4}/g) || [];
+      // Extract all ICAO codes (4 alphanumeric characters starting with letter)
+      const icaos = text.match(/[A-Z][A-Z0-9]{3}/g) || [];
       return { text: text, icaos: icaos };
     }).filter(r => r.icaos.length >= 2);
     
@@ -4747,12 +4747,27 @@ function showCategoryOnMap() {
       selectedRouting = routings[idx];
     }
     
-    // Build legs from consecutive ICAO codes
+    // Build legs from consecutive ICAO codes - include coordinates from DB_SCHED
     const legs = [];
     for (let i = 0; i < selectedRouting.icaos.length - 1; i++) {
+      const depCode = selectedRouting.icaos[i];
+      const arrCode = selectedRouting.icaos[i + 1];
+      const depAp = schedByCode[depCode];
+      const arrAp = schedByCode[arrCode];
+      
       legs.push({
-        dep: selectedRouting.icaos[i],
-        arr: selectedRouting.icaos[i + 1]
+        dep: depCode,
+        arr: arrCode,
+        depLat: depAp ? depAp[3] : null,
+        depLon: depAp ? depAp[4] : null,
+        depName: depAp ? depAp[2] : '',
+        depCity: depAp ? depAp[7] : '',
+        depIata: depAp ? depAp[1] : '',
+        arrLat: arrAp ? arrAp[3] : null,
+        arrLon: arrAp ? arrAp[4] : null,
+        arrName: arrAp ? arrAp[2] : '',
+        arrCity: arrAp ? arrAp[7] : '',
+        arrIata: arrAp ? arrAp[1] : ''
       });
     }
     
