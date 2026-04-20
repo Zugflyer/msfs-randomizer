@@ -435,6 +435,34 @@ function buildLegend() {
 // ═══ Load from URL hash (cat= parameter from randomizer) ═══
 function loadFromHash() {
   const hash = window.location.hash;
+  
+  // Check for route= parameter (routing with connected lines)
+  if (hash && hash.startsWith('#route=')) {
+    try {
+      const json = decodeURIComponent(hash.slice(7));
+      const payload = JSON.parse(json);
+      if (!payload || !payload.legs || !payload.legs.length) return false;
+      
+      // Set title
+      const title = payload.title || 'Route';
+      document.getElementById('status-text').textContent = title;
+      document.getElementById('file-info').style.display = 'block';
+      document.getElementById('file-name').innerHTML = '✈️ ' + title;
+      
+      // Hide settings and dropzone
+      document.getElementById('settings-area').style.display = 'none';
+      document.querySelector('.dropzone').innerHTML = '<div style="font-size:12px;color:var(--txt2);padding:8px;">Showing route: <b style="color:var(--green);">' + title + '</b><br><br><span style="color:var(--txt3);font-size:11px;">Drop an XLSX to load different data.</span></div>';
+      
+      // Render route with lines
+      renderRoute(payload);
+      return true;
+    } catch(e) {
+      console.warn('Failed to parse route data:', e);
+      return false;
+    }
+  }
+  
+  // Original cat= parameter handling
   if (!hash || !hash.startsWith('#cat=')) return false;
   try {
     const json = decodeURIComponent(hash.slice(5));
@@ -466,6 +494,114 @@ function loadFromHash() {
     console.warn('Failed to parse hash data:', e);
     return false;
   }
+}
+
+// ═══ Render Route with connected lines ═══
+function renderRoute(payload) {
+  // Clear existing
+  mapMarkers.forEach(m => mapObj.removeLayer(m));
+  mapMarkers = [];
+  
+  document.getElementById('empty-map').style.display = 'none';
+  document.getElementById('cat-filter').style.display = 'none';
+  
+  const points = [];
+  const legs = payload.legs || [];
+  const COLORS = ['#f85149','#d29922','#58a6ff','#3fb950','#a78bfa','#ec6547','#79c0ff','#f0883e','#56d364','#d2a8ff'];
+  
+  // Build airport list HTML
+  let listHtml = '';
+  
+  legs.forEach((leg, idx) => {
+    const depCode = (leg.dep || '').toUpperCase();
+    const arrCode = (leg.arr || '').toUpperCase();
+    const depAp = schedByCode[depCode];
+    const arrAp = schedByCode[arrCode];
+    const color = COLORS[idx % COLORS.length];
+    
+    // Add departure marker (only for first leg, others share with previous arrival)
+    if (idx === 0 && depAp) {
+      const lat = depAp[3], lon = depAp[4];
+      points.push([lat, lon]);
+      
+      const marker = L.circleMarker([lat, lon], {
+        radius: 9, color: '#0e1117', weight: 3,
+        fillColor: '#3fb950', fillOpacity: 0.95
+      }).addTo(mapObj);
+      
+      marker._icao = depCode;
+      marker.bindPopup(`<b style="color:#3fb950;">START</b><br><b>${depCode}</b> ${depAp[1] ? '(' + depAp[1] + ')' : ''}<br>${depAp[2] || ''}<br><span style="color:#888;">${depAp[7] || ''}</span>`, { maxWidth: 320 });
+      mapMarkers.push(marker);
+      
+      listHtml += `<div class="ap-item" data-row="${idx}" onclick="focusPoint(${lat},${lon})">
+        <div class="ap-dot" style="background:#3fb950;"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${depCode}</span><span style="font-size:10px;color:#3fb950;font-weight:600;">START</span></div>
+          <div class="ap-name">${depAp[2] || ''}</div>
+        </div>
+      </div>`;
+    }
+    
+    // Add arrival marker
+    if (arrAp) {
+      const lat = arrAp[3], lon = arrAp[4];
+      points.push([lat, lon]);
+      
+      const isLast = idx === legs.length - 1;
+      const markerColor = isLast ? '#f85149' : color;
+      const radius = isLast ? 9 : 7;
+      const weight = isLast ? 3 : 2;
+      
+      const marker = L.circleMarker([lat, lon], {
+        radius: radius, color: '#0e1117', weight: weight,
+        fillColor: markerColor, fillOpacity: 0.95
+      }).addTo(mapObj);
+      
+      marker._icao = arrCode;
+      const label = isLast ? '<b style="color:#f85149;">END</b><br>' : `<span style="color:${color};">Leg ${idx + 1}</span><br>`;
+      marker.bindPopup(`${label}<b>${arrCode}</b> ${arrAp[1] ? '(' + arrAp[1] + ')' : ''}<br>${arrAp[2] || ''}<br><span style="color:#888;">${arrAp[7] || ''}</span>`, { maxWidth: 320 });
+      mapMarkers.push(marker);
+      
+      const labelText = isLast ? 'END' : `Leg ${idx + 1}`;
+      const labelColor = isLast ? '#f85149' : color;
+      listHtml += `<div class="ap-item" data-row="${idx + 1}" onclick="focusPoint(${lat},${lon})">
+        <div class="ap-dot" style="background:${markerColor};"></div>
+        <div style="flex:1;min-width:0;">
+          <div style="display:flex;gap:8px;align-items:baseline;"><span class="ap-icao">${arrCode}</span><span style="font-size:10px;color:${labelColor};font-weight:600;">${labelText}</span></div>
+          <div class="ap-name">${arrAp[2] || ''}</div>
+        </div>
+      </div>`;
+    }
+    
+    // Draw connecting line
+    if (depAp && arrAp) {
+      const line = L.polyline(
+        [[depAp[3], depAp[4]], [arrAp[3], arrAp[4]]],
+        { color: color, weight: 3, opacity: 0.8 }
+      ).addTo(mapObj);
+      
+      line.bindPopup(`<b style="color:${color};">Leg ${idx + 1}</b><br>${depCode} → ${arrCode}`, { maxWidth: 200 });
+      mapMarkers.push(line);
+    }
+  });
+  
+  // Update airport list
+  document.getElementById('airport-list').innerHTML = listHtml || '<div style="padding:20px 14px;color:var(--txt3);font-size:12px;text-align:center;">No valid airports found.</div>';
+  document.getElementById('file-stats').textContent = `${legs.length} leg(s), ${points.length} airport(s)`;
+  
+  // Fit bounds
+  if (points.length >= 2) {
+    try { mapObj.fitBounds(L.latLngBounds(points), { padding: [60, 60] }); } catch(e) {}
+  } else if (points.length === 1) {
+    mapObj.setView(points[0], 6);
+  }
+  
+  // Hide legend for routes
+  document.getElementById('legend').style.display = 'none';
+}
+
+function focusPoint(lat, lon) {
+  mapObj.setView([lat, lon], 8, { animate: true });
 }
 
 // ═══ Init ═══

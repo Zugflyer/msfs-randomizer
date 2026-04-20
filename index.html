@@ -4718,32 +4718,68 @@ function showCategoryOnMap() {
     return;
   }
   
-  // Build payload for map viewer
+  // Special handling for Routings category - show as connected route
+  if (cat.type === 'text' || cat.id === 'routings') {
+    // Parse all routings and let user select one, or show all if only one
+    const routings = cat.items.map(item => {
+      const text = (item.text || item.name || '').toUpperCase();
+      // Extract all ICAO codes from the routing string
+      const icaos = text.match(/[A-Z]{4}/g) || [];
+      return { text: text, icaos: icaos };
+    }).filter(r => r.icaos.length >= 2);
+    
+    if (routings.length === 0) {
+      alert('No valid routings found (need at least 2 ICAO codes per routing).');
+      return;
+    }
+    
+    // If multiple routings, let user select one
+    let selectedRouting = routings[0];
+    if (routings.length > 1) {
+      const options = routings.map((r, i) => `${i + 1}. ${r.text}`).join('\n');
+      const choice = prompt(`Select a routing to display (1-${routings.length}):\n\n${options}`, '1');
+      if (!choice) return;
+      const idx = parseInt(choice) - 1;
+      if (idx < 0 || idx >= routings.length) {
+        alert('Invalid selection.');
+        return;
+      }
+      selectedRouting = routings[idx];
+    }
+    
+    // Build legs from consecutive ICAO codes
+    const legs = [];
+    for (let i = 0; i < selectedRouting.icaos.length - 1; i++) {
+      legs.push({
+        dep: selectedRouting.icaos[i],
+        arr: selectedRouting.icaos[i + 1]
+      });
+    }
+    
+    const payload = {
+      title: selectedRouting.text,
+      legs: legs
+    };
+    
+    // Open map viewer with route parameter
+    const mapUrl = 'mapview.html#route=' + encodeURIComponent(JSON.stringify(payload));
+    window.open(mapUrl, '_blank');
+    return;
+  }
+  
+  // Normal categories - show as points
   const payload = {
     title: cat.name,
     items: cat.items.map(item => {
-      // Handle different category types
-      if (cat.type === 'text' || cat.id === 'routings') {
-        // Routings - extract first ICAO code from text field
-        const text = item.text || '';
-        const match = text.match(/[A-Z]{4}/);
-        return {
-          icao: match ? match[0] : '',
-          name: text,
-          country: ''
-        };
-      } else {
-        // Normal list categories
-        return {
-          icao: item.icao || '',
-          name: item.theme || item.name || '',
-          country: item.country || ''
-        };
-      }
+      return {
+        icao: item.icao || '',
+        name: item.theme || item.name || '',
+        country: item.country || ''
+      };
     }).filter(item => item.icao) // Only items with valid ICAO
   };
   
-  // Open map viewer with hash parameter
+  // Open map viewer with cat parameter
   const mapUrl = 'mapview.html#cat=' + encodeURIComponent(JSON.stringify(payload));
   window.open(mapUrl, '_blank');
 }
