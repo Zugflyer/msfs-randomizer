@@ -709,6 +709,46 @@ html, body {
 .leg-block-time.estimate {
   font-style: italic;
 }
+.leg-airport-input-wrap {
+  flex: 1;
+  position: relative;
+}
+.leg-airport-edit-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--bg);
+  color: var(--acc2);
+  font-family: 'SF Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid var(--acc);
+  border-radius: 6px;
+  padding: 7px 10px;
+  outline: none;
+}
+.leg-airport-edit-input::placeholder {
+  color: var(--txt3);
+  font-weight: 400;
+  font-size: 11px;
+}
+.leg-airport-edit-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 180px;
+  overflow-y: auto;
+  background: var(--surf);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  margin-top: 4px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.leg-airport-edit-dropdown.open {
+  display: block;
+}
 .leg-insert-btns {
   display: flex;
   justify-content: center;
@@ -1278,6 +1318,12 @@ document.addEventListener('click', function(e) {
       d.innerHTML = '';
     });
   }
+  if (!e.target.closest('.leg-airport-input-wrap')) {
+    document.querySelectorAll('.leg-airport-edit-dropdown').forEach(d => {
+      d.classList.remove('open');
+      d.innerHTML = '';
+    });
+  }
 });
 
 // Select result card -> fill ARR field
@@ -1601,11 +1647,14 @@ function renderLegs() {
       </div>
       <div class="leg-airport">
         <div class="leg-airport-label">DEP</div>
-        <div class="leg-airport-info">
+        ${leg.dep ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'dep')" title="Click to change" style="cursor:pointer;">
           <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-iata">/ ${depIata}</span>` : ''}
           <div class="leg-airport-city">${depCity}</div>
           ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
-        </div>
+        </div>` : `<div class="leg-airport-input-wrap">
+          <input type="text" class="leg-airport-edit-input" id="leg-dep-edit-${i}" placeholder="ICAO or city…" autocomplete="off" oninput="onLegAirportInput(${i},'dep',this.value)">
+          <div class="leg-airport-edit-dropdown" id="leg-dep-edit-dropdown-${i}"></div>
+        </div>`}
         <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)" onblur="formatDepTimeOnBlur(${i})">
         <button class="leg-charts-btn" onclick="openCharts('${depIcao}')">Charts</button>
       </div>
@@ -1613,15 +1662,18 @@ function renderLegs() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 5v14M5 12l7 7 7-7"/>
         </svg>
-        <span class="leg-block-time ${leg.blockTimeReal ? 'real' : 'estimate'}">${leg.blockTime || (leg.dep && leg.arr ? '…' : '')}</span>
+        <span class="leg-block-time ${leg.blockTimeReal ? 'real' : 'estimate'}" id="leg-bt-${i}">${leg.blockTime || (leg.dep && leg.arr ? '…' : '')}</span>
       </div>
       <div class="leg-airport">
         <div class="leg-airport-label">ARR</div>
-        <div class="leg-airport-info">
+        ${leg.arr ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'arr')" title="Click to change" style="cursor:pointer;">
           <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-iata">/ ${arrIata}</span>` : ''}
           <div class="leg-airport-city">${arrCity}</div>
           ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
-        </div>
+        </div>` : `<div class="leg-airport-input-wrap">
+          <input type="text" class="leg-airport-edit-input" id="leg-arr-edit-${i}" placeholder="ICAO or city…" autocomplete="off" oninput="onLegAirportInput(${i},'arr',this.value)">
+          <div class="leg-airport-edit-dropdown" id="leg-arr-edit-dropdown-${i}"></div>
+        </div>`}
         <input type="text" class="leg-time-input leg-arr-time" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" readonly>
         <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')">Charts</button>
       </div>
@@ -1665,17 +1717,33 @@ function deleteLeg(i) {
 }
 
 function insertLegAfter(i) {
-  const prevArr = legs[i].arr;
+  // Stopover insertion — mirrors desktop behaviour:
+  //   Before: leg i: A -> B
+  //   After:  leg i: A -> ? (user types stopover), leg i+1: ? -> B
+  // The airport the user picks as leg i's ARR is auto-propagated to leg i+1's DEP.
+  const originalArr = legs[i].arr;
   const newLeg = {
-    dep: prevArr,
-    arr: null,
+    dep: null,              // will sync from legs[i].arr when user picks it
+    arr: originalArr,       // keep the final destination on the new (second) leg
     airline: legs[i].airline,
     aircraft: legs[i].aircraft,
     depTime: '',
-    arrTime: ''
+    arrTime: '',
+    blockTime: '',
+    blockTimeReal: false
   };
+  // Clear the first leg's ARR (user will pick the stopover airport)
+  legs[i].arr = null;
+  legs[i].arrTime = '';
+  legs[i].blockTime = '';
+  legs[i].blockTimeReal = false;
   legs.splice(i + 1, 0, newLeg);
   renderLegs();
+  // Focus the newly-empty ARR input so the user can immediately type the stopover
+  setTimeout(() => {
+    const inp = document.getElementById('leg-arr-edit-' + i);
+    if (inp) inp.focus();
+  }, 50);
 }
 
 function addLegAtEnd() {
@@ -1690,6 +1758,107 @@ function addLegAtEnd() {
   };
   legs.push(newLeg);
   renderLegs();
+}
+
+// ── Inline airport picker inside a leg card ─────────────────────────────
+// Tap a filled DEP/ARR display to clear it and show an input instead,
+// then type/tap to pick a new airport. Neighbour legs are kept in sync.
+function clearLegAirport(i, which) {
+  if (which === 'arr') {
+    legs[i].arr = null;
+    legs[i].arrTime = '';
+    legs[i].blockTime = '';
+    legs[i].blockTimeReal = false;
+    // Next leg's DEP was linked to this ARR — clear it too
+    if (i + 1 < legs.length) {
+      legs[i + 1].dep = null;
+      legs[i + 1].depTime = '';
+      legs[i + 1].arrTime = '';
+      legs[i + 1].blockTime = '';
+      legs[i + 1].blockTimeReal = false;
+    }
+  } else if (which === 'dep') {
+    legs[i].dep = null;
+    legs[i].depTime = '';
+    legs[i].arrTime = '';
+    legs[i].blockTime = '';
+    legs[i].blockTimeReal = false;
+    // Previous leg's ARR was linked to this DEP — clear it too
+    if (i - 1 >= 0) {
+      legs[i - 1].arr = null;
+      legs[i - 1].arrTime = '';
+      legs[i - 1].blockTime = '';
+      legs[i - 1].blockTimeReal = false;
+    }
+  }
+  renderLegs();
+  setTimeout(() => {
+    const inp = document.getElementById('leg-' + which + '-edit-' + i);
+    if (inp) inp.focus();
+  }, 50);
+}
+
+// Search-as-you-type dropdown for inline leg-airport input
+function onLegAirportInput(i, which, rawVal) {
+  const dropdown = document.getElementById('leg-' + which + '-edit-dropdown-' + i);
+  if (!dropdown) return;
+  const query = (rawVal || '').trim().toUpperCase();
+  if (query.length < 2) {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+    return;
+  }
+  if (typeof DB_SCHED === 'undefined') return;
+  const matches = DB_SCHED.filter(ap => {
+    const icao = ap[0] || '';
+    const iata = ap[1] || '';
+    const city = (ap[7] || ap[2] || '').toUpperCase();
+    return icao.startsWith(query) || iata.startsWith(query) || city.includes(query);
+  }).slice(0, 8);
+  if (matches.length === 0) {
+    dropdown.classList.remove('open');
+    dropdown.innerHTML = '';
+    return;
+  }
+  dropdown.innerHTML = matches.map(ap => {
+    const icao = ap[0];
+    const iata = ap[1] || '';
+    const city = ap[7] || ap[2] || '';
+    const country = countryName(ap[6] || '');
+    return `<div class="airport-dropdown-item" onclick="selectLegAirport(${i},'${which}','${icao}')">
+      <div><span class="airport-dropdown-icao">${icao}</span>${iata ? `<span class="airport-dropdown-iata">/ ${iata}</span>` : ''}</div>
+      <div class="airport-dropdown-name">${city}${country ? ', ' + country : ''}</div>
+    </div>`;
+  }).join('');
+  dropdown.classList.add('open');
+}
+
+// User tapped an item from the inline leg-airport dropdown
+function selectLegAirport(i, which, icao) {
+  const ap = schedByCode[icao];
+  if (!ap) return;
+  if (which === 'arr') {
+    legs[i].arr = ap;
+    // Keep the chain connected: next leg's DEP follows this ARR
+    if (i + 1 < legs.length) {
+      legs[i + 1].dep = ap;
+    }
+  } else if (which === 'dep') {
+    legs[i].dep = ap;
+    // Keep the chain connected: previous leg's ARR follows this DEP
+    if (i - 1 >= 0) {
+      legs[i - 1].arr = ap;
+    }
+  }
+  renderLegs();
+  // Fetch block times (staggered to respect rate limits)
+  setTimeout(() => fetchBlockTime(i), 100);
+  if (which === 'arr' && i + 1 < legs.length && legs[i + 1].dep && legs[i + 1].arr) {
+    setTimeout(() => fetchBlockTime(i + 1), 2100);
+  }
+  if (which === 'dep' && i - 1 >= 0 && legs[i - 1].dep && legs[i - 1].arr) {
+    setTimeout(() => fetchBlockTime(i - 1), 2100);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1758,16 +1927,28 @@ function calculateArrivalTime(idx) {
   if (arrInput) arrInput.value = leg.arrTime;
 }
 
-// Fetch block time from web or calculate
+// Fetch block time from web or calculate. Mirrors the desktop behaviour:
+// - 🔍 while searching
+// - Green + bold when a real nonstop duration was found on the web
+// - Grey + italic when falling back to a great-circle estimate
+// - Clicking the arrow re-runs the search
 async function fetchBlockTime(idx) {
   const leg = legs[idx];
   if (!leg || !leg.dep || !leg.arr) return;
   if (leg._fetchingBT) return;
   leg._fetchingBT = true;
-  
+
+  // Update the in-place span so we don't need a full re-render
+  const btEl = document.getElementById('leg-bt-' + idx);
+  if (btEl) {
+    btEl.textContent = '🔍';
+    btEl.classList.remove('real', 'estimate');
+    btEl.title = 'Searching…';
+  }
+
   const depIata = leg.dep[1] || leg.dep[0];
   const arrIata = leg.arr[1] || leg.arr[0];
-  
+
   // Try API if key available
   const apiKey = localStorage.getItem('anthropic_api_key');
   if (apiKey) {
@@ -1802,15 +1983,21 @@ async function fetchBlockTime(idx) {
           leg.blockTime = m[0];
           leg.blockTimeReal = true;
           leg._fetchingBT = false;
+          const btEl2 = document.getElementById('leg-bt-' + idx);
+          if (btEl2) {
+            btEl2.textContent = m[0];
+            btEl2.classList.add('real');
+            btEl2.classList.remove('estimate');
+            btEl2.title = `Nonstop ${depIata}→${arrIata} (web)`;
+          }
           calculateArrivalTime(idx);
-          renderLegs();
           return;
         }
       }
     } catch(e) { /* fall through to estimate */ }
   }
-  
-  // Fallback: great circle estimate
+
+  // Fallback: great circle estimate (grey + italic)
   const R = 6371;
   const φ1 = leg.dep[3] * Math.PI / 180, φ2 = leg.arr[3] * Math.PI / 180;
   const Δφ = (leg.arr[3] - leg.dep[3]) * Math.PI / 180;
@@ -1823,8 +2010,14 @@ async function fetchBlockTime(idx) {
   leg.blockTime = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
   leg.blockTimeReal = false;
   leg._fetchingBT = false;
+  const btEl3 = document.getElementById('leg-bt-' + idx);
+  if (btEl3) {
+    btEl3.textContent = leg.blockTime;
+    btEl3.classList.add('estimate');
+    btEl3.classList.remove('real');
+    btEl3.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
+  }
   calculateArrivalTime(idx);
-  renderLegs();
 }
 
 function clearAllLegs() {
