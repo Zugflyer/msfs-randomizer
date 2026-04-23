@@ -1647,7 +1647,7 @@ function renderLegs() {
       </div>
       <div class="leg-airport">
         <div class="leg-airport-label">DEP</div>
-        ${leg.dep ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'dep')" title="Click to change" style="cursor:pointer;">
+        ${leg.dep ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'dep')" title="Tap to change" style="cursor:pointer;">
           <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-iata">/ ${depIata}</span>` : ''}
           <div class="leg-airport-city">${depCity}</div>
           ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
@@ -1666,7 +1666,7 @@ function renderLegs() {
       </div>
       <div class="leg-airport">
         <div class="leg-airport-label">ARR</div>
-        ${leg.arr ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'arr')" title="Click to change" style="cursor:pointer;">
+        ${leg.arr ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'arr')" title="Tap to change" style="cursor:pointer;">
           <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-iata">/ ${arrIata}</span>` : ''}
           <div class="leg-airport-city">${arrCity}</div>
           ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
@@ -1717,14 +1717,15 @@ function deleteLeg(i) {
 }
 
 function insertLegAfter(i) {
-  // Stopover insertion — mirrors desktop behaviour:
+  // Stopover insertion:
   //   Before: leg i: A -> B
-  //   After:  leg i: A -> ? (user types stopover), leg i+1: ? -> B
-  // The airport the user picks as leg i's ARR is auto-propagated to leg i+1's DEP.
+  //   After:  leg i: A -> ? (user types stopover here),  leg i+1: ? -> B
+  // When the user picks the stopover in leg i's ARR, it auto-propagates
+  // to leg i+1's DEP (see selectLegAirport).
   const originalArr = legs[i].arr;
   const newLeg = {
     dep: null,              // will sync from legs[i].arr when user picks it
-    arr: originalArr,       // keep the final destination on the new (second) leg
+    arr: originalArr,       // the old destination moves down to the new leg
     airline: legs[i].airline,
     aircraft: legs[i].aircraft,
     depTime: '',
@@ -1732,14 +1733,14 @@ function insertLegAfter(i) {
     blockTime: '',
     blockTimeReal: false
   };
-  // Clear the first leg's ARR (user will pick the stopover airport)
+  // Clear the current leg's ARR — user will pick the stopover airport
   legs[i].arr = null;
   legs[i].arrTime = '';
   legs[i].blockTime = '';
   legs[i].blockTimeReal = false;
   legs.splice(i + 1, 0, newLeg);
   renderLegs();
-  // Focus the newly-empty ARR input so the user can immediately type the stopover
+  // Focus the newly-empty ARR input so user can immediately type
   setTimeout(() => {
     const inp = document.getElementById('leg-arr-edit-' + i);
     if (inp) inp.focus();
@@ -1927,24 +1928,25 @@ function calculateArrivalTime(idx) {
   if (arrInput) arrInput.value = leg.arrTime;
 }
 
-// Fetch block time from web or calculate. Mirrors the desktop behaviour:
-// - 🔍 while searching
-// - Green + bold when a real nonstop duration was found on the web
-// - Grey + italic when falling back to a great-circle estimate
-// - Clicking the arrow re-runs the search
+// Fetch block time from web or calculate — mirrors desktop behaviour:
+// 🔍 while searching → green+bold on web hit → grey+italic on estimate.
+// Clicking the arrow re-runs the search.
 async function fetchBlockTime(idx) {
   const leg = legs[idx];
   if (!leg || !leg.dep || !leg.arr) return;
   if (leg._fetchingBT) return;
   leg._fetchingBT = true;
 
-  // Update the in-place span so we don't need a full re-render
-  const btEl = document.getElementById('leg-bt-' + idx);
-  if (btEl) {
-    btEl.textContent = '🔍';
-    btEl.classList.remove('real', 'estimate');
-    btEl.title = 'Searching…';
-  }
+  // Update the span in place — no full re-render needed
+  const setBt = (text, cls, title) => {
+    const el = document.getElementById('leg-bt-' + idx);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.remove('real', 'estimate');
+    if (cls) el.classList.add(cls);
+    if (title) el.title = title;
+  };
+  setBt('🔍', null, 'Searching…');
 
   const depIata = leg.dep[1] || leg.dep[0];
   const arrIata = leg.arr[1] || leg.arr[0];
@@ -1983,13 +1985,7 @@ async function fetchBlockTime(idx) {
           leg.blockTime = m[0];
           leg.blockTimeReal = true;
           leg._fetchingBT = false;
-          const btEl2 = document.getElementById('leg-bt-' + idx);
-          if (btEl2) {
-            btEl2.textContent = m[0];
-            btEl2.classList.add('real');
-            btEl2.classList.remove('estimate');
-            btEl2.title = `Nonstop ${depIata}→${arrIata} (web)`;
-          }
+          setBt(m[0], 'real', `Nonstop ${depIata}→${arrIata} (web)`);
           calculateArrivalTime(idx);
           return;
         }
@@ -2010,13 +2006,7 @@ async function fetchBlockTime(idx) {
   leg.blockTime = Math.floor(mins / 60) + ':' + String(mins % 60).padStart(2, '0');
   leg.blockTimeReal = false;
   leg._fetchingBT = false;
-  const btEl3 = document.getElementById('leg-bt-' + idx);
-  if (btEl3) {
-    btEl3.textContent = leg.blockTime;
-    btEl3.classList.add('estimate');
-    btEl3.classList.remove('real');
-    btEl3.title = `Estimated ${depIata}→${arrIata} (no nonstop data found)`;
-  }
+  setBt(leg.blockTime, 'estimate', `Estimated ${depIata}→${arrIata} (no nonstop data found)`);
   calculateArrivalTime(idx);
 }
 
