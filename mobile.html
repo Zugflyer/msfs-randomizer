@@ -403,10 +403,7 @@ html, body {
   align-items: center;
 }
 .airport-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: var(--txt3);
-  margin-bottom: 4px;
+  display: none;
 }
 .airport-input-wrapper {
   position: relative;
@@ -486,7 +483,7 @@ html, body {
   min-height: 12px;
 }
 .airport-arrow {
-  padding-top: 24px;
+  padding-top: 10px;
   color: var(--txt3);
 }
 
@@ -513,6 +510,16 @@ html, body {
 }
 .btn-planning:active {
   background: var(--surf2);
+}
+.btn-planning.btn-planning-green {
+  background: linear-gradient(135deg, #3fb950 0%, #2ea043 100%);
+  color: white;
+  border-color: transparent;
+  font-weight: 600;
+}
+.btn-planning.btn-planning-green:active {
+  transform: scale(0.98);
+  background: linear-gradient(135deg, #36a845 0%, #268d39 100%);
 }
 .btn-planning svg {
   flex-shrink: 0;
@@ -1002,6 +1009,14 @@ html, body {
               <div class="panel-handle-bar"></div>
             </div>
             <div class="roll-tab-content">
+              <!-- Roll Button - now on top, above DEP/ARR -->
+              <button class="roll-button" onclick="rollAll()">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+                Next Flight
+              </button>
+
               <!-- DEP/ARR Fields -->
               <div class="flight-planning">
                 <div class="airport-field">
@@ -1027,14 +1042,14 @@ html, body {
               
               <!-- Action Buttons -->
               <div class="planning-buttons">
-                <button class="btn-planning" onclick="showFlightOnMap()">
+                <button class="btn-planning btn-planning-green" onclick="showFlightOnMap()">
                   <svg width="16" height="16" viewBox="0 0 180 180" fill="none" stroke="currentColor" stroke-width="12">
                     <circle cx="90" cy="90" r="50"/><ellipse cx="90" cy="90" rx="20" ry="50"/>
                     <line x1="40" y1="90" x2="140" y2="90"/>
                   </svg>
                   Show on Map
                 </button>
-                <button class="btn-planning" onclick="planLegs()">
+                <button class="btn-planning btn-planning-green" onclick="planLegs()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/>
                     <rect x="9" y="3" width="6" height="4" rx="1"/>
@@ -1043,14 +1058,6 @@ html, body {
                   Plan Legs
                 </button>
               </div>
-              
-              <!-- Roll Button - Pfeil Icon wie Desktop -->
-              <button class="roll-button" onclick="rollAll()">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M5 12h14M12 5l7 7-7 7"/>
-                </svg>
-                Next Flight
-              </button>
               
               <!-- Results -->
               <div class="results-list" id="results-list"></div>
