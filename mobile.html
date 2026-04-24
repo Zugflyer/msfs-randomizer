@@ -919,15 +919,36 @@ html, body {
 .cat-section-title { font-size: 12px; font-weight: 600; color: var(--txt2); text-transform: uppercase; margin-bottom: 10px; }
 .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .cat-chip {
-  display: flex; align-items: center; gap: 5px;
-  padding: 8px 12px;
+  display: flex; align-items: center; gap: 6px;
+  padding: 6px 4px 6px 10px;
   background: var(--surf);
   border: 1px solid var(--bdr);
   border-radius: 16px;
   font-size: 12px;
+  cursor: pointer;
 }
-.cat-chip-dot { width: 6px; height: 6px; border-radius: 50%; }
-.cat-chip-count { font-size: 10px; color: var(--txt3); }
+.cat-chip-name { line-height: 1; }
+.cat-chip-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.cat-chip-count { font-size: 10px; color: var(--txt3); padding: 0 2px; }
+.cat-chip-del {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 2px;
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  color: var(--txt3);
+  cursor: pointer;
+  padding: 0;
+  flex-shrink: 0;
+}
+.cat-chip-del:active {
+  background: rgba(248,81,73,0.2);
+  color: #f85149;
+}
 
 .cat-detail { display: none; padding: 14px; padding-bottom: calc(70px + var(--safe-bottom)); overflow-y: auto; }
 .cat-detail.active { display: block; }
@@ -949,6 +970,8 @@ html, body {
 .cat-item-icao { font-family: 'SF Mono', monospace; font-size: 12px; font-weight: 600; color: var(--acc2); width: 50px; }
 .cat-item-name { flex: 1; font-size: 12px; }
 .cat-item-country { font-size: 10px; color: var(--txt3); }
+.cat-item-diff { color: #d29922; font-weight: 700; margin-left: 4px; font-family: 'SF Mono', monospace; }
+.cat-item-iata { color: var(--blue); font-family: 'SF Mono', monospace; margin-left: 4px; }
 
 /* LOADING */
 .loading-overlay {
@@ -1146,7 +1169,7 @@ const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Ge
 function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
 
 let CATEGORIES = [
-{id:'difficult',name:'Difficult Airports',group:'themes',colorIdx:0,hasDiff:true,type:'list',items:[
+{id:'difficult',name:'Difficult Airports',group:'custom',colorIdx:0,hasDiff:true,type:'list',items:[
   {icao:'OPGT',diff:'***',region:'AS'},{icao:'RJCH',diff:'**',region:'AS'},{icao:'RPUB',diff:'***',region:'AS'},
   {icao:'RPVE',diff:'**',region:'AS'},{icao:'VHHX',diff:'***',region:'AS'},{icao:'VILH',diff:'TBD',region:'AS'},
   {icao:'VNKT',diff:'**',region:'AS'},{icao:'VNLK',diff:'***',region:'AS'},{icao:'VQBT',diff:'***',region:'AS'},
@@ -1174,13 +1197,13 @@ let CATEGORIES = [
   {icao:'SLLP',diff:'*',region:'SA'},{icao:'SPGL',diff:'***',region:'SA'},{icao:'SPZO',diff:'***',region:'SA'},
   {icao:'SVMD',diff:'***',region:'SA'},{icao:'SKPE',diff:'',region:'SA'},
 ]},
-{id:'interesting',name:'Interesting Airports',group:'themes',colorIdx:1,type:'list-simple',items:[
+{id:'interesting',name:'Interesting Airports',group:'custom',colorIdx:1,type:'list-simple',items:[
   {name:'Split',icao:'LDSP'},{name:'Petropavlovsk-Kamchatsky',icao:'UHPP'},{name:'Norilsk',icao:'UOOO'},
   {name:'Magadan',icao:'UHMM'},{name:'Gilgit',icao:'OPGT'},{name:'Easter Island',icao:'SCIP'},
   {name:'East Africa – Nairobi',icao:'HKJK'},{name:'Leipzig DHL Hub',icao:'EDDP'},{name:'Toronto Island',icao:'CYTZ'},
   {name:'Narsarsuaq',icao:'BGBW'},{name:'Port Moresby',icao:'AYPY'},{name:'Kinshasa',icao:'FZAA'},
 ]},
-{id:'mountain',name:'Mountain Climbing',group:'themes',colorIdx:2,type:'list-simple',items:[
+{id:'mountain',name:'Mountain Climbing',group:'custom',colorIdx:2,type:'list-simple',items:[
   {name:'Kathmandu',icao:'VNKT'},{name:'La Paz',icao:'SLLP'},{name:'Dire Dawa',icao:'HADR'},
   {name:'Samedan',icao:'LSZS'},{name:'Queenstown',icao:'NZQN'},{name:'Juneau',icao:'PAJN'},
   {name:'El Calafate',icao:'SAWC'},{name:'Talkeetna',icao:'PATK'},{name:'Nanyuki',icao:'HKNY'},
@@ -1191,11 +1214,11 @@ let CATEGORIES = [
   {name:'Lima',icao:'SPJC'},{name:'Quito',icao:'SEQM'},{name:'Seattle',icao:'KSEA'},
   {name:'Wamena',icao:'WAJW'},{name:'Jayapura',icao:'WAJJ'},{name:'Union Glacier',icao:'SCGC'},
 ]},
-{id:'routings',name:'Routings',group:'themes',colorIdx:3,type:'text',items:[
+{id:'routings',name:'Routings',group:'custom',colorIdx:3,type:'text',items:[
   {name:'Lufthansa B747 → La Paz'},{name:'UTA B747 → Nouméa'},{name:'Pan Am 1 round-the-world'},
   {name:'TBD'},{name:'TBD'},{name:'TBD'},
 ]},
-{id:'formula1',name:'Formula 1',group:'themes',colorIdx:4,type:'list-themed',items:[{"icao":"EGBB","iata":"BHX","theme":"Alpine-Mercedes","city":"Birmingham","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Aston Martin Aramco-Honda","city":"Luton","country":"United Kingdom"},{"icao":"EGLL","iata":"LHR","theme":"Atlassian Williams-Mercedes","city":"London","country":"United Kingdom"},{"icao":"LSZH","iata":"ZRH","theme":"Audi","city":"Zurich","country":"Switzerland"},{"icao":"KIND","iata":"IND","theme":"Cadillac-Ferrari","city":"Indianapolis","country":"United States"},{"icao":"EGLL","iata":"LHR","theme":"McLaren-Mercedes","city":"London","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Mercedes","city":"Luton","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Red Bull Racing-Red Bull Ford","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Ferrari","city":"Bologna","country":"Italy"},{"icao":"EGGW","iata":"LTN","theme":"Haas-Ferrari","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Racing Bulls-Red Bull Ford","city":"Bologna","country":"Italy"},{"icao":"YMML","iata":"MEL","theme":"Australian Grand Prix","city":"Melbourne","country":"Australia"},{"icao":"ZSPD","iata":"PVG","theme":"Chinese Grand Prix","city":"Shanghai","country":"China"},{"icao":"RJGG","iata":"NGO","theme":"Japanese Grand Prix","city":"Nagoya","country":"Japan"},{"icao":"KMIA","iata":"MIA","theme":"Miami Grand Prix","city":"Miami","country":"United States"},{"icao":"CYUL","iata":"YUL","theme":"Canadian Grand Prix","city":"Montreal","country":"Canada"},{"icao":"LFMN","iata":"NCE","theme":"Monaco Grand Prix","city":"Nice","country":"France"},{"icao":"LEBL","iata":"BCN","theme":"Barcelona-Catalunya Grand Prix","city":"Barcelona","country":"Spain"},{"icao":"LOWG","iata":"GRZ","theme":"Austrian Grand Prix","city":"Graz","country":"Austria"},{"icao":"EGGW","iata":"LTN","theme":"British Grand Prix","city":"Luton","country":"United Kingdom"},{"icao":"EBLG","iata":"LGG","theme":"Belgian Grand Prix","city":"Liège","country":"Belgium"},{"icao":"LHBP","iata":"BUD","theme":"Hungarian Grand Prix","city":"Budapest","country":"Hungary"},{"icao":"EHAM","iata":"AMS","theme":"Dutch Grand Prix","city":"Amsterdam","country":"Netherlands"},{"icao":"LIML","iata":"LIN","theme":"Italian Grand Prix","city":"Milan","country":"Italy"},{"icao":"LEMD","iata":"MAD","theme":"Spanish Grand Prix","city":"Madrid","country":"Spain"},{"icao":"UBBB","iata":"GYD","theme":"Azerbaijan Grand Prix","city":"Baku","country":"Azerbaijan"},{"icao":"WSSS","iata":"SIN","theme":"Singapore Grand Prix","city":"Singapore","country":"Singapore"},{"icao":"KAUS","iata":"AUS","theme":"United States Grand Prix","city":"Austin","country":"United States"},{"icao":"MMMX","iata":"MEX","theme":"Mexico City Grand Prix","city":"Mexico City","country":"Mexico"},{"icao":"SBGR","iata":"GRU","theme":"São Paulo Grand Prix","city":"São Paulo","country":"Brazil"},{"icao":"KLAS","iata":"LAS","theme":"Las Vegas Grand Prix","city":"Las Vegas","country":"United States"},{"icao":"OTHH","iata":"DOH","theme":"Qatar Grand Prix","city":"Doha","country":"Qatar"},{"icao":"OMAA","iata":"AUH","theme":"Abu Dhabi Grand Prix","city":"Abu Dhabi","country":"UAE"}]},
+{id:'formula1',name:'Formula 1',group:'custom',colorIdx:4,type:'list-themed',items:[{"icao":"EGBB","iata":"BHX","theme":"Alpine-Mercedes","city":"Birmingham","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Aston Martin Aramco-Honda","city":"Luton","country":"United Kingdom"},{"icao":"EGLL","iata":"LHR","theme":"Atlassian Williams-Mercedes","city":"London","country":"United Kingdom"},{"icao":"LSZH","iata":"ZRH","theme":"Audi","city":"Zurich","country":"Switzerland"},{"icao":"KIND","iata":"IND","theme":"Cadillac-Ferrari","city":"Indianapolis","country":"United States"},{"icao":"EGLL","iata":"LHR","theme":"McLaren-Mercedes","city":"London","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Mercedes","city":"Luton","country":"United Kingdom"},{"icao":"EGGW","iata":"LTN","theme":"Red Bull Racing-Red Bull Ford","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Ferrari","city":"Bologna","country":"Italy"},{"icao":"EGGW","iata":"LTN","theme":"Haas-Ferrari","city":"Luton","country":"United Kingdom"},{"icao":"LIPE","iata":"BLQ","theme":"Racing Bulls-Red Bull Ford","city":"Bologna","country":"Italy"},{"icao":"YMML","iata":"MEL","theme":"Australian Grand Prix","city":"Melbourne","country":"Australia"},{"icao":"ZSPD","iata":"PVG","theme":"Chinese Grand Prix","city":"Shanghai","country":"China"},{"icao":"RJGG","iata":"NGO","theme":"Japanese Grand Prix","city":"Nagoya","country":"Japan"},{"icao":"KMIA","iata":"MIA","theme":"Miami Grand Prix","city":"Miami","country":"United States"},{"icao":"CYUL","iata":"YUL","theme":"Canadian Grand Prix","city":"Montreal","country":"Canada"},{"icao":"LFMN","iata":"NCE","theme":"Monaco Grand Prix","city":"Nice","country":"France"},{"icao":"LEBL","iata":"BCN","theme":"Barcelona-Catalunya Grand Prix","city":"Barcelona","country":"Spain"},{"icao":"LOWG","iata":"GRZ","theme":"Austrian Grand Prix","city":"Graz","country":"Austria"},{"icao":"EGGW","iata":"LTN","theme":"British Grand Prix","city":"Luton","country":"United Kingdom"},{"icao":"EBLG","iata":"LGG","theme":"Belgian Grand Prix","city":"Liège","country":"Belgium"},{"icao":"LHBP","iata":"BUD","theme":"Hungarian Grand Prix","city":"Budapest","country":"Hungary"},{"icao":"EHAM","iata":"AMS","theme":"Dutch Grand Prix","city":"Amsterdam","country":"Netherlands"},{"icao":"LIML","iata":"LIN","theme":"Italian Grand Prix","city":"Milan","country":"Italy"},{"icao":"LEMD","iata":"MAD","theme":"Spanish Grand Prix","city":"Madrid","country":"Spain"},{"icao":"UBBB","iata":"GYD","theme":"Azerbaijan Grand Prix","city":"Baku","country":"Azerbaijan"},{"icao":"WSSS","iata":"SIN","theme":"Singapore Grand Prix","city":"Singapore","country":"Singapore"},{"icao":"KAUS","iata":"AUS","theme":"United States Grand Prix","city":"Austin","country":"United States"},{"icao":"MMMX","iata":"MEX","theme":"Mexico City Grand Prix","city":"Mexico City","country":"Mexico"},{"icao":"SBGR","iata":"GRU","theme":"São Paulo Grand Prix","city":"São Paulo","country":"Brazil"},{"icao":"KLAS","iata":"LAS","theme":"Las Vegas Grand Prix","city":"Las Vegas","country":"United States"},{"icao":"OTHH","iata":"DOH","theme":"Qatar Grand Prix","city":"Doha","country":"Qatar"},{"icao":"OMAA","iata":"AUH","theme":"Abu Dhabi Grand Prix","city":"Abu Dhabi","country":"UAE"}]},
 {id:'rand_icao',name:'Random ICAO',group:'randoms',colorIdx:5,type:'rand-icao',items:[]},
 {id:'rand_iata',name:'Random IATA',group:'randoms',colorIdx:6,type:'rand-iata',items:[]},
 {id:'rand_world',name:'Random World',group:'randoms',colorIdx:7,type:'rand-coord',region:{latMin:-70,latMax:80,lonMin:-180,lonMax:180},items:[]},
@@ -1325,16 +1348,34 @@ async function loadAllFromCloud() {
         console.log('Loaded ' + Object.keys(_supabaseLogos).length + ' logos from Supabase');
       }
       
-      // Update categories - but NOT rand types (they have no cloud data)
-      CATEGORIES.forEach(cat => { 
+      // Load deleted-categories list — matches the desktop schema so mobile
+      // and desktop share the same set of hidden built-ins.
+      let deletedCats = [];
+      if (byId['__deleted_cats__'] && Array.isArray(byId['__deleted_cats__'])) {
+        deletedCats = byId['__deleted_cats__'];
+      }
+      if (deletedCats.length > 0) {
+        const deletedSet = new Set(deletedCats);
+        for (let i = CATEGORIES.length - 1; i >= 0; i--) {
+          if (deletedSet.has(CATEGORIES[i].id)) CATEGORIES.splice(i, 1);
+        }
+      }
+
+      // Update categories - but NOT rand types (they have no cloud data),
+      // and ONLY if cloud provides non-empty items (otherwise keep hardcoded).
+      CATEGORIES.forEach(cat => {
         if (cat.type && cat.type.startsWith('rand-')) return; // Skip rand types
-        if (byId[cat.id] && Array.isArray(byId[cat.id])) cat.items = byId[cat.id]; 
+        if (cat.id === 'formula1') return; // formula1 keeps its hardcoded themed data
+        if (byId[cat.id] && Array.isArray(byId[cat.id]) && byId[cat.id].length > 0) {
+          cat.items = byId[cat.id];
+        }
       });
-      
-      // Load custom themed categories
+
+      // Load custom themed categories (not built-in, not deleted, has items)
       const existingIds = new Set(CATEGORIES.map(c => c.id));
+      const deletedSet = new Set(deletedCats);
       data.forEach(row => {
-        if (!existingIds.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0 && row.items[0]?.theme !== undefined) {
+        if (!existingIds.has(row.name) && !deletedSet.has(row.name) && !row.name.startsWith('__') && Array.isArray(row.items) && row.items.length > 0 && row.items[0]?.theme !== undefined) {
           CATEGORIES.push({ id: row.name, name: row.name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()), group: 'custom', colorIdx: CATEGORIES.length % 12, type: 'list-themed', items: row.items });
         }
       });
@@ -2785,18 +2826,54 @@ function renderResults() {
 // DATA
 function renderCatsList() {
   const c = document.getElementById('cats-list');
-  const groups = {themes:'Themes', randoms:'Random', networks:'Networks', custom:'Custom'};
+  // Groups shown on mobile: Networks, Random, Custom.
+  // The 'themes' group from desktop is mapped into 'custom' for mobile.
+  const groups = {networks:'Networks', randoms:'Random', custom:'Custom'};
   let html = '';
   for (const [gid, gname] of Object.entries(groups)) {
-    const cats = CATEGORIES.filter(x => x.group === gid && x.items && x.items.length > 0);
+    // randoms always show (they generate fresh each time, item-count is irrelevant)
+    // other groups require items to be present
+    const cats = CATEGORIES.filter(x => x.group === gid && (gid === 'randoms' || (x.items && x.items.length > 0)));
     if (!cats.length) continue;
     html += `<div class="cat-section"><div class="cat-section-title">${gname}</div><div class="cat-chips">
-      ${cats.map(cat => `<div class="cat-chip" onclick="openCatDetail('${cat.id}')"><div class="cat-chip-dot" style="background:${COLORS[cat.colorIdx % COLORS.length]}"></div>${cat.name}<span class="cat-chip-count">${cat.items.length}</span></div>`).join('')}
+      ${cats.map(cat => `<div class="cat-chip" onclick="openCatDetail('${cat.id}')">
+          <div class="cat-chip-dot" style="background:${COLORS[cat.colorIdx % COLORS.length]}"></div>
+          <span class="cat-chip-name">${cat.name}</span>
+          ${gid === 'randoms' ? '' : `<span class="cat-chip-count">${cat.items.length}</span>`}
+          <button class="cat-chip-del" onclick="event.stopPropagation(); deleteCategory('${cat.id}')" title="Delete category">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>`).join('')}
     </div></div>`;
   }
   c.innerHTML = html || '<div class="empty-state">No categories</div>';
   document.getElementById('cat-detail').classList.remove('active');
   c.style.display = '';
+}
+
+// Delete a category (built-in or custom) — removes locally and records the
+// deletion in the Supabase __deleted_cats__ row so it stays gone after reload
+// on both mobile and desktop.
+async function deleteCategory(catId) {
+  const cat = CATEGORIES.find(c => c.id === catId);
+  if (!cat) return;
+  if (!confirm(`Delete "${cat.name}"?\n\nThis will also remove it from the desktop app.`)) return;
+  // Remove locally
+  const i = CATEGORIES.findIndex(c => c.id === catId);
+  if (i >= 0) CATEGORIES.splice(i, 1);
+  renderCatsList();
+  // Persist deletion to cloud — same format the desktop uses
+  try {
+    const { data } = await sb.from('categories').select('items').eq('name', '__deleted_cats__').single();
+    const existing = (data && Array.isArray(data.items)) ? data.items : [];
+    if (!existing.includes(catId)) existing.push(catId);
+    await sb.from('categories').upsert({ name: '__deleted_cats__', items: existing }, { onConflict: 'name' });
+    setCloudStatus('✓ Deleted ' + cat.name, 'ok');
+    setTimeout(() => setCloudStatus('✓ Synced', 'ok'), 2000);
+  } catch(e) {
+    console.error('deleteCategory cloud sync failed', e);
+    setCloudStatus('⚠ Delete sync failed', 'err');
+  }
 }
 
 function openCatDetail(catId) {
@@ -2805,11 +2882,33 @@ function openCatDetail(catId) {
   document.getElementById('cat-detail').classList.add('active');
   document.getElementById('cat-detail-title').textContent = cat.name;
   const list = document.getElementById('cat-items-list');
+  // Random categories generate airports on demand and have no stored items
+  if (cat.type && cat.type.startsWith('rand-')) {
+    let desc = '';
+    if (cat.type === 'rand-icao') desc = 'Random airports from the full scheduled-flights database, chosen by ICAO.';
+    else if (cat.type === 'rand-iata') desc = 'Random airports that have an IATA code.';
+    else if (cat.type === 'rand-coord' && cat.region) desc = `Random airports within lat ${cat.region.latMin}–${cat.region.latMax}, lon ${cat.region.lonMin}–${cat.region.lonMax}.`;
+    list.innerHTML = `<div class="empty-state" style="padding:24px 14px;">
+      <div style="font-size:28px;margin-bottom:8px;">🎲</div>
+      <div style="color:var(--txt2);font-size:13px;line-height:1.5;">${desc}</div>
+      <div style="margin-top:10px;color:var(--txt3);font-size:11px;">Pick this category in the Next tab to roll a random airport from here.</div>
+    </div>`;
+    return;
+  }
   list.innerHTML = cat.items.slice(0, 50).map(item => {
     const db = item.icao ? schedByCode[item.icao] : null;
-    const name = item.name || item.city || (db ? db[7] || db[2] : '');
+    // Prefer theme (list-themed like Formula 1) as the display name, then item.name, then DB lookup
+    const name = item.theme || item.name || item.city || (db ? db[7] || db[2] : '');
     const country = item.country || (db ? countryName(db[6]) : '');
-    return `<div class="cat-item"><div class="cat-item-icao">${item.icao || '–'}</div><div class="cat-item-name">${name}</div><div class="cat-item-country">${country}</div></div>`;
+    // Right-hand annotation: difficulty stars (list with hasDiff) or IATA (if available)
+    const annot = item.diff ? `<span class="cat-item-diff">${item.diff}</span>`
+                 : item.iata ? `<span class="cat-item-iata">${item.iata}</span>`
+                 : '';
+    return `<div class="cat-item">
+      <div class="cat-item-icao">${item.icao || '–'}</div>
+      <div class="cat-item-name">${name}</div>
+      <div class="cat-item-country">${country}${annot ? ' ' + annot : ''}</div>
+    </div>`;
   }).join('');
   if (cat.items.length > 50) list.innerHTML += `<div style="text-align:center;padding:10px;color:var(--txt3);font-size:11px;">+${cat.items.length - 50} more</div>`;
 }
