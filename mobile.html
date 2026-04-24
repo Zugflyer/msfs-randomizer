@@ -553,23 +553,29 @@ html, body {
   -webkit-overflow-scrolling: touch;
   padding: 10px 14px;
 }
+/* ═══════════ LEG CARD (new horizontal layout) ═══════════ */
 .leg-card {
   background: var(--surf);
   border: 1px solid var(--bdr);
   border-radius: var(--r);
-  margin-bottom: 10px;
-  overflow: hidden;
-}
-.leg-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-bottom: 6px;
+  position: relative;
   padding: 10px 12px;
-  border-bottom: 1px solid var(--bdr);
-  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: row;
+  gap: 10px;
+  align-items: flex-start;
+}
+/* Left vertical stack: logo, airline, EQP */
+.leg-meta-col {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 54px;
+  flex-shrink: 0;
 }
 .leg-logo {
-  width: 32px;
+  width: 54px;
   height: 32px;
   border-radius: 4px;
   background: #f0f0f0;
@@ -580,127 +586,148 @@ html, body {
   flex-shrink: 0;
 }
 .leg-logo img {
-  width: 100%;
-  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
 }
 .leg-logo-text {
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 700;
   color: #666;
-}
-.leg-airline-eqp {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 .leg-airline-input, .leg-eqp-input {
   background: transparent;
   border: 1px solid var(--bdr);
   border-radius: 4px;
-  padding: 4px 8px;
-  font-size: 11px;
+  padding: 3px 6px;
+  font-size: 10px;
   font-family: 'SF Mono', monospace;
   color: var(--txt);
-  width: 70px;
+  width: 54px;
+  box-sizing: border-box;
+  text-align: center;
   text-transform: uppercase;
+  outline: none;
 }
 .leg-airline-input::placeholder, .leg-eqp-input::placeholder {
   color: var(--txt3);
+  text-transform: none;
 }
-.leg-delete-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: var(--txt3);
-  border-radius: 4px;
-}
-.leg-delete-btn:active {
-  color: #f85149;
-}
-.leg-airport {
-  display: flex;
-  align-items: center;
-  padding: 10px 12px;
-  gap: 10px;
-}
-.leg-airport-label {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--txt3);
-  width: 28px;
-}
-.leg-airport-info {
+/* Right 3-column body: DEP | block-time | ARR */
+.leg-body {
   flex: 1;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 6px;
+  min-width: 0;
+  align-items: start;
 }
-.leg-airport-icao {
-  font-family: 'SF Mono', monospace;
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--acc2);
-}
-.leg-airport-iata {
-  font-size: 12px;
-  color: var(--blue);
-  margin-left: 4px;
-}
-.leg-airport-city {
-  font-size: 11px;
-  color: var(--txt2);
-  margin-top: 2px;
-}
-.leg-airport-utc {
-  font-size: 9px;
-  color: var(--blue);
-  margin-top: 2px;
-  font-family: 'SF Mono', monospace;
+.leg-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  width: 100%;
 }
 .leg-time-input {
   width: 60px;
   background: transparent;
   border: 1px solid var(--bdr);
   border-radius: 4px;
-  padding: 6px 8px;
-  font-size: 12px;
+  padding: 3px 6px;
+  font-size: 11px;
   font-family: 'SF Mono', monospace;
   color: var(--txt);
   text-align: center;
+  outline: none;
+  margin-bottom: 2px;
 }
 .leg-time-input::placeholder {
   color: var(--txt3);
 }
 .leg-arr-time {
   color: var(--blue);
-  background: rgba(88,166,255,0.1);
+  background: rgba(88,166,255,0.08);
+}
+.leg-airport-info {
+  width: 100%;
+  text-align: center;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.leg-airport-icao {
+  font-family: 'SF Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--blue);
+  letter-spacing: 0.3px;
+}
+.leg-airport-iata {
+  font-family: 'SF Mono', monospace;
+  font-size: 13px;
+  color: var(--blue);
+  opacity: 0.85;
+}
+.leg-airport-slash {
+  color: var(--blue);
+  opacity: 0.5;
+  margin: 0 1px;
+}
+.leg-airport-city {
+  font-size: 11px;
+  color: var(--txt);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.leg-airport-utc {
+  font-size: 10px;
+  color: var(--blue);
+  margin-top: 2px;
+  font-family: 'SF Mono', monospace;
 }
 .leg-charts-btn {
-  padding: 6px 10px;
-  font-size: 10px;
-  background: rgba(88,166,255,0.15);
-  color: var(--blue);
+  padding: 2px;
+  width: 40px;
+  height: 26px;
+  background: transparent;
   border: none;
   border-radius: 4px;
-  font-family: var(--ff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 3px;
 }
-.leg-arrow {
+.leg-charts-btn img {
+  width: 34px;
+  height: auto;
+  object-fit: contain;
+  pointer-events: none;
+}
+.leg-charts-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+/* Middle column: block time, centered vertically to roughly align with ICAO row */
+.leg-mid {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 6px 0;
-  color: var(--txt3);
+  justify-content: flex-start;
+  padding-top: 32px; /* align roughly with ICAO line (under the time input row) */
   cursor: pointer;
-  gap: 2px;
+  min-width: 44px;
 }
 .leg-block-time {
-  font-size: 11px;
+  font-size: 12px;
   font-family: 'SF Mono', monospace;
   color: var(--txt3);
+  white-space: nowrap;
 }
 .leg-block-time.real {
   color: #3fb950;
@@ -709,34 +736,37 @@ html, body {
 .leg-block-time.estimate {
   font-style: italic;
 }
+/* Inline airport-picker (shown when DEP/ARR is empty) */
 .leg-airport-input-wrap {
-  flex: 1;
+  width: 100%;
   position: relative;
 }
 .leg-airport-edit-input {
   width: 100%;
   box-sizing: border-box;
   background: var(--bg);
-  color: var(--acc2);
+  color: var(--blue);
   font-family: 'SF Mono', monospace;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   border: 1px solid var(--acc);
-  border-radius: 6px;
-  padding: 7px 10px;
+  border-radius: 4px;
+  padding: 5px 6px;
   outline: none;
+  text-align: center;
+  text-transform: uppercase;
 }
 .leg-airport-edit-input::placeholder {
   color: var(--txt3);
   font-weight: 400;
-  font-size: 11px;
+  font-size: 10px;
 }
 .leg-airport-edit-dropdown {
   display: none;
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  left: -8px;
+  right: -8px;
   max-height: 180px;
   overflow-y: auto;
   background: var(--surf);
@@ -749,24 +779,48 @@ html, body {
 .leg-airport-edit-dropdown.open {
   display: block;
 }
-.leg-insert-btns {
+/* Action row below the card: three circular-icon buttons */
+.leg-actions {
   display: flex;
   justify-content: center;
-  gap: 8px;
-  padding: 6px 0;
+  gap: 6px;
+  padding: 4px 0 12px;
+  flex-wrap: wrap;
 }
-.leg-insert-btn {
-  font-size: 10px;
-  padding: 5px 12px;
+.leg-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px 5px 6px;
   border: 1px solid var(--bdr);
-  border-radius: 6px;
+  border-radius: 14px;
   background: transparent;
-  color: var(--txt3);
+  color: var(--txt2);
   font-family: var(--ff);
+  font-size: 11px;
+  cursor: pointer;
+  outline: none;
 }
-.leg-insert-btn:active {
+.leg-action-btn:active {
   background: var(--surf2);
 }
+.leg-action-btn .leg-action-ic {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+.leg-action-btn.delete {
+  color: #f85149;
+  border-color: rgba(248,81,73,0.35);
+}
+.leg-action-btn.add {
+  color: var(--blue);
+  border-color: rgba(88,166,255,0.45);
+}
+.leg-action-btn.insert {
+  color: var(--txt);
+}
+/* ═══════════ /LEG CARD ═══════════ */
 .plan-footer {
   padding: 12px 14px;
   border-top: 1px solid var(--bdr);
@@ -1008,6 +1062,7 @@ html, body {
   </div>
 
   <script>
+const CHARTS_LOGO = 'data:image/png;base64,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';
 const COLORS = ['#7d5ee8','#3fb950','#f0883e','#58a6ff','#d29922','#ec6547','#56d364','#79c0ff','#a78bfa','#ff7b72','#d2a8ff','#ffa657'];
 const COUNTRY_NAMES = {US:'United States',GB:'United Kingdom',FR:'France',DE:'Germany',IT:'Italy',ES:'Spain',AT:'Austria',CH:'Switzerland',NL:'Netherlands',BE:'Belgium',CA:'Canada',JP:'Japan',AU:'Australia',NZ:'New Zealand',BR:'Brazil',MX:'Mexico',CN:'China',IN:'India',SG:'Singapore',AE:'UAE',QA:'Qatar',NO:'Norway',SE:'Sweden',DK:'Denmark',FI:'Finland',IS:'Iceland',GR:'Greece',TR:'Turkey',PT:'Portugal',PL:'Poland',CZ:'Czechia',HU:'Hungary',IE:'Ireland',LU:'Luxembourg',HR:'Croatia',RU:'Russia'};
 function countryName(iso) { return COUNTRY_NAMES[iso] || iso; }
@@ -1632,55 +1687,72 @@ function renderLegs() {
       ? `<img src="${logoUrl}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" alt="${leg.airline}"><span class="leg-logo-text" style="display:none;">${leg.airline || '–'}</span>`
       : `<span class="leg-logo-text">${leg.airline || '–'}</span>`;
     
+    // DEP side (time on top, then airport block OR inline input, then chart logo)
+    const depSideHtml = `<div class="leg-side">
+      <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" inputmode="numeric" oninput="updateLegDepTime(${i}, this.value)" onblur="formatDepTimeOnBlur(${i})">
+      ${leg.dep ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'dep')" title="Tap to change">
+        <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-slash">/</span><span class="leg-airport-iata">${depIata}</span>` : ''}
+        <div class="leg-airport-city">${depCity}</div>
+        ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
+      </div>` : `<div class="leg-airport-input-wrap">
+        <input type="text" class="leg-airport-edit-input" id="leg-dep-edit-${i}" placeholder="ICAO or city…" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="onLegAirportInput(${i},'dep',this.value)">
+        <div class="leg-airport-edit-dropdown" id="leg-dep-edit-dropdown-${i}"></div>
+      </div>`}
+      <button class="leg-charts-btn" onclick="openCharts('${depIcao}')" title="Navigraph Charts ${depIcao !== '????' ? depIcao : ''}" ${depIcao === '????' ? 'disabled' : ''}><img src="${CHARTS_LOGO}" alt="Navigraph"></button>
+    </div>`;
+
+    // ARR side (time on top, then airport block OR inline input, then chart logo)
+    const arrSideHtml = `<div class="leg-side">
+      <input type="text" class="leg-time-input leg-arr-time" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" readonly>
+      ${leg.arr ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'arr')" title="Tap to change">
+        <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-slash">/</span><span class="leg-airport-iata">${arrIata}</span>` : ''}
+        <div class="leg-airport-city">${arrCity}</div>
+        ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
+      </div>` : `<div class="leg-airport-input-wrap">
+        <input type="text" class="leg-airport-edit-input" id="leg-arr-edit-${i}" placeholder="ICAO or city…" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="onLegAirportInput(${i},'arr',this.value)">
+        <div class="leg-airport-edit-dropdown" id="leg-arr-edit-dropdown-${i}"></div>
+      </div>`}
+      <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')" title="Navigraph Charts ${arrIcao !== '????' ? arrIcao : ''}" ${arrIcao === '????' ? 'disabled' : ''}><img src="${CHARTS_LOGO}" alt="Navigraph"></button>
+    </div>`;
+
     html += `<div class="leg-card">
-      <div class="leg-header">
+      <div class="leg-meta-col">
         <div class="leg-logo" id="leg-logo-${i}">${logoHtml}</div>
-        <div class="leg-airline-eqp">
-          <input type="text" class="leg-airline-input" id="leg-al-${i}" placeholder="Airline" value="${leg.airline}" maxlength="3" oninput="updateLegAirline(${i}, this.value)">
-          <input type="text" class="leg-eqp-input" id="leg-ac-${i}" placeholder="EQP" value="${leg.aircraft}" maxlength="6" oninput="updateLegAircraft(${i}, this.value)">
+        <input type="text" class="leg-airline-input" id="leg-al-${i}" placeholder="Airline" value="${leg.airline}" maxlength="3" oninput="updateLegAirline(${i}, this.value)">
+        <input type="text" class="leg-eqp-input" id="leg-ac-${i}" placeholder="EQP" value="${leg.aircraft}" maxlength="6" oninput="updateLegAircraft(${i}, this.value)">
+      </div>
+      <div class="leg-body">
+        ${depSideHtml}
+        <div class="leg-mid" onclick="fetchBlockTime(${i})" title="Tap to refresh block time">
+          <span class="leg-block-time ${leg.blockTimeReal ? 'real' : 'estimate'}" id="leg-bt-${i}">${leg.blockTime || (leg.dep && leg.arr ? '…' : '')}</span>
         </div>
-        <button class="leg-delete-btn" onclick="deleteLeg(${i})">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
-          </svg>
-        </button>
-      </div>
-      <div class="leg-airport">
-        <div class="leg-airport-label">DEP</div>
-        ${leg.dep ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'dep')" title="Tap to change" style="cursor:pointer;">
-          <span class="leg-airport-icao">${depIcao}</span>${depIata ? `<span class="leg-airport-iata">/ ${depIata}</span>` : ''}
-          <div class="leg-airport-city">${depCity}</div>
-          ${depUtc ? `<div class="leg-airport-utc">${depUtc}</div>` : ''}
-        </div>` : `<div class="leg-airport-input-wrap">
-          <input type="text" class="leg-airport-edit-input" id="leg-dep-edit-${i}" placeholder="ICAO or city…" autocomplete="off" oninput="onLegAirportInput(${i},'dep',this.value)">
-          <div class="leg-airport-edit-dropdown" id="leg-dep-edit-dropdown-${i}"></div>
-        </div>`}
-        <input type="text" class="leg-time-input" id="leg-dep-time-${i}" placeholder="00:00" value="${leg.depTime || ''}" oninput="updateLegDepTime(${i}, this.value)" onblur="formatDepTimeOnBlur(${i})">
-        <button class="leg-charts-btn" onclick="openCharts('${depIcao}')">Charts</button>
-      </div>
-      <div class="leg-arrow" onclick="fetchBlockTime(${i})" title="Click to refresh">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12l7 7 7-7"/>
-        </svg>
-        <span class="leg-block-time ${leg.blockTimeReal ? 'real' : 'estimate'}" id="leg-bt-${i}">${leg.blockTime || (leg.dep && leg.arr ? '…' : '')}</span>
-      </div>
-      <div class="leg-airport">
-        <div class="leg-airport-label">ARR</div>
-        ${leg.arr ? `<div class="leg-airport-info" onclick="clearLegAirport(${i},'arr')" title="Tap to change" style="cursor:pointer;">
-          <span class="leg-airport-icao">${arrIcao}</span>${arrIata ? `<span class="leg-airport-iata">/ ${arrIata}</span>` : ''}
-          <div class="leg-airport-city">${arrCity}</div>
-          ${arrUtc ? `<div class="leg-airport-utc">${arrUtc}</div>` : ''}
-        </div>` : `<div class="leg-airport-input-wrap">
-          <input type="text" class="leg-airport-edit-input" id="leg-arr-edit-${i}" placeholder="ICAO or city…" autocomplete="off" oninput="onLegAirportInput(${i},'arr',this.value)">
-          <div class="leg-airport-edit-dropdown" id="leg-arr-edit-dropdown-${i}"></div>
-        </div>`}
-        <input type="text" class="leg-time-input leg-arr-time" id="leg-arr-time-${i}" placeholder="00:00" value="${leg.arrTime || ''}" readonly>
-        <button class="leg-charts-btn" onclick="openCharts('${arrIcao}')">Charts</button>
+        ${arrSideHtml}
       </div>
     </div>
-    <div class="leg-insert-btns">
-      <button class="leg-insert-btn" onclick="insertLegAfter(${i})">+ Insert Leg</button>
-      ${i === legs.length - 1 ? `<button class="leg-insert-btn" onclick="addLegAtEnd()">+ Add Leg</button>` : ''}
+    <div class="leg-actions">
+      <button class="leg-action-btn insert" onclick="insertLegAfter(${i})" title="Insert stopover after this leg">
+        <svg class="leg-action-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 7h10"/>
+          <path d="M4 12h16"/>
+          <path d="M4 17h10"/>
+          <path d="M17 4l3 3-3 3"/>
+        </svg>
+        Insert Leg
+      </button>
+      ${i === legs.length - 1 ? `<button class="leg-action-btn add" onclick="addLegAtEnd()" title="Add a new leg at the end">
+        <svg class="leg-action-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M12 8v8M8 12h8"/>
+        </svg>
+        Add Leg
+      </button>` : ''}
+      <button class="leg-action-btn delete" onclick="deleteLeg(${i})" title="Delete this leg">
+        <svg class="leg-action-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M9 9l6 6M15 9l-6 6"/>
+        </svg>
+        Delete Leg
+      </button>
     </div>`;
   });
   
@@ -1802,8 +1874,16 @@ function clearLegAirport(i, which) {
 // Search-as-you-type dropdown for inline leg-airport input
 function onLegAirportInput(i, which, rawVal) {
   const dropdown = document.getElementById('leg-' + which + '-edit-dropdown-' + i);
+  const input = document.getElementById('leg-' + which + '-edit-' + i);
   if (!dropdown) return;
-  const query = (rawVal || '').trim().toUpperCase();
+  // Force uppercase for ICAO/IATA style input (also updates the actual .value)
+  const upper = (rawVal || '').toUpperCase();
+  if (input && input.value !== upper) {
+    const pos = input.selectionStart;
+    input.value = upper;
+    try { input.setSelectionRange(pos, pos); } catch(e) {}
+  }
+  const query = upper.trim();
   if (query.length < 2) {
     dropdown.classList.remove('open');
     dropdown.innerHTML = '';
@@ -2019,7 +2099,8 @@ function clearAllLegs() {
 
 function openCharts(icao) {
   if (icao && icao !== '????') {
-    window.open(`https://chartfox.org/${icao}`, '_blank');
+    // Navigraph Charts — same deep-link as the desktop version
+    window.open('https://charts.navigraph.com/airport/' + icao + '?chartCategory=ARR&section=Info&informationSection=General&procedureSection=Departures&weatherSection=METAR&networksSection=Gates&ATISSection=Real', '_blank');
   }
 }
 
