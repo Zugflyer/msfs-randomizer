@@ -129,9 +129,9 @@ html, body {
 }
 #roll-map-container .leaflet-container { background: var(--bg); }
 
-/* Plan-tab route map (shown below the legs list) */
+/* Plan-tab route map (shown below the Add-to-Logbook button) */
 #plan-map-wrapper {
-  margin: 8px 0 6px;
+  margin: 12px 14px 8px;
   border: 1px solid var(--bdr);
   border-radius: var(--r);
   overflow: hidden;
@@ -583,7 +583,6 @@ html, body {
   display: flex;
   flex-direction: column;
   height: 100%;
-  padding-bottom: calc(70px + var(--safe-bottom));
 }
 .plan-header {
   display: flex;
@@ -591,6 +590,7 @@ html, body {
   align-items: center;
   padding: 12px 14px;
   border-bottom: 1px solid var(--bdr);
+  flex-shrink: 0;
 }
 .plan-title {
   font-size: 16px;
@@ -605,11 +605,15 @@ html, body {
   color: var(--txt3);
   font-family: var(--ff);
 }
-.legs-list {
+/* Single scroll container: legs → Add-to-Logbook → Route map */
+.plan-scroll {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding: 10px 14px;
+  padding-bottom: calc(70px + var(--safe-bottom));
+}
+.legs-list {
+  padding: 10px 14px 4px;
 }
 /* ═══════════ LEG CARD (new horizontal layout) ═══════════ */
 .leg-card {
@@ -1076,23 +1080,25 @@ html, body {
             <span class="plan-title">Flight Plan</span>
             <button class="plan-clear-btn" onclick="clearAllLegs()">Clear All</button>
           </div>
-          <div class="legs-list" id="legs-list">
-            <div class="empty-state"><div class="empty-state-icon">✈️</div><div class="empty-state-text">No legs planned. Use "Plan Legs" in the Next tab.</div></div>
-          </div>
-          <div id="plan-map-wrapper" style="display:none;">
-            <div id="plan-map-header">
-              <span class="pm-title">Route Map</span>
-              <span class="pm-meta" id="plan-map-meta"></span>
+          <div class="plan-scroll">
+            <div class="legs-list" id="legs-list">
+              <div class="empty-state"><div class="empty-state-icon">✈️</div><div class="empty-state-text">No legs planned. Use "Plan Legs" in the Next tab.</div></div>
             </div>
-            <div id="plan-map-container"></div>
-          </div>
-          <div class="plan-footer" id="plan-footer" style="display:none;">
-            <button class="add-to-logbook-btn" onclick="addLegsToLogbook()">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12h14"/>
-              </svg>
-              Add to Logbook
-            </button>
+            <div class="plan-footer" id="plan-footer" style="display:none;">
+              <button class="add-to-logbook-btn" onclick="addLegsToLogbook()">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                Add to Logbook
+              </button>
+            </div>
+            <div id="plan-map-wrapper" style="display:none;">
+              <div id="plan-map-header">
+                <span class="pm-title">Route Map</span>
+                <span class="pm-meta" id="plan-map-meta"></span>
+              </div>
+              <div id="plan-map-container"></div>
+            </div>
           </div>
         </div>
       </div>
