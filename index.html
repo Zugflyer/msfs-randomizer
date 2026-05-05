@@ -2884,6 +2884,29 @@ function renderLegs() {
     navCell.appendChild(navBtn);
     navCell.appendChild(sbBtn);
 
+    // ── Surface Mode buttons (Ship / Road) ──
+    const surfaceCell = document.createElement('div');
+    surfaceCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:54px;flex-shrink:0;gap:3px;padding:0 4px;';
+    
+    const currentMode = leg.surfaceMode || 'air';
+    
+    // Ship button
+    const shipBtn = document.createElement('button');
+    shipBtn.style.cssText = 'display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;border:1px solid ' + (currentMode === 'ship' ? 'var(--blue)' : 'var(--bdr)') + ';background:' + (currentMode === 'ship' ? 'rgba(88,166,255,.15)' : 'var(--surf2)') + ';color:' + (currentMode === 'ship' ? 'var(--blue)' : 'var(--txt2)') + ';cursor:pointer;font-size:10px;font-weight:500;';
+    shipBtn.title = currentMode === 'ship' ? 'Click to switch back to flight' : 'Mark as ship segment';
+    shipBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1 .6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-9-4-9 4c0 2.9.94 5.34 2.81 7.76"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M12 10v4"/><path d="M12 2v3"/></svg>Ship';
+    shipBtn.onclick = () => toggleSurfaceMode(i, 'ship');
+    
+    // Road button  
+    const roadBtn = document.createElement('button');
+    roadBtn.style.cssText = 'display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:4px;border:1px solid ' + (currentMode === 'road' ? 'var(--blue)' : 'var(--bdr)') + ';background:' + (currentMode === 'road' ? 'rgba(88,166,255,.15)' : 'var(--surf2)') + ';color:' + (currentMode === 'road' ? 'var(--blue)' : 'var(--txt2)') + ';cursor:pointer;font-size:10px;font-weight:500;';
+    roadBtn.title = currentMode === 'road' ? 'Click to switch back to flight' : 'Mark as road segment';
+    roadBtn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></svg>Road';
+    roadBtn.onclick = () => toggleSurfaceMode(i, 'road');
+    
+    surfaceCell.appendChild(shipBtn);
+    surfaceCell.appendChild(roadBtn);
+
     // ── Delete ──
     const delCell = document.createElement('div');
     delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding-left:4px;';
@@ -2901,6 +2924,7 @@ function renderLegs() {
     row.appendChild(arrTimeCell);
     row.appendChild(taGateCell);
     row.appendChild(navCell);
+    row.appendChild(surfaceCell);
     row.appendChild(delCell);
     container.appendChild(row);
 
@@ -3353,17 +3377,42 @@ function updateRosterLines() {
     if (!leg.dep || !leg.arr) return;
     const dc = [leg.dep[3], leg.dep[4]];
     const ac = [leg.arr[3], leg.arr[4]];
+    const mode = leg.surfaceMode || 'air';
     try {
-      const line = new L.Geodesic([[dc, ac]], {
-        color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12
-      }).addTo(rosterMap);
+      let line;
+      if (mode === 'ship' || mode === 'road') {
+        // Dashed line for surface transport
+        line = new L.Geodesic([[dc, ac]], {
+          color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12,
+          dashArray: '8, 6'
+        }).addTo(rosterMap);
+      } else {
+        // Solid line for flights
+        line = new L.Geodesic([[dc, ac]], {
+          color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12
+        }).addTo(rosterMap);
+      }
       const dm = L.circleMarker(dc, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
       const am = L.circleMarker(ac, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
+      const modeIcon = mode === 'ship' ? '🚢 ' : (mode === 'road' ? '🚗 ' : '');
       dm.bindTooltip(`<b>${leg.dep[0]}</b> ${leg.dep[7]||leg.dep[2]}`, { direction: 'top' });
-      am.bindTooltip(`<b>${leg.arr[0]}</b> ${leg.arr[7]||leg.arr[2]}`, { direction: 'top' });
+      am.bindTooltip(`${modeIcon}<b>${leg.arr[0]}</b> ${leg.arr[7]||leg.arr[2]}`, { direction: 'top' });
       rosterLayers.push(line, dm, am);
     } catch(e) {}
   });
+}
+
+// Toggle surface mode for a leg (air/ship/road)
+function toggleSurfaceMode(idx, mode) {
+  if (!legs[idx]) return;
+  // If already this mode, switch back to air
+  if (legs[idx].surfaceMode === mode) {
+    legs[idx].surfaceMode = 'air';
+  } else {
+    legs[idx].surfaceMode = mode;
+  }
+  renderLegs();
+  if (rosterMap) updateRosterLines();
 }
 
 // ═══════════════════════════════════════════════════════════
