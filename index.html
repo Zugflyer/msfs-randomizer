@@ -3543,12 +3543,20 @@ function findNearestNode(lon, lat) {
 function dijkstraSeaRoute(startId, endId) {
   if (!_marnetNodes || !_marnetEdges) return null;
   
-  // Build adjacency list
+  // Build adjacency list - make edges bidirectional
   const adj = {};
   for (const e of _marnetEdges) {
+    // Forward edge
     if (!adj[e.from]) adj[e.from] = [];
     adj[e.from].push({ to: e.to, dist: e.length_nm });
+    // Reverse edge (make bidirectional)
+    if (!adj[e.to]) adj[e.to] = [];
+    adj[e.to].push({ to: e.from, dist: e.length_nm });
   }
+  
+  console.log('Adjacency built, checking connectivity...');
+  console.log('Start has', (adj[startId] || []).length, 'neighbors');
+  console.log('End has', (adj[endId] || []).length, 'neighbors');
   
   // Dijkstra
   const dist = {};
@@ -3556,7 +3564,8 @@ function dijkstraSeaRoute(startId, endId) {
   const visited = new Set();
   dist[startId] = 0;
   
-  const pq = [[0, startId]]; // [distance, nodeId]
+  // Use a simple priority queue (array sorted by distance)
+  const pq = [[0, startId]];
   
   while (pq.length > 0) {
     pq.sort((a, b) => a[0] - b[0]);
@@ -3565,9 +3574,13 @@ function dijkstraSeaRoute(startId, endId) {
     if (visited.has(u)) continue;
     visited.add(u);
     
-    if (u === endId) break;
+    if (u === endId) {
+      console.log('Found path! Visited', visited.size, 'nodes');
+      break;
+    }
     
     for (const edge of (adj[u] || [])) {
+      if (visited.has(edge.to)) continue;
       const alt = d + edge.dist;
       if (dist[edge.to] === undefined || alt < dist[edge.to]) {
         dist[edge.to] = alt;
@@ -3578,7 +3591,10 @@ function dijkstraSeaRoute(startId, endId) {
   }
   
   // Reconstruct path
-  if (prev[endId] === undefined && startId !== endId) return null;
+  if (prev[endId] === undefined && startId !== endId) {
+    console.log('No path found after visiting', visited.size, 'nodes');
+    return null;
+  }
   
   const path = [];
   let cur = endId;
@@ -3587,6 +3603,7 @@ function dijkstraSeaRoute(startId, endId) {
     cur = prev[cur];
   }
   
+  console.log('Path length:', path.length, 'nodes, distance:', dist[endId], 'nm');
   return path;
 }
 
