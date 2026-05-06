@@ -3298,6 +3298,7 @@ async function saveRoster() {
       arr_lat: leg.arr[3], arr_lon: leg.arr[4],
       airline: leg.airline||'', aircraft: leg.aircraft||'',
       planned: true,  // ← key flag: planned = blue line, not yet flown
+      surfaceMode: leg.surfaceMode || 'air',  // ship/road/air
     });
     added++;
   });
@@ -3356,17 +3357,60 @@ function drawLogbookLines() {
     const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : null;
     const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : null;
     if (!depCoords || !arrCoords) return;
-    // Planned = thin solid steel-blue; flown = thin solid grey
     const color = f.planned ? '#4a9eda' : '#5a6270';
     const weight = 1.2;
+    const mode = f.surfaceMode || 'air';
+    const isDashed = (mode === 'ship' || mode === 'road');
     try {
-      const line = new L.Geodesic([[depCoords, arrCoords]], { color, weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(rosterMap);
+      let line;
+      if (isDashed) {
+        line = drawDashedGeodesic(rosterMap, depCoords, arrCoords, {
+          color, weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4', steps: 20
+        });
+      } else {
+        line = new L.Geodesic([[depCoords, arrCoords]], { color, weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(rosterMap);
+      }
       const r = 3;
       const dm = L.circleMarker(depCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
       const am = L.circleMarker(arrCoords, { radius: r, color, fillColor: color, fillOpacity: 0.8, weight: 0 }).addTo(rosterMap);
       rosterLayers.push(line, dm, am);
     } catch(e) {}
   });
+}
+
+// Helper: Draw a dashed great-circle line using L.Polyline (L.Geodesic doesn't support dashArray)
+function drawDashedGeodesic(map, from, to, opts) {
+  // Generate intermediate points along the great circle
+  const steps = opts.steps || 20;
+  const points = [];
+  const lat1 = from[0] * Math.PI / 180;
+  const lon1 = from[1] * Math.PI / 180;
+  const lat2 = to[0] * Math.PI / 180;
+  const lon2 = to[1] * Math.PI / 180;
+  
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const d = Math.acos(Math.sin(lat1)*Math.sin(lat2) + Math.cos(lat1)*Math.cos(lat2)*Math.cos(lon2-lon1));
+    if (d === 0) {
+      points.push(from);
+    } else {
+      const A = Math.sin((1-f)*d) / Math.sin(d);
+      const B = Math.sin(f*d) / Math.sin(d);
+      const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+      const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+      const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+      const lat = Math.atan2(z, Math.sqrt(x*x + y*y)) * 180 / Math.PI;
+      const lon = Math.atan2(y, x) * 180 / Math.PI;
+      points.push([lat, lon]);
+    }
+  }
+  
+  return L.polyline(points, {
+    color: opts.color || '#f85149',
+    weight: opts.weight || 2,
+    opacity: opts.opacity || 0.8,
+    dashArray: opts.dashArray || '8, 6'
+  }).addTo(map);
 }
 
 function updateRosterLines() {
@@ -3380,40 +3424,200 @@ function updateRosterLines() {
     const mode = leg.surfaceMode || 'air';
     try {
       let line;
-      if (mode === 'ship' || mode === 'road') {
-        // Dashed line for surface transport
-        line = new L.Geodesic([[dc, ac]], {
-          color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12,
-          dashArray: '8, 6'
+      
+      if (mode === 'ship' && leg.seaRouteWaypoints && leg.seaRouteWaypoints.length >= 2) {
+        // Use calculated sea route waypoints
+        line = L.polyline(leg.seaRouteWaypoints, {
+          color: '#4a9eda', weight: 2.5, opacity: 0.92, dashArray: '8, 6'
         }).addTo(rosterMap);
+      } else if (mode === 'ship' || mode === 'road') {
+        // Dashed great circle for road, or ship without route yet
+        line = drawDashedGeodesic(rosterMap, dc, ac, {
+          color: mode === 'ship' ? '#4a9eda' : '#f85149',
+          weight: 2.5, opacity: 0.92, dashArray: '8, 6', steps: 30
+        });
       } else {
-        // Solid line for flights
-        line = new L.Geodesic([[dc, ac]], {
-          color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12
-        }).addTo(rosterMap);
+        // Normal flight
+        line = new L.Geodesic([[dc, ac]], { color: '#f85149', weight: 2.5, opacity: 0.92, steps: 12 }).addTo(rosterMap);
       }
+      
       const dm = L.circleMarker(dc, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
       const am = L.circleMarker(ac, { radius: 6, color: '#0e1117', weight: 2, fillColor: '#f85149', fillOpacity: 1 }).addTo(rosterMap);
       const modeIcon = mode === 'ship' ? '🚢 ' : (mode === 'road' ? '🚗 ' : '');
       dm.bindTooltip(`<b>${leg.dep[0]}</b> ${leg.dep[7]||leg.dep[2]}`, { direction: 'top' });
       am.bindTooltip(`${modeIcon}<b>${leg.arr[0]}</b> ${leg.arr[7]||leg.arr[2]}`, { direction: 'top' });
       rosterLayers.push(line, dm, am);
-    } catch(e) {}
+    } catch(e) { console.error('Route draw error:', e); }
   });
 }
 
 // Toggle surface mode for a leg (air/ship/road)
 function toggleSurfaceMode(idx, mode) {
   if (!legs[idx]) return;
+  const leg = legs[idx];
+  
   // If already this mode, switch back to air
-  if (legs[idx].surfaceMode === mode) {
-    legs[idx].surfaceMode = 'air';
+  if (leg.surfaceMode === mode) {
+    leg.surfaceMode = 'air';
+    leg.seaRouteWaypoints = null; // Clear cached route
   } else {
-    legs[idx].surfaceMode = mode;
+    leg.surfaceMode = mode;
+    
+    // For ship mode, calculate sea route
+    if (mode === 'ship' && leg.dep && leg.arr) {
+      calculateSeaRoute(idx, [leg.dep[4], leg.dep[3]], [leg.arr[4], leg.arr[3]]);
+    } else {
+      leg.seaRouteWaypoints = null;
+    }
   }
   renderLegs();
   if (rosterMap) updateRosterLines();
 }
+
+// ═══════════════════════════════════════════════════════════
+// SEA ROUTE CALCULATION (Eurostat Marnet)
+// ═══════════════════════════════════════════════════════════
+let _marnetNodes = null;
+let _marnetEdges = null;
+let _marnetLoading = false;
+let _marnetLoaded = false;
+
+async function loadMarnetData() {
+  if (_marnetLoaded || _marnetLoading) return;
+  _marnetLoading = true;
+  
+  try {
+    // Load nodes and edges from GitHub (ssroute/data-eurostat)
+    const baseUrl = 'https://raw.githubusercontent.com/ssroute/data-eurostat/main/data/';
+    const [nodesRes, edgesRes] = await Promise.all([
+      fetch(baseUrl + 'nodes.json'),
+      fetch(baseUrl + 'edges.json')
+    ]);
+    
+    if (!nodesRes.ok || !edgesRes.ok) throw new Error('Failed to load Marnet data');
+    
+    _marnetNodes = await nodesRes.json();
+    _marnetEdges = await edgesRes.json();
+    _marnetLoaded = true;
+    console.log('Loaded Marnet: ' + _marnetNodes.length + ' nodes, ' + _marnetEdges.length + ' edges');
+  } catch(e) {
+    console.error('Marnet load error:', e);
+  }
+  _marnetLoading = false;
+}
+
+// Find nearest node to a coordinate
+function findNearestNode(lon, lat) {
+  if (!_marnetNodes) return null;
+  let best = null, bestDist = Infinity;
+  for (const n of _marnetNodes) {
+    const d = Math.pow(n.lon - lon, 2) + Math.pow(n.lat - lat, 2);
+    if (d < bestDist) { bestDist = d; best = n; }
+  }
+  return best;
+}
+
+// Dijkstra shortest path
+function dijkstraSeaRoute(startId, endId) {
+  if (!_marnetNodes || !_marnetEdges) return null;
+  
+  // Build adjacency list
+  const adj = {};
+  for (const e of _marnetEdges) {
+    if (!adj[e.from]) adj[e.from] = [];
+    adj[e.from].push({ to: e.to, dist: e.length_nm });
+  }
+  
+  // Dijkstra
+  const dist = {};
+  const prev = {};
+  const visited = new Set();
+  dist[startId] = 0;
+  
+  const pq = [[0, startId]]; // [distance, nodeId]
+  
+  while (pq.length > 0) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, u] = pq.shift();
+    
+    if (visited.has(u)) continue;
+    visited.add(u);
+    
+    if (u === endId) break;
+    
+    for (const edge of (adj[u] || [])) {
+      const alt = d + edge.dist;
+      if (dist[edge.to] === undefined || alt < dist[edge.to]) {
+        dist[edge.to] = alt;
+        prev[edge.to] = u;
+        pq.push([alt, edge.to]);
+      }
+    }
+  }
+  
+  // Reconstruct path
+  if (prev[endId] === undefined && startId !== endId) return null;
+  
+  const path = [];
+  let cur = endId;
+  while (cur !== undefined) {
+    path.unshift(cur);
+    cur = prev[cur];
+  }
+  
+  return path;
+}
+
+// Calculate and store sea route for a leg
+async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
+  if (!_marnetLoaded) {
+    await loadMarnetData();
+    if (!_marnetLoaded) {
+      alert('Could not load sea route data. Using straight line.');
+      return;
+    }
+  }
+  
+  const startNode = findNearestNode(fromLonLat[0], fromLonLat[1]);
+  const endNode = findNearestNode(toLonLat[0], toLonLat[1]);
+  
+  if (!startNode || !endNode) {
+    console.warn('No nearby sea nodes found');
+    return;
+  }
+  
+  const path = dijkstraSeaRoute(startNode.id, endNode.id);
+  
+  if (!path || path.length < 2) {
+    console.warn('No sea route found');
+    return;
+  }
+  
+  // Convert path to waypoints [lat, lon]
+  const nodeById = {};
+  for (const n of _marnetNodes) nodeById[n.id] = n;
+  
+  const waypoints = [];
+  // Add origin
+  waypoints.push([fromLonLat[1], fromLonLat[0]]);
+  // Add path nodes
+  for (const id of path) {
+    const n = nodeById[id];
+    if (n) waypoints.push([n.lat, n.lon]);
+  }
+  // Add destination
+  waypoints.push([toLonLat[1], toLonLat[0]]);
+  
+  // Store in leg
+  if (legs[legIdx]) {
+    legs[legIdx].seaRouteWaypoints = waypoints;
+    renderLegs();
+    if (rosterMap) updateRosterLines();
+  }
+}
+
+// Preload Marnet data on first ship button click
+loadMarnetData();
 
 // ═══════════════════════════════════════════════════════════
 // LOGBOOK
@@ -3672,8 +3876,15 @@ function drawLbMapEu() {
     const color = matchesSel ? '#f85149' : baseColor;
     const weight = matchesSel ? 2.5 : 1.5;
     const opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.55);
+    const mode = f.surfaceMode || 'air';
+    const isDashed = (mode === 'ship' || mode === 'road');
     try {
-      const line = new L.Geodesic([[dc, ac]], { color, weight, opacity, steps: 6 }).addTo(lbMapEu);
+      let line;
+      if (isDashed) {
+        line = drawDashedGeodesic(lbMapEu, dc, ac, { color, weight, opacity, dashArray: '6, 4', steps: 15 });
+      } else {
+        line = new L.Geodesic([[dc, ac]], { color, weight, opacity, steps: 6 }).addTo(lbMapEu);
+      }
       lbMapEuLayers.push(line);
     } catch(e) {}
     if (f.dep_icao && !airportMapEu[f.dep_icao]) airportMapEu[f.dep_icao] = { icao: f.dep_icao, iata: f.dep_iata, city: f.dep, lat: f.dep_lat, lon: f.dep_lon };
@@ -3760,8 +3971,15 @@ function drawLbMap() {
     var color = matchesSel ? '#f85149' : baseColor;
     var weight = matchesSel ? 2.5 : 1.2;
     var opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.5);
+    var mode = f.surfaceMode || 'air';
+    var isDashed = (mode === 'ship' || mode === 'road');
     try {
-      var line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: opacity, steps: 8 }).addTo(lbMap);
+      var line;
+      if (isDashed) {
+        line = drawDashedGeodesic(lbMap, dc, ac, { color: color, weight: weight, opacity: opacity, dashArray: '6, 4', steps: 20 });
+      } else {
+        line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: opacity, steps: 8 }).addTo(lbMap);
+      }
       lbMapLayers.push(line);
     } catch(e) {}
 
