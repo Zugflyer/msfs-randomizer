@@ -3570,9 +3570,13 @@ function dijkstraSeaRoute(startId, endId) {
 
 // Calculate and store sea route for a leg
 async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
+  console.log('🚢 Calculating sea route from', fromLonLat, 'to', toLonLat);
+  
   if (!_marnetLoaded) {
+    console.log('Loading Marnet data...');
     await loadMarnetData();
     if (!_marnetLoaded) {
+      console.error('Failed to load Marnet data');
       alert('Could not load sea route data. Using straight line.');
       return;
     }
@@ -3581,15 +3585,21 @@ async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
   const startNode = findNearestNode(fromLonLat[0], fromLonLat[1]);
   const endNode = findNearestNode(toLonLat[0], toLonLat[1]);
   
+  console.log('Start node:', startNode);
+  console.log('End node:', endNode);
+  
   if (!startNode || !endNode) {
     console.warn('No nearby sea nodes found');
     return;
   }
   
+  console.log('Running Dijkstra from', startNode.id, 'to', endNode.id);
   const path = dijkstraSeaRoute(startNode.id, endNode.id);
   
+  console.log('Path found:', path ? path.length + ' nodes' : 'NO PATH');
+  
   if (!path || path.length < 2) {
-    console.warn('No sea route found');
+    console.warn('No sea route found between these points');
     return;
   }
   
@@ -3607,6 +3617,8 @@ async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
   }
   // Add destination
   waypoints.push([toLonLat[1], toLonLat[0]]);
+  
+  console.log('✓ Sea route calculated:', waypoints.length, 'waypoints');
   
   // Store in leg
   if (legs[legIdx]) {
