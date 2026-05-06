@@ -3496,10 +3496,32 @@ async function loadMarnetData() {
     
     if (!nodesRes.ok || !edgesRes.ok) throw new Error('Failed to load Marnet data');
     
-    _marnetNodes = await nodesRes.json();
-    _marnetEdges = await edgesRes.json();
+    const nodesRaw = await nodesRes.json();
+    const edgesRaw = await edgesRes.json();
+    
+    // Debug: show first few items to understand format
+    console.log('Nodes sample:', JSON.stringify(nodesRaw.slice(0, 3)));
+    console.log('Edges sample:', JSON.stringify(edgesRaw.slice(0, 3)));
+    
+    // Convert format - nodes could be [id, lon, lat] tuples or {id, lon, lat} objects
+    if (Array.isArray(nodesRaw[0])) {
+      // Tuple format: [id, lon, lat]
+      _marnetNodes = nodesRaw.map(n => ({ id: n[0], lon: n[1], lat: n[2] }));
+    } else {
+      _marnetNodes = nodesRaw;
+    }
+    
+    // Convert edges - could be [from, to, length_nm] tuples or objects
+    if (Array.isArray(edgesRaw[0])) {
+      // Tuple format: [from, to, length_nm]
+      _marnetEdges = edgesRaw.map(e => ({ from: e[0], to: e[1], length_nm: e[2] }));
+    } else {
+      _marnetEdges = edgesRaw;
+    }
+    
     _marnetLoaded = true;
     console.log('Loaded Marnet: ' + _marnetNodes.length + ' nodes, ' + _marnetEdges.length + ' edges');
+    console.log('First node after conversion:', _marnetNodes[0]);
   } catch(e) {
     console.error('Marnet load error:', e);
   }
