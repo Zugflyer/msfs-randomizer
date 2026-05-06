@@ -3300,6 +3300,7 @@ async function saveRoster() {
       planned: true,  // ← key flag: planned = blue line, not yet flown
       surfaceMode: leg.surfaceMode || 'air',  // ship/road/air
       seaRouteWaypoints: leg.seaRouteWaypoints || null,  // waypoints for ship routes
+      roadRouteWaypoints: leg.roadRouteWaypoints || null,  // waypoints for road routes
     });
     added++;
   });
@@ -3308,7 +3309,7 @@ async function saveRoster() {
     await saveLogbook();
     renderLogbook();
     // Redraw map lines to include new planned routes
-    if (rosterMap) { drawLogbookLines(); updateRosterLines(); }
+    if (rosterMap) { updateRosterLines(); }  // updateRosterLines already calls drawLogbookLines
   }
   setCloudStatus(`✓ Saved${added>0?' +'+added+' to logbook':''}`, 'ok');
   setTimeout(() => setCloudStatus('✓ Synced','ok'), 2500);
@@ -3354,11 +3355,25 @@ function clearRosterLayers() {
 
 function drawLogbookLines() {
   if (!rosterMap) return;
+  
+  // Build set of active leg routes to avoid duplicates
+  const activeRoutes = new Set();
+  legs.forEach(leg => {
+    if (leg.dep && leg.arr) {
+      activeRoutes.add(leg.dep[0] + '-' + leg.arr[0]);
+    }
+  });
+  
   logbookFlights.forEach(f => {
     const depCoords = f.dep_lat ? [f.dep_lat, f.dep_lon] : null;
     const arrCoords = f.arr_lat ? [f.arr_lat, f.arr_lon] : null;
     if (!depCoords || !arrCoords) return;
+    
+    // Skip if this is also an active leg (will be drawn by updateRosterLines)
+    if (f.planned && activeRoutes.has(f.dep_icao + '-' + f.arr_icao)) return;
+    
     const color = f.planned ? '#4a9eda' : '#5a6270';
+    const roadColor = f.planned ? '#f0883e' : '#8a6030';
     const weight = 1.2;
     const mode = f.surfaceMode || 'air';
     try {
@@ -3369,10 +3384,16 @@ function drawLogbookLines() {
           color: f.planned ? '#4a9eda' : '#5a6270',
           weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4'
         }).addTo(rosterMap);
+      } else if (mode === 'road' && f.roadRouteWaypoints && f.roadRouteWaypoints.length >= 2) {
+        // Use stored road route waypoints
+        line = L.polyline(f.roadRouteWaypoints, {
+          color: roadColor,
+          weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4'
+        }).addTo(rosterMap);
       } else if (mode === 'ship' || mode === 'road') {
         // Dashed line without waypoints
         line = drawDashedGeodesic(rosterMap, depCoords, arrCoords, {
-          color, weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4', steps: 20
+          color: mode === 'ship' ? color : roadColor, weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4', steps: 20
         });
       } else {
         line = new L.Geodesic([[depCoords, arrCoords]], { color, weight, opacity: f.planned ? 0.85 : 0.5, steps: 8 }).addTo(rosterMap);
@@ -3437,10 +3458,15 @@ function updateRosterLines() {
         line = L.polyline(leg.seaRouteWaypoints, {
           color: '#4a9eda', weight: 2.5, opacity: 0.92, dashArray: '8, 6'
         }).addTo(rosterMap);
+      } else if (mode === 'road' && leg.roadRouteWaypoints && leg.roadRouteWaypoints.length >= 2) {
+        // Use calculated road route waypoints
+        line = L.polyline(leg.roadRouteWaypoints, {
+          color: '#f0883e', weight: 2.5, opacity: 0.92, dashArray: '8, 6'
+        }).addTo(rosterMap);
       } else if (mode === 'ship' || mode === 'road') {
-        // Dashed great circle for road, or ship without route yet
+        // Dashed great circle for ship/road without route yet
         line = drawDashedGeodesic(rosterMap, dc, ac, {
-          color: mode === 'ship' ? '#4a9eda' : '#f85149',
+          color: mode === 'ship' ? '#4a9eda' : '#f0883e',
           weight: 2.5, opacity: 0.92, dashArray: '8, 6', steps: 30
         });
       } else {
@@ -3467,14 +3493,21 @@ function toggleSurfaceMode(idx, mode) {
   if (leg.surfaceMode === mode) {
     leg.surfaceMode = 'air';
     leg.seaRouteWaypoints = null; // Clear cached route
+    leg.roadRouteWaypoints = null;
   } else {
     leg.surfaceMode = mode;
     
     // For ship mode, calculate sea route
     if (mode === 'ship' && leg.dep && leg.arr) {
       calculateSeaRoute(idx, [leg.dep[4], leg.dep[3]], [leg.arr[4], leg.arr[3]]);
+      leg.roadRouteWaypoints = null;
+    } else if (mode === 'road' && leg.dep && leg.arr) {
+      // For road mode, calculate road route via OSRM
+      calculateRoadRoute(idx, [leg.dep[4], leg.dep[3]], [leg.arr[4], leg.arr[3]]);
+      leg.seaRouteWaypoints = null;
     } else {
       leg.seaRouteWaypoints = null;
+      leg.roadRouteWaypoints = null;
     }
   }
   renderLegs();
@@ -3676,6 +3709,46 @@ async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
 
 // Preload Marnet data on first ship button click
 loadMarnetData();
+
+// ═══════════════════════════════════════════════════════════
+// ROAD ROUTE CALCULATION (OSRM)
+// ═══════════════════════════════════════════════════════════
+async function calculateRoadRoute(legIdx, fromLonLat, toLonLat) {
+  console.log('🚗 Calculating road route from', fromLonLat, 'to', toLonLat);
+  
+  try {
+    // OSRM API - free public server
+    const url = `https://router.project-osrm.org/route/v1/driving/${fromLonLat[0]},${fromLonLat[1]};${toLonLat[0]},${toLonLat[1]}?overview=full&geometries=geojson`;
+    
+    const response = await fetch(url);
+    if (!response.ok) throw new Error('OSRM request failed');
+    
+    const data = await response.json();
+    
+    if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
+      console.warn('No road route found');
+      return;
+    }
+    
+    // Extract coordinates from GeoJSON geometry
+    const coords = data.routes[0].geometry.coordinates;
+    
+    // Convert [lon, lat] to [lat, lon] for Leaflet
+    const waypoints = coords.map(c => [c[1], c[0]]);
+    
+    console.log('✓ Road route calculated:', waypoints.length, 'waypoints, distance:', Math.round(data.routes[0].distance / 1000), 'km');
+    
+    // Store in leg
+    if (legs[legIdx]) {
+      legs[legIdx].roadRouteWaypoints = waypoints;
+      renderLegs();
+      if (rosterMap) updateRosterLines();
+    }
+  } catch(e) {
+    console.error('Road route error:', e);
+    alert('Could not calculate road route. Check console for details.');
+  }
+}
 
 // ═══════════════════════════════════════════════════════════
 // LOGBOOK
@@ -3935,12 +4008,15 @@ function drawLbMapEu() {
     const weight = matchesSel ? 2.5 : 1.5;
     const opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.55);
     const mode = f.surfaceMode || 'air';
+    const roadColor = f.planned ? '#f0883e' : '#8a6030';
     try {
       let line;
       if (mode === 'ship' && f.seaRouteWaypoints && f.seaRouteWaypoints.length >= 2) {
         line = L.polyline(f.seaRouteWaypoints, { color, weight, opacity, dashArray: '6, 4' }).addTo(lbMapEu);
+      } else if (mode === 'road' && f.roadRouteWaypoints && f.roadRouteWaypoints.length >= 2) {
+        line = L.polyline(f.roadRouteWaypoints, { color: matchesSel ? '#f85149' : roadColor, weight, opacity, dashArray: '6, 4' }).addTo(lbMapEu);
       } else if (mode === 'ship' || mode === 'road') {
-        line = drawDashedGeodesic(lbMapEu, dc, ac, { color, weight, opacity, dashArray: '6, 4', steps: 15 });
+        line = drawDashedGeodesic(lbMapEu, dc, ac, { color: mode === 'ship' ? color : (matchesSel ? '#f85149' : roadColor), weight, opacity, dashArray: '6, 4', steps: 15 });
       } else {
         line = new L.Geodesic([[dc, ac]], { color, weight, opacity, steps: 6 }).addTo(lbMapEu);
       }
@@ -4031,12 +4107,15 @@ function drawLbMap() {
     var weight = matchesSel ? 2.5 : 1.2;
     var opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.5);
     var mode = f.surfaceMode || 'air';
+    var roadColor = f.planned ? '#f0883e' : '#8a6030';
     try {
       var line;
       if (mode === 'ship' && f.seaRouteWaypoints && f.seaRouteWaypoints.length >= 2) {
         line = L.polyline(f.seaRouteWaypoints, { color: color, weight: weight, opacity: opacity, dashArray: '6, 4' }).addTo(lbMap);
+      } else if (mode === 'road' && f.roadRouteWaypoints && f.roadRouteWaypoints.length >= 2) {
+        line = L.polyline(f.roadRouteWaypoints, { color: matchesSel ? '#f85149' : roadColor, weight: weight, opacity: opacity, dashArray: '6, 4' }).addTo(lbMap);
       } else if (mode === 'ship' || mode === 'road') {
-        line = drawDashedGeodesic(lbMap, dc, ac, { color: color, weight: weight, opacity: opacity, dashArray: '6, 4', steps: 20 });
+        line = drawDashedGeodesic(lbMap, dc, ac, { color: mode === 'ship' ? color : (matchesSel ? '#f85149' : roadColor), weight: weight, opacity: opacity, dashArray: '6, 4', steps: 20 });
       } else {
         line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: opacity, steps: 8 }).addTo(lbMap);
       }
