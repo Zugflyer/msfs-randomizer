@@ -3299,6 +3299,7 @@ async function saveRoster() {
       airline: leg.airline||'', aircraft: leg.aircraft||'',
       planned: true,  // ← key flag: planned = blue line, not yet flown
       surfaceMode: leg.surfaceMode || 'air',  // ship/road/air
+      seaRouteWaypoints: leg.seaRouteWaypoints || null,  // waypoints for ship routes
     });
     added++;
   });
@@ -3360,10 +3361,16 @@ function drawLogbookLines() {
     const color = f.planned ? '#4a9eda' : '#5a6270';
     const weight = 1.2;
     const mode = f.surfaceMode || 'air';
-    const isDashed = (mode === 'ship' || mode === 'road');
     try {
       let line;
-      if (isDashed) {
+      if (mode === 'ship' && f.seaRouteWaypoints && f.seaRouteWaypoints.length >= 2) {
+        // Use stored sea route waypoints
+        line = L.polyline(f.seaRouteWaypoints, {
+          color: f.planned ? '#4a9eda' : '#5a6270',
+          weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4'
+        }).addTo(rosterMap);
+      } else if (mode === 'ship' || mode === 'road') {
+        // Dashed line without waypoints
         line = drawDashedGeodesic(rosterMap, depCoords, arrCoords, {
           color, weight, opacity: f.planned ? 0.85 : 0.5, dashArray: '6, 4', steps: 20
         });
@@ -3928,10 +3935,11 @@ function drawLbMapEu() {
     const weight = matchesSel ? 2.5 : 1.5;
     const opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.55);
     const mode = f.surfaceMode || 'air';
-    const isDashed = (mode === 'ship' || mode === 'road');
     try {
       let line;
-      if (isDashed) {
+      if (mode === 'ship' && f.seaRouteWaypoints && f.seaRouteWaypoints.length >= 2) {
+        line = L.polyline(f.seaRouteWaypoints, { color, weight, opacity, dashArray: '6, 4' }).addTo(lbMapEu);
+      } else if (mode === 'ship' || mode === 'road') {
         line = drawDashedGeodesic(lbMapEu, dc, ac, { color, weight, opacity, dashArray: '6, 4', steps: 15 });
       } else {
         line = new L.Geodesic([[dc, ac]], { color, weight, opacity, steps: 6 }).addTo(lbMapEu);
@@ -4023,10 +4031,11 @@ function drawLbMap() {
     var weight = matchesSel ? 2.5 : 1.2;
     var opacity = matchesSel ? 0.95 : (f.planned ? 0.85 : 0.5);
     var mode = f.surfaceMode || 'air';
-    var isDashed = (mode === 'ship' || mode === 'road');
     try {
       var line;
-      if (isDashed) {
+      if (mode === 'ship' && f.seaRouteWaypoints && f.seaRouteWaypoints.length >= 2) {
+        line = L.polyline(f.seaRouteWaypoints, { color: color, weight: weight, opacity: opacity, dashArray: '6, 4' }).addTo(lbMap);
+      } else if (mode === 'ship' || mode === 'road') {
         line = drawDashedGeodesic(lbMap, dc, ac, { color: color, weight: weight, opacity: opacity, dashArray: '6, 4', steps: 20 });
       } else {
         line = new L.Geodesic([[dc, ac]], { color: color, weight: weight, opacity: opacity, steps: 8 }).addTo(lbMap);
