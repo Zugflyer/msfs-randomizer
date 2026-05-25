@@ -3848,7 +3848,7 @@ function renderLogbook() {
 
     return `<tr style="${rowStyle}">
       <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;min-width:28px;">
-        ${f.planned ? '<span style="color:#58a6ff;font-size:9px;">✈</span>' : lineNum}
+        ${lineNum}${f.planned ? '<br><span style="color:#58a6ff;font-size:9px;">✈</span>' : ''}
       </td>
       ${apCell(f.dep_icao, f.dep_iata, f.dep)}
       <td style="width:12px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
