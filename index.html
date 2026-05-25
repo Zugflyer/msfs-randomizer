@@ -700,15 +700,16 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input class="filter-input" id="lb-filter-input" placeholder="ICAO, city, airline..." oninput="applyLogbookFilter()" style="max-width:180px;">
         <span id="lb-filter-count" style="font-size:11px;color:var(--txt2);"></span>
         <button class="btn-toolbar-purple" onclick="showAddLogbookRow()">⊕ Add leg to logbook</button>
-        <button class="btn-toolbar-red" onclick="clearLogbook()">⊗ Clear logbook</button>
-        <button class="btn-toolbar" onclick="document.getElementById('lb-xlsx-input').click()">⬆ Import new logbook XLSX</button>
-        <input type="file" id="lb-xlsx-input" accept=".xlsx" style="display:none;" onchange="importLogbookXlsx(this)">
+
         <span id="lb-status" style="font-size:11px;color:var(--txt3);"></span>
         <div style="flex:1;min-width:16px;"></div>
         <span id="lb-count" style="font-size:11px;color:var(--txt2);font-weight:600;"></span>
       </div>
       <!-- Inline add-leg row -->
       <div id="lb-add-row" style="display:none;padding:6px 14px;background:var(--surf);border-bottom:1px solid var(--bdr);gap:8px;align-items:center;flex-wrap:wrap;">
+        <input id="lb-in-linenum" placeholder="Line # (opt)" type="number" min="1"
+          style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);"
+          title="Insert at this line number (leave empty to append)">
         <div style="position:relative;">
           <input id="lb-in-dep" placeholder="Dep ICAO/city" oninput="this.value=this.value.toUpperCase();lbSuggest(this,'dep')" onkeydown="lbTabKey(event,'dep')" style="width:130px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
           <div id="lb-dep-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:260px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:180px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
@@ -721,6 +722,34 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <input id="lb-in-aircraft" placeholder="Aircraft" maxlength="8" oninput="this.value=this.value.toUpperCase()" style="width:80px;font-size:12px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);">
         <button class="btn-toolbar-purple" onclick="addLogbookLeg()">+ Add</button>
         <button onclick="showAddLogbookRow()" style="font-size:11px;padding:4px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">✕</button>
+      </div>
+      <!-- Logbook Edit Modal -->
+      <div id="lb-edit-modal" style="display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.65);align-items:center;justify-content:center;">
+        <div style="background:var(--surf);border:1px solid var(--bdr);border-radius:10px;padding:18px 20px;min-width:340px;max-width:95vw;box-shadow:0 8px 32px rgba(0,0,0,.6);">
+          <div style="font-size:12px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;margin-bottom:12px;">Edit Flight <span id="lb-edit-linenum" style="color:var(--acc2);"></span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
+            <div>
+              <div style="font-size:10px;color:var(--txt3);margin-bottom:3px;">Departure ICAO</div>
+              <div style="position:relative;">
+                <input id="lb-edit-dep" placeholder="DEP ICAO/city" oninput="this.value=this.value.toUpperCase();lbEditSuggest(this,'dep')"
+                  style="width:100%;font-size:12px;padding:5px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+                <div id="lb-edit-dep-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9100;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--txt3);margin-bottom:3px;">Arrival ICAO</div>
+              <div style="position:relative;">
+                <input id="lb-edit-arr" placeholder="ARR ICAO/city" oninput="this.value=this.value.toUpperCase();lbEditSuggest(this,'arr')"
+                  style="width:100%;font-size:12px;padding:5px 8px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);">
+                <div id="lb-edit-arr-suggest" style="display:none;position:absolute;top:100%;left:0;right:0;z-index:9100;background:var(--surf);border:1px solid var(--bdr);border-radius:var(--r);max-height:160px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:14px;">
+            <button onclick="closeEditLbRow()" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">Cancel</button>
+            <button onclick="saveEditLbRow()" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Save</button>
+          </div>
+        </div>
       </div>
       <!-- Top row: table left (5 rows) + Europa map right -->
       <div style="display:flex;flex:0 0 auto;border-bottom:1px solid var(--bdr);overflow:hidden;">
@@ -2304,10 +2333,11 @@ function addLogbookLeg() {
   const arr = lbSelectedAps['arr'] ? lbSelectedAps['arr'][0] : (arrInput?.value||'').trim().toUpperCase();
   const airline = (document.getElementById('lb-in-airline')?.value || '').trim().toUpperCase();
   const aircraft = (document.getElementById('lb-in-aircraft')?.value || '').trim().toUpperCase();
+  const lineNumRaw = (document.getElementById('lb-in-linenum')?.value || '').trim();
   if (!dep || !arr) { alert('Please enter departure and arrival airports'); return; }
   const depDb = schedByCode[dep] || (lbSelectedAps['dep']);
   const arrDb = schedByCode[arr] || (lbSelectedAps['arr']);
-  logbookFlights.push({
+  const newFlight = {
     dep: depDb ? depDb[7]||depDb[2] : dep,
     dep_icao: depDb?depDb[0]:dep, dep_iata: depDb?depDb[1]||'':'',
     dep_lat: depDb?depDb[3]:null, dep_lon: depDb?depDb[4]:null,
@@ -2315,8 +2345,14 @@ function addLogbookLeg() {
     arr_icao: arrDb?arrDb[0]:arr, arr_iata: arrDb?arrDb[1]||'':'',
     arr_lat: arrDb?arrDb[3]:null, arr_lon: arrDb?arrDb[4]:null,
     airline, aircraft,
-  });
-  ['lb-in-dep','lb-in-arr','lb-in-airline','lb-in-aircraft'].forEach(id => {
+  };
+  if (lineNumRaw !== '') {
+    const lineNum = Math.max(1, Math.min(parseInt(lineNumRaw, 10), logbookFlights.length + 1));
+    logbookFlights.splice(lineNum - 1, 0, newFlight);
+  } else {
+    logbookFlights.push(newFlight);
+  }
+  ['lb-in-dep','lb-in-arr','lb-in-airline','lb-in-aircraft','lb-in-linenum'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   lbSelectedAps = {};
@@ -3492,10 +3528,12 @@ function toggleSurfaceMode(idx, mode) {
   // If already this mode, switch back to air
   if (leg.surfaceMode === mode) {
     leg.surfaceMode = 'air';
-    leg.seaRouteWaypoints = null; // Clear cached route
+    leg.seaRouteWaypoints = null;
     leg.roadRouteWaypoints = null;
+    leg._calculatingRoute = false;
   } else {
     leg.surfaceMode = mode;
+    leg._calculatingRoute = true; // Flag to show we're calculating
     
     // For ship mode, calculate sea route
     if (mode === 'ship' && leg.dep && leg.arr) {
@@ -3508,6 +3546,7 @@ function toggleSurfaceMode(idx, mode) {
     } else {
       leg.seaRouteWaypoints = null;
       leg.roadRouteWaypoints = null;
+      leg._calculatingRoute = false;
     }
   }
   renderLegs();
@@ -3720,13 +3759,17 @@ async function calculateRoadRoute(legIdx, fromLonLat, toLonLat) {
     // OSRM API - free public server
     const url = `https://router.project-osrm.org/route/v1/driving/${fromLonLat[0]},${fromLonLat[1]};${toLonLat[0]},${toLonLat[1]}?overview=full&geometries=geojson`;
     
+    console.log('OSRM URL:', url);
+    
     const response = await fetch(url);
-    if (!response.ok) throw new Error('OSRM request failed');
+    if (!response.ok) throw new Error('OSRM request failed: ' + response.status);
     
     const data = await response.json();
+    console.log('OSRM response:', data);
     
     if (data.code !== 'Ok' || !data.routes || data.routes.length === 0) {
-      console.warn('No road route found');
+      console.warn('No road route found:', data.code);
+      if (legs[legIdx]) legs[legIdx]._calculatingRoute = false;
       return;
     }
     
@@ -3741,12 +3784,14 @@ async function calculateRoadRoute(legIdx, fromLonLat, toLonLat) {
     // Store in leg
     if (legs[legIdx]) {
       legs[legIdx].roadRouteWaypoints = waypoints;
+      legs[legIdx]._calculatingRoute = false;
       renderLegs();
       if (rosterMap) updateRosterLines();
     }
   } catch(e) {
     console.error('Road route error:', e);
-    alert('Could not calculate road route. Check console for details.');
+    if (legs[legIdx]) legs[legIdx]._calculatingRoute = false;
+    alert('Could not calculate road route: ' + e.message);
   }
 }
 
@@ -3774,26 +3819,36 @@ function renderLogbook() {
 
   tbody.innerHTML = flights.map((f, i) => {
     const realIdx = logbookFlights.indexOf(f);
+    const lineNum = realIdx + 1; // Always show true position in array
     const logoHtml = f.airline ? airlineLogoHtml(f.airline.toUpperCase()) : '<span></span>';
 
-    // Planned flights: blue tinted row
     const rowStyle = f.planned
       ? 'border-bottom:1px solid rgba(88,166,255,.3);background:rgba(88,166,255,.06);'
       : 'border-bottom:1px solid var(--bdr);';
 
     const actionBtn = f.planned
-      ? `<td style="padding:2px 4px;white-space:nowrap;display:flex;gap:4px;align-items:center;">
-          <button onclick="markFlightLanded(${realIdx})" title="Mark as flown"
-            style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid #58a6ff;background:rgba(88,166,255,.15);color:#58a6ff;cursor:pointer;white-space:nowrap;">
-            ✈ Landed
-          </button>
-          <button class="btn-del" onclick="deleteLogbookFlight(${realIdx})" title="Delete">✕</button>
+      ? `<td style="padding:2px 4px;white-space:nowrap;">
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button onclick="openEditLbRow(${realIdx})" title="Edit flight"
+              style="font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid var(--bdr);background:rgba(255,255,255,.06);color:var(--txt2);cursor:pointer;">✎</button>
+            <button onclick="markFlightLanded(${realIdx})" title="Mark as flown"
+              style="font-size:10px;padding:2px 7px;border-radius:3px;border:1px solid #58a6ff;background:rgba(88,166,255,.15);color:#58a6ff;cursor:pointer;white-space:nowrap;">
+              ✈ Landed
+            </button>
+            <button class="btn-del" onclick="deleteLogbookFlight(${realIdx})" title="Delete">✕</button>
+          </div>
         </td>`
-      : `<td style="padding:2px 4px;"><button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button></td>`;
+      : `<td style="padding:2px 4px;white-space:nowrap;">
+          <div style="display:flex;gap:4px;align-items:center;">
+            <button onclick="openEditLbRow(${realIdx})" title="Edit flight"
+              style="font-size:10px;padding:2px 6px;border-radius:3px;border:1px solid var(--bdr);background:rgba(255,255,255,.06);color:var(--txt2);cursor:pointer;">✎</button>
+            <button class="btn-del" onclick="deleteLogbookFlight(${realIdx})">✕</button>
+          </div>
+        </td>`;
 
     return `<tr style="${rowStyle}">
-      <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;">
-        ${f.planned ? '<span style="color:#58a6ff;font-size:9px;">✈</span>' : i+1}
+      <td style="padding:3px 5px;font-size:10px;color:var(--txt3);text-align:right;white-space:nowrap;min-width:28px;">
+        ${f.planned ? '<span style="color:#58a6ff;font-size:9px;">✈</span>' : lineNum}
       </td>
       ${apCell(f.dep_icao, f.dep_iata, f.dep)}
       <td style="width:12px;background:rgba(255,255,255,.025);border-left:1px solid var(--bdr);"></td>
@@ -3837,6 +3892,97 @@ function deleteLogbookFlight(i) {
   renderLogbook();
   if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); }
 }
+
+// ── Logbook edit modal ──────────────────────────────────────────────────────
+let _lbEditIdx = null;
+let _lbEditAps = {};
+
+function openEditLbRow(idx) {
+  const f = logbookFlights[idx]; if (!f) return;
+  _lbEditIdx = idx;
+  _lbEditAps = {};
+  const modal = document.getElementById('lb-edit-modal');
+  document.getElementById('lb-edit-linenum').textContent = `#${idx + 1}`;
+  document.getElementById('lb-edit-dep').value = f.dep_icao || '';
+  document.getElementById('lb-edit-arr').value = f.arr_icao || '';
+  modal.style.display = 'flex';
+  setTimeout(() => document.getElementById('lb-edit-dep')?.focus(), 50);
+}
+
+function closeEditLbRow() {
+  document.getElementById('lb-edit-modal').style.display = 'none';
+  ['lb-edit-dep-suggest','lb-edit-arr-suggest'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.style.display = 'none';
+  });
+  _lbEditIdx = null;
+  _lbEditAps = {};
+}
+
+function lbEditSuggest(inputEl, side) {
+  const q = inputEl.value.trim().toUpperCase();
+  const boxId = 'lb-edit-' + side + '-suggest';
+  const box = document.getElementById(boxId);
+  if (!box) return;
+  _lbEditAps[side] = null;
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().includes(q)
+  ).slice(0, 10);
+  if (!hits.length) { box.style.display = 'none'; return; }
+  box.innerHTML = hits.map(ap =>
+    `<div class="leg-sug-item" onmousedown="lbEditSelectAp(event,'${ap[0]}','${side}')">
+      <span class="leg-sug-icao">${ap[0]}</span>
+      ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+      ${ap[7]||ap[2]}
+      <span style="color:var(--txt3);font-size:10px;margin-left:3px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function lbEditSelectAp(e, code, side) {
+  e.preventDefault();
+  const ap = schedByCode[code]; if (!ap) return;
+  _lbEditAps[side] = ap;
+  document.getElementById('lb-edit-' + side).value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
+  document.getElementById('lb-edit-' + side + '-suggest').style.display = 'none';
+}
+
+function saveEditLbRow() {
+  if (_lbEditIdx === null) return;
+  const f = logbookFlights[_lbEditIdx]; if (!f) return;
+
+  // Resolve DEP
+  const depAp = _lbEditAps['dep'];
+  const depRaw = (document.getElementById('lb-edit-dep')?.value || '').trim().toUpperCase().split(' ')[0].replace('/','');
+  if (depAp) {
+    f.dep_icao = depAp[0]; f.dep_iata = depAp[1]||'';
+    f.dep = depAp[7]||depAp[2]; f.dep_lat = depAp[3]; f.dep_lon = depAp[4];
+  } else if (depRaw && schedByCode[depRaw]) {
+    const ap = schedByCode[depRaw];
+    f.dep_icao = ap[0]; f.dep_iata = ap[1]||'';
+    f.dep = ap[7]||ap[2]; f.dep_lat = ap[3]; f.dep_lon = ap[4];
+  }
+
+  // Resolve ARR
+  const arrAp = _lbEditAps['arr'];
+  const arrRaw = (document.getElementById('lb-edit-arr')?.value || '').trim().toUpperCase().split(' ')[0].replace('/','');
+  if (arrAp) {
+    f.arr_icao = arrAp[0]; f.arr_iata = arrAp[1]||'';
+    f.arr = arrAp[7]||arrAp[2]; f.arr_lat = arrAp[3]; f.arr_lon = arrAp[4];
+  } else if (arrRaw && schedByCode[arrRaw]) {
+    const ap = schedByCode[arrRaw];
+    f.arr_icao = ap[0]; f.arr_iata = ap[1]||'';
+    f.arr = ap[7]||ap[2]; f.arr_lat = ap[3]; f.arr_lon = ap[4];
+  }
+
+  saveLogbook();
+  renderLogbook();
+  if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); }
+  closeEditLbRow();
+}
+// ───────────────────────────────────────────────────────────────────────────
 
 function markFlightLanded(i) {
   if (!logbookFlights[i]) return;
