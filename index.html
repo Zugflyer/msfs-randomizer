@@ -5781,9 +5781,22 @@ function renderAiGen() {
     swapBtn.onmouseenter = () => swapBtn.style.color = '#58a6ff';
     swapBtn.onmouseleave = () => swapBtn.style.color = '#555';
     swapBtn.onclick = () => {
-      const tmp = aiGenLegs[i].dep;
-      aiGenLegs[i].dep = aiGenLegs[i].arr;
-      aiGenLegs[i].arr = tmp;
+      if (!aiGenTarget) return;
+      const oldDep = aiGenLegs[i].dep;
+      const oldTarget = aiGenTarget;
+      // New target = old DEP, new DEP = old target
+      aiGenTarget = oldDep;
+      aiGenLegs.forEach(l => { l.arr = aiGenTarget; });
+      aiGenLegs[i].dep = oldTarget;
+      // Update target input display
+      if (aiGenTarget) {
+        document.getElementById('aigen-target-input').value = `${aiGenTarget[0]}${aiGenTarget[1]?' / '+aiGenTarget[1]:''} — ${aiGenTarget[7]||aiGenTarget[2]}`;
+        const box = document.getElementById('aigen-target-box');
+        box.style.display = 'flex'; box.innerHTML = apBox(aiGenTarget);
+      } else {
+        document.getElementById('aigen-target-input').value = '';
+        document.getElementById('aigen-target-box').style.display = 'none';
+      }
       renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i);
     };
     const btInp = document.createElement('input');
