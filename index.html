@@ -350,6 +350,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
     </button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-aigen" onclick="switchView('aigen')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      AI Generator
+    </button>
 
   </div>
   <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
@@ -657,6 +662,39 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
       <div style="flex:1;position:relative;min-height:200px;">
         <div id="tovisit-map" style="width:100%;height:100%;"></div>
+      </div>
+    </div>
+
+    <!-- ═══ AI GENERATOR ═══ -->
+    <div id="view-aigen" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
+      <div class="roster-top" style="flex:1;overflow-y:auto;">
+        <div class="sec-label-sm">AI Traffic Generator</div>
+
+        <!-- Target Airport row -->
+        <div style="padding:8px 12px 4px;display:flex;align-items:center;gap:10px;flex-shrink:0;border-bottom:1px solid var(--bdr);">
+          <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Target Airport</span>
+          <div style="position:relative;flex:0 0 auto;">
+            <input id="aigen-target-input" placeholder="ICAO or city…"
+              style="width:220px;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
+              oninput="aiGenTargetSuggest(this)">
+            <div id="aigen-target-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:280px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+          </div>
+          <div id="aigen-target-box" style="display:none;"></div>
+        </div>
+
+        <!-- Routes table -->
+        <div style="flex:1;overflow-y:auto;padding:8px 12px;" id="aigen-routes-wrap">
+          <div id="aigen-legs-container"></div>
+          <button onclick="aiGenAddLeg()"
+            style="margin-top:6px;font-size:11px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt2);cursor:pointer;">
+            + Add new route
+          </button>
+        </div>
+      </div>
+
+      <!-- Map -->
+      <div class="roster-map-wrap">
+        <div id="aigen-map"></div>
       </div>
     </div>
 
@@ -2470,7 +2508,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2481,7 +2519,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2498,7 +2536,13 @@ function switchView(view) {
       else initRosterMap();
     }, 120);
   }
-  if (view === 'tovisit') {
+  if (view === 'aigen') {
+    renderAiGen();
+    setTimeout(() => {
+      if (aiGenMap) aiGenMap.invalidateSize();
+      else initAiGenMap();
+    }, 120);
+  }
     setTimeout(() => {
       if (tovisitMap) tovisitMap.invalidateSize();
       else initTovisitMap();
@@ -5564,6 +5608,340 @@ function gatesAddRow() {
   renderGatesTable();
 }
 
-</script>
-</body>
-</html>
+// ════════════════════════════════════════════════════════════════════════════
+// AI GENERATOR
+// ════════════════════════════════════════════════════════════════════════════
+
+let aiGenLegs = [];       // array of route objects
+let aiGenTarget = null;   // selected target airport array
+let aiGenMap = null;
+let aiGenLayers = [];
+
+// ── Target airport suggest ───────────────────────────────────────────────────
+function aiGenTargetSuggest(inp) {
+  const q = inp.value.trim().toUpperCase();
+  const box = document.getElementById('aigen-target-suggest');
+  aiGenTarget = null;
+  document.getElementById('aigen-target-box').style.display = 'none';
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1]&&r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().includes(q)
+  ).slice(0, 10);
+  if (!hits.length) { box.style.display = 'none'; return; }
+  box.innerHTML = hits.map(ap =>
+    `<div class="leg-sug-item" onmousedown="aiGenSelectTarget(event,'${ap[0]}')">
+      <span class="leg-sug-icao">${ap[0]}</span>
+      ${ap[1]?`<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>`:''}
+      ${ap[7]||ap[2]}
+      <span style="color:var(--txt3);font-size:10px;margin-left:3px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function aiGenSelectTarget(e, code) {
+  e.preventDefault();
+  const ap = schedByCode[code]; if (!ap) return;
+  aiGenTarget = ap;
+  document.getElementById('aigen-target-input').value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
+  document.getElementById('aigen-target-suggest').style.display = 'none';
+  const box = document.getElementById('aigen-target-box');
+  box.style.display = 'flex';
+  box.innerHTML = apBox(ap);
+  renderAiGen();
+  updateAiGenMap();
+}
+
+// ── Data model ───────────────────────────────────────────────────────────────
+function aiGenEmptyLeg() {
+  return { dep: null, arr: null, airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
+           schedDepTime: '', schedArrTime: '' };
+}
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function renderAiGen() {
+  const c = document.getElementById('aigen-legs-container'); if (!c) return;
+  if (!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg());
+  c.innerHTML = '';
+
+  const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
+
+  aiGenLegs.forEach((leg, i) => {
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom:2px;';
+
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:5px 8px;flex-wrap:nowrap;overflow-x:auto;';
+
+    // ── Logo ──
+    const logoCell = document.createElement('div');
+    logoCell.style.cssText = 'display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border:1px solid rgba(255,255,255,.25);border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
+    logoCell.id = 'aigen-logo-' + i;
+    logoCell.innerHTML = leg.airline ? airlineLogoHtml(leg.airline) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
+
+    // ── Airline + EQP ──
+    const alCell = document.createElement('div');
+    alCell.style.cssText = bS + 'width:96px;min-width:96px;gap:5px;';
+    const alInp = document.createElement('input');
+    alInp.placeholder = 'Airline'; alInp.value = leg.airline||'';
+    alInp.maxLength = 5;
+    alInp.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:82px;text-align:center;letter-spacing:.04em;text-transform:uppercase;font-family:var(--ff);';
+    alInp.oninput = () => {
+      aiGenLegs[i].airline = alInp.value.toUpperCase();
+      alInp.value = alInp.value.toUpperCase();
+      document.getElementById('aigen-logo-'+i).innerHTML = aiGenLegs[i].airline ? airlineLogoHtml(aiGenLegs[i].airline) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
+      updateAiGenMap();
+    };
+    const acInp = document.createElement('input');
+    acInp.placeholder = 'EQP'; acInp.value = leg.aircraft||'';
+    acInp.maxLength = 8;
+    acInp.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:82px;text-align:center;letter-spacing:.04em;text-transform:uppercase;font-family:var(--ff);';
+    acInp.oninput = () => { aiGenLegs[i].aircraft = acInp.value.toUpperCase(); acInp.value = acInp.value.toUpperCase(); };
+    alCell.appendChild(alInp); alCell.appendChild(acInp);
+
+    // ── DEP ──
+    const depCell = document.createElement('div');
+    depCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
+    if (leg.dep) {
+      depCell.innerHTML = apBox(leg.dep);
+      depCell.style.cursor = 'pointer'; depCell.title = 'Click to change';
+      depCell.onclick = () => { aiGenLegs[i].dep = null; renderAiGen(); updateAiGenMap(); };
+    } else {
+      const w = document.createElement('div'); w.style.position = 'relative';
+      const inp2 = document.createElement('input');
+      inp2.placeholder = 'ICAO or city…';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+      w.appendChild(inp2); depCell.appendChild(w);
+      buildSuggestBox(inp2, ap => { aiGenLegs[i].dep = ap; renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i); });
+    }
+
+    // ── Block time arrow ──
+    const btCell = document.createElement('div');
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 5px;min-height:54px;gap:2px;';
+    const btColor = leg.blockTimeReal ? '#3fb950' : '#777';
+    const btWeight = leg.blockTimeReal ? '700' : '400';
+    const btStyle = leg.blockTimeReal ? '' : 'font-style:italic;';
+    btCell.innerHTML = '<div style="font-size:20px;color:#555;line-height:1;cursor:pointer;" onclick="aiGenFetchBlockTime('+i+')" title="Click to search">→</div>'
+      + '<input type="text" id="aigen-bt-'+i+'" value="'+(leg.blockTime||'')+'" placeholder="H:MM" '
+      + 'style="width:50px;font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';'+btStyle+'background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;" '
+      + 'oninput="aiGenLegs['+i+'].blockTime=this.value;aiGenLegs['+i+'].blockTimeReal=false;">';
+
+    // ── ARR ──
+    const arrCell = document.createElement('div');
+    arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
+    if (leg.arr) {
+      arrCell.innerHTML = apBox(leg.arr);
+      arrCell.style.cursor = 'pointer'; arrCell.title = 'Click to change';
+      arrCell.onclick = () => { aiGenLegs[i].arr = null; renderAiGen(); updateAiGenMap(); };
+    } else {
+      const w = document.createElement('div'); w.style.position = 'relative';
+      const inp2 = document.createElement('input');
+      inp2.placeholder = 'ICAO or city…';
+      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+      w.appendChild(inp2); arrCell.appendChild(w);
+      buildSuggestBox(inp2, ap => { aiGenLegs[i].arr = ap; renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i); });
+    }
+
+    // ── Dep time ──
+    const depTCell = document.createElement('div');
+    depTCell.style.cssText = bS + 'width:70px;min-width:70px;gap:3px;align-items:center;';
+    const depTInp = document.createElement('input');
+    depTInp.placeholder = '00:00'; depTInp.value = leg.schedDepTime||'';
+    depTInp.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:60px;text-align:center;font-family:monospace;';
+    depTInp.oninput = () => { aiGenLegs[i].schedDepTime = depTInp.value; aiGenCalcArrTime(i); };
+    depTInp.onblur = () => { depTInp.value = formatTimeStr(depTInp.value)||depTInp.value; aiGenLegs[i].schedDepTime = depTInp.value; aiGenCalcArrTime(i); };
+    const depTLabel = document.createElement('div');
+    depTLabel.style.cssText = 'font-size:9px;color:var(--txt3);text-align:center;';
+    depTLabel.textContent = 'DEP';
+    depTCell.appendChild(depTLabel); depTCell.appendChild(depTInp);
+
+    // ── Arr time (computed, readonly) ──
+    const arrTCell = document.createElement('div');
+    arrTCell.style.cssText = bS + 'width:70px;min-width:70px;gap:3px;align-items:center;';
+    const arrTLabel = document.createElement('div');
+    arrTLabel.style.cssText = 'font-size:9px;color:#4a9eda;text-align:center;';
+    arrTLabel.textContent = 'ARR';
+    const arrTVal = document.createElement('div');
+    arrTVal.id = 'aigen-arr-'+i;
+    arrTVal.style.cssText = 'font-size:12px;color:#4a9eda;font-family:monospace;text-align:center;';
+    arrTVal.textContent = leg.schedArrTime||'';
+    arrTCell.appendChild(arrTLabel); arrTCell.appendChild(arrTVal);
+
+    // ── Delete button ──
+    const delCell = document.createElement('div');
+    delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 2px;';
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '✕';
+    delBtn.style.cssText = 'font-size:11px;padding:3px 7px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;';
+    delBtn.onclick = () => { aiGenLegs.splice(i, 1); if (!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg()); renderAiGen(); updateAiGenMap(); };
+    delCell.appendChild(delBtn);
+
+    row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
+    row.appendChild(btCell); row.appendChild(arrCell);
+    row.appendChild(depTCell); row.appendChild(arrTCell);
+    row.appendChild(delCell);
+    wrapper.appendChild(row);
+
+    // ── Sub-row: Duplicate + Add new route ──
+    const sub = document.createElement('div');
+    sub.style.cssText = 'display:flex;gap:6px;padding:2px 8px 6px;';
+    const dupBtn = document.createElement('button');
+    dupBtn.textContent = '⧉ Duplicate leg';
+    dupBtn.style.cssText = 'font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
+    dupBtn.onclick = () => {
+      const copy = Object.assign({}, aiGenLegs[i]);
+      aiGenLegs.splice(i + 1, 0, copy);
+      renderAiGen(); updateAiGenMap();
+    };
+    const addBtn = document.createElement('button');
+    addBtn.textContent = '+ Add new route';
+    addBtn.style.cssText = 'font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
+    addBtn.onclick = () => {
+      aiGenLegs.splice(i + 1, 0, aiGenEmptyLeg());
+      renderAiGen();
+    };
+    sub.appendChild(dupBtn); sub.appendChild(addBtn);
+    wrapper.appendChild(sub);
+
+    c.appendChild(wrapper);
+  });
+}
+
+// ── Block time lookup ─────────────────────────────────────────────────────────
+async function aiGenFetchBlockTime(i) {
+  const leg = aiGenLegs[i];
+  if (!leg || !leg.dep || !leg.arr) return;
+  const btEl = document.getElementById('aigen-bt-'+i); if (!btEl) return;
+  btEl.value = '🔍'; btEl.style.color='#777';
+
+  const depIata = leg.dep[1]||leg.dep[0], arrIata = leg.arr[1]||leg.arr[0];
+  const apiKey = getApiKey();
+
+  if (apiKey) {
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body: JSON.stringify({ model:'claude-haiku-4-5-20251001', max_tokens:100,
+          tools:[{type:'web_search_20250305',name:'web_search'}],
+          messages:[{role:'user',content:`Search "flights ${depIata}-${arrIata} nonstop" and find nonstop duration. Reply ONLY in H:MM format (e.g. 1:05). If none, reply NONE.`}]
+        })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        const txt = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
+        const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
+        if (m && !txt.toUpperCase().includes('NONE')) {
+          aiGenLegs[i].blockTime = m[0]; aiGenLegs[i].blockTimeReal = true;
+          btEl.value = m[0]; btEl.style.color='#3fb950'; btEl.style.fontWeight='700'; btEl.style.fontStyle='';
+          aiGenCalcArrTime(i); return;
+        }
+      }
+    } catch(e) {}
+  }
+
+  // Fallback: great circle estimate
+  const R = 6371;
+  const φ1=leg.dep[3]*Math.PI/180, φ2=leg.arr[3]*Math.PI/180;
+  const Δφ=(leg.arr[3]-leg.dep[3])*Math.PI/180, Δλ=(leg.arr[4]-leg.dep[4])*Math.PI/180;
+  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  const spd=dist<200?400:dist<500?580:dist<2000?780:870;
+  const mins=Math.round(dist/spd*60)+(dist<500?15:25);
+  const h=Math.floor(mins/60), m=String(mins%60).padStart(2,'0');
+  const bt=h+':'+m;
+  aiGenLegs[i].blockTime = bt; aiGenLegs[i].blockTimeReal = false;
+  btEl.value = bt; btEl.style.color='#777'; btEl.style.fontStyle='italic';
+  aiGenCalcArrTime(i);
+}
+
+// ── Compute arrival time from dep + blockTime ─────────────────────────────────
+function aiGenCalcArrTime(i) {
+  const leg = aiGenLegs[i];
+  const el = document.getElementById('aigen-arr-'+i); if (!el) return;
+  if (!leg.schedDepTime || !leg.blockTime) { el.textContent = ''; leg.schedArrTime = ''; return; }
+  const dep = parseTimeToMins(leg.schedDepTime);
+  const bt = parseBlockTimeToMins(leg.blockTime);
+  if (dep === null || bt === null) { el.textContent = ''; return; }
+  const arr = (dep + bt) % (24 * 60);
+  const hh = String(Math.floor(arr / 60)).padStart(2,'0');
+  const mm = String(arr % 60).padStart(2,'0');
+  leg.schedArrTime = hh + ':' + mm;
+  el.textContent = leg.schedArrTime;
+}
+
+function parseTimeToMins(t) {
+  if (!t) return null;
+  const m = t.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1])*60 + parseInt(m[2]);
+}
+
+function parseBlockTimeToMins(bt) {
+  if (!bt) return null;
+  const m = bt.match(/^(\d+):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1])*60 + parseInt(m[2]);
+}
+
+function formatTimeStr(t) {
+  if (!t) return '';
+  const m = t.match(/^(\d{1,2}):?(\d{2})?$/);
+  if (!m) return t;
+  const h = m[1].padStart(2,'0'), mn = (m[2]||'00').padStart(2,'0');
+  return h + ':' + mn;
+}
+
+// ── Add leg button at bottom ──────────────────────────────────────────────────
+function aiGenAddLeg() {
+  aiGenLegs.push(aiGenEmptyLeg());
+  renderAiGen();
+}
+
+// ── Map ───────────────────────────────────────────────────────────────────────
+function initAiGenMap() {
+  if (aiGenMap) return;
+  const el = document.getElementById('aigen-map'); if (!el) return;
+  aiGenMap = L.map('aigen-map', { zoomControl:true, attributionControl:false });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+    { maxZoom:18 }).addTo(aiGenMap);
+  aiGenMap.setView([30, 10], 2);
+  updateAiGenMap();
+}
+
+function updateAiGenMap() {
+  if (!aiGenMap) return;
+  aiGenLayers.forEach(l => aiGenMap.removeLayer(l)); aiGenLayers = [];
+  const bounds = [];
+
+  aiGenLegs.forEach(leg => {
+    if (!leg.dep || !leg.arr) return;
+    const from = [leg.dep[3], leg.dep[4]], to = [leg.arr[3], leg.arr[4]];
+    const line = L.polyline([from, to], { color:'#58a6ff', weight:2, opacity:.7, dashArray:'6 4' });
+    line.addTo(aiGenMap); aiGenLayers.push(line);
+
+    const dDot = L.circleMarker(from, { radius:4, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:.9, weight:1 });
+    dDot.bindTooltip(`${leg.dep[0]}${leg.dep[1]?' / '+leg.dep[1]:''} — ${leg.dep[7]||leg.dep[2]}`, {direction:'top'});
+    dDot.addTo(aiGenMap); aiGenLayers.push(dDot);
+
+    const aDot = L.circleMarker(to, { radius:4, color:'#58a6ff', fillColor:'#1a2a3a', fillOpacity:1, weight:2 });
+    aDot.bindTooltip(`${leg.arr[0]}${leg.arr[1]?' / '+leg.arr[1]:''} — ${leg.arr[7]||leg.arr[2]}`, {direction:'top'});
+    aDot.addTo(aiGenMap); aiGenLayers.push(aDot);
+
+    bounds.push(from, to);
+  });
+
+  if (aiGenTarget) {
+    const tp = [aiGenTarget[3], aiGenTarget[4]];
+    const tDot = L.circleMarker(tp, { radius:7, color:'#f0883e', fillColor:'#f0883e', fillOpacity:.9, weight:2 });
+    tDot.bindTooltip(`Target: ${aiGenTarget[0]} — ${aiGenTarget[7]||aiGenTarget[2]}`, {direction:'top', permanent:false});
+    tDot.addTo(aiGenMap); aiGenLayers.push(tDot);
+    bounds.push(tp);
+  }
+
+  if (bounds.length > 1) aiGenMap.fitBounds(bounds, { padding:[30,30] });
+}
+
+// ════════════════════════════════════════════════════════════════════════════
