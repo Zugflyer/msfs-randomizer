@@ -2543,6 +2543,7 @@ function switchView(view) {
       else initAiGenMap();
     }, 120);
   }
+  if (view === 'tovisit') {
     setTimeout(() => {
       if (tovisitMap) tovisitMap.invalidateSize();
       else initTovisitMap();
