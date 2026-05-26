@@ -5808,12 +5808,9 @@ function renderAiGen() {
       aiGenLegs[i].arr = null;
     }
 
-    row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
-    row.appendChild(btCell); row.appendChild(arrCell);
-    row.appendChild(fixCell);
-    row.appendChild(delCell);
     // ── Fixed DEP / ARR time (optional) ──
     const fixCell = document.createElement('div');
+    fixCell.style.cssText = bS + 'width:80px;min-width:80px;gap:4px;align-items:center;';
     const fixLabel = document.createElement('div');
     fixLabel.style.cssText = 'font-size:9px;color:var(--txt3);text-align:center;white-space:nowrap;';
     fixLabel.textContent = 'Fix DEP / ARR';
@@ -5828,10 +5825,11 @@ function renderAiGen() {
     fixArrInp.type = 'text'; fixArrInp.placeholder = 'ARR'; fixArrInp.value = leg.fixedArrTime||'';
     fixArrInp.maxLength = 5;
     fixArrInp.style.cssText = 'background:transparent;border:1px solid rgba(100,180,255,.3);border-radius:4px;color:#4a9eda;font-size:11px;padding:2px 4px;width:68px;text-align:center;font-family:monospace;';
-    fixArrInp.title = 'Fix arrival time (optional) — block time is then calculated backwards';
+    fixArrInp.title = 'Fix arrival time (optional) — block time calculated backwards';
     fixArrInp.oninput = () => { aiGenLegs[i].fixedArrTime = fixArrInp.value; };
     fixArrInp.onblur = () => { fixArrInp.value = formatTimeStr(fixArrInp.value)||fixArrInp.value; aiGenLegs[i].fixedArrTime = fixArrInp.value; };
     fixCell.appendChild(fixLabel); fixCell.appendChild(fixDepInp); fixCell.appendChild(fixArrInp);
+
     const delCell = document.createElement('div');
     delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 2px;';
     const delBtn = document.createElement('button');
@@ -5842,7 +5840,6 @@ function renderAiGen() {
 
     row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
     row.appendChild(btCell); row.appendChild(arrCell);
-    row.appendChild(depTCell); row.appendChild(arrTCell);
     row.appendChild(fixCell);
     row.appendChild(delCell);
     wrapper.appendChild(row);
