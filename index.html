@@ -5771,16 +5771,29 @@ function renderAiGen() {
       buildSuggestBox(inp2, ap => { aiGenLegs[i].dep = ap; renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i); });
     }
 
-    // ── Block time arrow ──
+    // ── Swap button (↔ replaces arrow) ──
     const btCell = document.createElement('div');
-    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 5px;min-height:54px;gap:2px;';
-    const btColor = leg.blockTimeReal ? '#3fb950' : '#777';
-    const btWeight = leg.blockTimeReal ? '700' : '400';
-    const btStyle = leg.blockTimeReal ? '' : 'font-style:italic;';
-    btCell.innerHTML = '<div style="font-size:20px;color:#555;line-height:1;cursor:pointer;" onclick="aiGenFetchBlockTime('+i+')" title="Click to search">→</div>'
-      + '<input type="text" id="aigen-bt-'+i+'" value="'+(leg.blockTime||'')+'" placeholder="H:MM" '
-      + 'style="width:50px;font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';'+btStyle+'background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;" '
-      + 'oninput="aiGenLegs['+i+'].blockTime=this.value;aiGenLegs['+i+'].blockTimeReal=false;">';
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 4px;min-height:54px;gap:2px;';
+    const swapBtn = document.createElement('button');
+    swapBtn.innerHTML = '⇄';
+    swapBtn.title = 'Swap DEP ↔ ARR';
+    swapBtn.style.cssText = 'font-size:16px;background:transparent;border:none;color:#555;cursor:pointer;padding:2px 4px;line-height:1;';
+    swapBtn.onmouseenter = () => swapBtn.style.color = '#58a6ff';
+    swapBtn.onmouseleave = () => swapBtn.style.color = '#555';
+    swapBtn.onclick = () => {
+      const tmp = aiGenLegs[i].dep;
+      aiGenLegs[i].dep = aiGenLegs[i].arr;
+      aiGenLegs[i].arr = tmp;
+      renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i);
+    };
+    const btInp = document.createElement('input');
+    btInp.type = 'text'; btInp.id = 'aigen-bt-'+i;
+    btInp.value = leg.blockTime||''; btInp.placeholder = 'H:MM';
+    btInp.style.cssText = 'width:50px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?'700':'400')+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;';
+    btInp.onclick = () => aiGenFetchBlockTime(i);
+    btInp.title = 'Block time — click to auto-search';
+    btInp.oninput = () => { aiGenLegs[i].blockTime = btInp.value; aiGenLegs[i].blockTimeReal = false; };
+    btCell.appendChild(swapBtn); btCell.appendChild(btInp);
 
     // ── ARR (always = target airport) ──
     const arrCell = document.createElement('div');
@@ -5795,34 +5808,12 @@ function renderAiGen() {
       aiGenLegs[i].arr = null;
     }
 
-    // ── Dep time ──
-    const depTCell = document.createElement('div');
-    depTCell.style.cssText = bS + 'width:70px;min-width:70px;gap:3px;align-items:center;';
-    const depTInp = document.createElement('input');
-    depTInp.placeholder = '00:00'; depTInp.value = leg.schedDepTime||'';
-    depTInp.style.cssText = 'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:60px;text-align:center;font-family:monospace;';
-    depTInp.oninput = () => { aiGenLegs[i].schedDepTime = depTInp.value; aiGenCalcArrTime(i); };
-    depTInp.onblur = () => { depTInp.value = formatTimeStr(depTInp.value)||depTInp.value; aiGenLegs[i].schedDepTime = depTInp.value; aiGenCalcArrTime(i); };
-    const depTLabel = document.createElement('div');
-    depTLabel.style.cssText = 'font-size:9px;color:var(--txt3);text-align:center;';
-    depTLabel.textContent = 'DEP';
-    depTCell.appendChild(depTLabel); depTCell.appendChild(depTInp);
-
-    // ── Arr time (computed, readonly) ──
-    const arrTCell = document.createElement('div');
-    arrTCell.style.cssText = bS + 'width:70px;min-width:70px;gap:3px;align-items:center;';
-    const arrTLabel = document.createElement('div');
-    arrTLabel.style.cssText = 'font-size:9px;color:#4a9eda;text-align:center;';
-    arrTLabel.textContent = 'ARR';
-    const arrTVal = document.createElement('div');
-    arrTVal.id = 'aigen-arr-'+i;
-    arrTVal.style.cssText = 'font-size:12px;color:#4a9eda;font-family:monospace;text-align:center;';
-    arrTVal.textContent = leg.schedArrTime||'';
-    arrTCell.appendChild(arrTLabel); arrTCell.appendChild(arrTVal);
-
+    row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
+    row.appendChild(btCell); row.appendChild(arrCell);
+    row.appendChild(fixCell);
+    row.appendChild(delCell);
     // ── Fixed DEP / ARR time (optional) ──
     const fixCell = document.createElement('div');
-    fixCell.style.cssText = bS + 'width:80px;min-width:80px;gap:4px;align-items:center;';
     const fixLabel = document.createElement('div');
     fixLabel.style.cssText = 'font-size:9px;color:var(--txt3);text-align:center;white-space:nowrap;';
     fixLabel.textContent = 'Fix DEP / ARR';
@@ -6020,7 +6011,7 @@ function updateAiGenMap() {
 
 async function generateAiFlightplan() {
   if (!aiGenTarget) { alert('Please select a Target Airport first.'); return; }
-  const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.schedDepTime && l.blockTime);
+  const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.blockTime);
   if (!validLegs.length) { alert('Please fill in at least one complete route (DEP, Airline, EQP, Dep Time, Block Time).'); return; }
 
   const statusEl = document.getElementById('aigen-gen-status');
@@ -6124,10 +6115,8 @@ async function generateAiFlightplan() {
       } else if (leg.fixedArrTime) {
         outArrMins = parseTimeToMins(leg.fixedArrTime) ?? (depFromMins + btMins);
         outDepMins = outArrMins - btMins;
-      } else if (leg.schedDepTime) {
-        outDepMins = parseTimeToMins(leg.schedDepTime) ?? depFromMins;
-        outArrMins = outDepMins + btMins;
       } else {
+        // Free scheduling: place at depFromMins
         outDepMins = depFromMins;
         outArrMins = outDepMins + btMins;
       }
