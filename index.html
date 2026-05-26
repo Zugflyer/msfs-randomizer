@@ -5993,6 +5993,13 @@ function updateAiGenMap() {
     dDot.bindTooltip(`${leg.dep[0]}${leg.dep[1]?' / '+leg.dep[1]:''} — ${leg.dep[7]||leg.dep[2]}`, {direction:'top'});
     dDot.addTo(aiGenMap); aiGenLayers.push(dDot);
 
+    // If ARR is different from target (swapped), show it as a blue dot too
+    if (leg.arr && aiGenTarget && leg.arr[0] !== aiGenTarget[0]) {
+      const aDot = L.circleMarker(to, { radius:3, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:.9, weight:1 });
+      aDot.bindTooltip(`${leg.arr[0]}${leg.arr[1]?' / '+leg.arr[1]:''} — ${leg.arr[7]||leg.arr[2]}`, {direction:'top'});
+      aDot.addTo(aiGenMap); aiGenLayers.push(aDot);
+    }
+
     bounds.push(from, to);
   });
 
@@ -6133,8 +6140,10 @@ async function generateAiFlightplan() {
     }));
 
     // Build one day schedule: chain all routes sequentially
+    // Random start within first 90 min of window (on 5-min boundary)
+    const randomOffsetSlots = Math.floor(Math.random() * 18); // 0–17 × 5min = 0–85min
     const daySchedule = [];
-    let cursor = utcDepFrom;
+    let cursor = roundUp5(utcDepFrom + randomOffsetSlots * 5);
 
     legsOfCombo.forEach((leg, li) => {
       const btMins = parseBlockTimeToMins(leg.blockTime) || 90;
