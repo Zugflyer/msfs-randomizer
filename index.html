@@ -667,7 +667,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
     <!-- ═══ AI GENERATOR ═══ -->
     <div id="view-aigen" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
-      <div class="roster-top" style="flex:1;overflow-y:auto;">
+      <div class="roster-top" style="overflow-y:auto;max-height:55%;">
         <div class="sec-label-sm">AI Traffic Generator</div>
 
         <!-- Target Airport row -->
@@ -5650,6 +5650,8 @@ function aiGenSelectTarget(e, code) {
   const box = document.getElementById('aigen-target-box');
   box.style.display = 'flex';
   box.innerHTML = apBox(ap);
+  // Sync all existing legs to new target
+  aiGenLegs.forEach(l => { l.arr = ap; });
   renderAiGen();
   updateAiGenMap();
 }
@@ -5728,20 +5730,17 @@ function renderAiGen() {
       + 'style="width:50px;font-size:11px;font-family:monospace;color:'+btColor+';font-weight:'+btWeight+';'+btStyle+'background:transparent;border:1px solid rgba(255,255,255,0.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;" '
       + 'oninput="aiGenLegs['+i+'].blockTime=this.value;aiGenLegs['+i+'].blockTimeReal=false;">';
 
-    // ── ARR ──
+    // ── ARR (always = target airport) ──
     const arrCell = document.createElement('div');
     arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
-    if (leg.arr) {
-      arrCell.innerHTML = apBox(leg.arr);
-      arrCell.style.cursor = 'pointer'; arrCell.title = 'Click to change';
-      arrCell.onclick = () => { aiGenLegs[i].arr = null; renderAiGen(); updateAiGenMap(); };
+    if (aiGenTarget) {
+      arrCell.innerHTML = apBox(aiGenTarget);
+      arrCell.title = 'Arrival = Target Airport';
+      // ensure leg.arr is always synced to target
+      aiGenLegs[i].arr = aiGenTarget;
     } else {
-      const w = document.createElement('div'); w.style.position = 'relative';
-      const inp2 = document.createElement('input');
-      inp2.placeholder = 'ICAO or city…';
-      inp2.style.cssText = 'width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
-      w.appendChild(inp2); arrCell.appendChild(w);
-      buildSuggestBox(inp2, ap => { aiGenLegs[i].arr = ap; renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i); });
+      arrCell.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:6px 8px;border:1px dashed rgba(255,255,255,.2);border-radius:5px;">Set Target Airport first</div>';
+      aiGenLegs[i].arr = null;
     }
 
     // ── Dep time ──
