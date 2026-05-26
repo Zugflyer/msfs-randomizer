@@ -6014,148 +6014,181 @@ function updateAiGenMap() {
 async function generateAiFlightplan() {
   if (!aiGenTarget) { alert('Please select a Target Airport first.'); return; }
   const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.blockTime);
-  if (!validLegs.length) { alert('Please fill in at least one complete route (DEP, Airline, EQP, Dep Time, Block Time).'); return; }
+  if (!validLegs.length) { alert('Please fill in at least one complete route (DEP, Airline, EQP, Block Time).'); return; }
 
   const statusEl = document.getElementById('aigen-gen-status');
   const dlArea = document.getElementById('aigen-download-area');
   dlArea.style.display = 'none';
-  statusEl.textContent = '⏳ Searching registrations…';
+  statusEl.textContent = '⏳ Looking up UTC offset…';
 
   const targetIcao = aiGenTarget[0];
-
-  // Unique aircraft types
-  const acTypes = [...new Set(validLegs.map(l => l.aircraft.toUpperCase()))];
-
-  // Aircraft file lines
-  const acLines = acTypes.map((type, i) => {
-    const airline = validLegs.find(l => l.aircraft.toUpperCase() === type)?.airline || '';
-    return `AC#${i+1},490,"AIGAIM_${airline} ${type} NCv2"`;
-  });
-
-  // Fetch registrations via Claude API
-  statusEl.textContent = '⏳ Fetching real registrations via AI…';
-  const regMap = {};
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
 
-  for (const type of acTypes) {
-    const airline = validLegs.find(l => l.aircraft.toUpperCase() === type)?.airline || '';
-    let regs = [];
+  // UTC offset lookup
+  let utcOffsetHours = 0;
+  if (apiKey) {
+    try {
+      const r = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
+          'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:60,
+          messages:[{role:'user',content:
+            `What is the UTC offset in summer (e.g. CEST=+2, BST=+1) for airport ${targetIcao} (${aiGenTarget[7]||aiGenTarget[2]})?`+
+            ` Reply ONLY with a number like 2 or -5 or 0. No other text.`
+          }]
+        })
+      });
+      if (r.ok) {
+        const d = await r.json();
+        const t = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();
+        const m = t.match(/^-?\d+(\.\d+)?/);
+        if (m) utcOffsetHours = parseFloat(m[0]);
+      }
+    } catch(e) {}
+  }
+  statusEl.textContent = `⏳ UTC${utcOffsetHours>=0?'+':''}${utcOffsetHours} — fetching registrations & flight numbers…`;
+
+  // Unique airline+EQP combos
+  const acCombos = [];
+  validLegs.forEach(l => {
+    const key = `${l.airline.toUpperCase()}|${l.aircraft.toUpperCase()}`;
+    if (!acCombos.find(c => c.key === key))
+      acCombos.push({ key, airline: l.airline.toUpperCase(), type: l.aircraft.toUpperCase() });
+  });
+  const acLines = acCombos.map((c, i) => `AC#${i+1},490,"AIGAIM_${c.airline} ${c.type} NCv2"`);
+
+  // Fetch registrations + flight numbers
+  const comboMeta = {};
+  for (const combo of acCombos) {
+    let regs = [], flNums = [];
     if (apiKey) {
       try {
-        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        const r = await fetch('https://api.anthropic.com/v1/messages', {
           method:'POST',
           headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
             'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-          body:JSON.stringify({
-            model:'claude-sonnet-4-20250514', max_tokens:300,
+          body:JSON.stringify({ model:'claude-sonnet-4-20250514', max_tokens:500,
             tools:[{type:'web_search_20250305',name:'web_search'}],
             messages:[{role:'user',content:
-              `Search for real current aircraft registrations of ${airline} ${type}. `+
-              `Return ONLY a JSON array of exactly 6 registration strings like ["F-ABCD","F-EFGH"]. No other text.`
+              `Search for: 1) real current ${combo.airline} ${combo.type} aircraft registrations in their fleet. `+
+              `2) real flight numbers used by ${combo.airline} (4-digit numbers). `+
+              `Reply ONLY as JSON: {"regs":["XX-AAA","XX-BBB",...8 items],"flightNumbers":["1234","5678",...12 four-digit strings]}. No other text.`
             }]
           })
         });
-        if (resp.ok) {
-          const data = await resp.json();
-          const txt = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ');
-          const m = txt.match(/\[[\s\S]*?\]/);
-          if (m) { try { regs = JSON.parse(m[0]).slice(0,6); } catch(e){} }
+        if (r.ok) {
+          const d = await r.json();
+          const txt = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ');
+          const m = txt.match(/\{[\s\S]*?\}/);
+          if (m) {
+            try {
+              const obj = JSON.parse(m[0]);
+              regs = (obj.regs||[]).slice(0,10);
+              flNums = (obj.flightNumbers||[]).map(n=>String(n).padStart(4,'0')).slice(0,20);
+            } catch(e) {}
+          }
         }
       } catch(e) {}
     }
-    if (!regs.length) regs = generateFallbackRegs(airline, type);
-    regMap[type] = regs;
+    if (!regs.length) regs = generateFallbackRegs(combo.airline, combo.type);
+    if (!flNums.length) flNums = Array.from({length:20},(_,i)=>String(1000+i*13).padStart(4,'0'));
+    comboMeta[combo.key] = { regs, flNums };
   }
 
-  // Build rotations
-  statusEl.textContent = '⏳ Building weekly rotations…';
-  const DAYS = [1,2,3,4,5,6,0]; // Mon–Sun
+  // Operating window: local → UTC
+  const localDepFrom  = parseTimeToMins((document.getElementById('aigen-dep-from')?.value||'06:00').trim()) ?? 360;
+  const localArrUntil = parseTimeToMins((document.getElementById('aigen-arr-until')?.value||'23:00').trim()) ?? 1380;
+  const utcDepFrom    = roundUp5(localDepFrom  - utcOffsetHours*60);
+  const utcArrUntil   = roundUp5(localArrUntil - utcOffsetHours*60);
 
-  // Read operating window
-  const depFromStr = (document.getElementById('aigen-dep-from')?.value||'').trim();
-  const arrUntilStr = (document.getElementById('aigen-arr-until')?.value||'').trim();
-  const depFromMins = parseTimeToMins(depFromStr) ?? 0;         // default: midnight
-  const arrUntilMins = parseTimeToMins(arrUntilStr) ?? 23*60+59; // default: 23:59
-
-  // Read turnaround times by category
   const taTimes = {
-    regional:  parseInt(document.getElementById('aigen-ta-regional')?.value||'30') || 30,
-    narrowbody:parseInt(document.getElementById('aigen-ta-narrow')?.value||'45')   || 45,
-    heavy:     parseInt(document.getElementById('aigen-ta-heavy')?.value||'90')    || 90,
+    regional:   parseInt(document.getElementById('aigen-ta-regional')?.value||'30') || 30,
+    narrowbody: parseInt(document.getElementById('aigen-ta-narrow')?.value||'45')   || 45,
+    heavy:      parseInt(document.getElementById('aigen-ta-heavy')?.value||'90')    || 90,
   };
 
-  // Classify EQP type for turnaround
   function getTurnaround(eqp) {
     const e = (eqp||'').toUpperCase();
-    // Heavy: widebody types
-    if (/^(B74|B77|B78|B76|B75|A33|A34|A35|A38|A30|IL9|DC1|MD1|B74[789]|77[89]|A38[09]|B78[789])/.test(e)) return taTimes.heavy;
-    // Regional: small jets/turboprops
-    if (/^(AT[47]|DH[48C]|E1[35]|CRJ|ERJ|E[0-9]{3}|SF3|JS4|BE[34]|CS1|CNA)/.test(e)) return taTimes.regional;
-    return taTimes.narrowbody; // default
+    if (/^(B74|B77|B78|B76|B75|A33|A34|A35|A38|A30|IL9|DC1|MD1)/.test(e)) return taTimes.heavy;
+    if (/^(AT[47]|DH[48C]|CRJ|ERJ|E[12][0-9]{2}|SF3|JS4|BE[34]|CS1)/.test(e)) return taTimes.regional;
+    return taTimes.narrowbody;
   }
 
+  const DAYS = [1,2,3,4,5,6,0];
   const fpLines = ['//FSXDAYS=False'];
 
-  acTypes.forEach((type, typeIdx) => {
-    const acNum = typeIdx + 1;
-    const legsOfType = validLegs.filter(l => l.aircraft.toUpperCase() === type);
-    const regs = regMap[type] || generateFallbackRegs('', type);
-    const turnaround = getTurnaround(type);
+  acCombos.forEach((combo, comboIdx) => {
+    const acNum = comboIdx + 1;
+    const legsOfCombo = validLegs.filter(l =>
+      l.airline.toUpperCase() === combo.airline && l.aircraft.toUpperCase() === combo.type);
+    const { regs, flNums } = comboMeta[combo.key];
+    const ta = getTurnaround(combo.type);
 
-    // Build all segments for full week
-    let allSegs = [];
-    legsOfType.forEach((leg, li) => {
+    // Assign flight numbers
+    let flNumIdx = 0;
+    const routeFlNums = legsOfCombo.map(() => ({
+      out: flNums[flNumIdx++ % flNums.length],
+      ret: flNums[flNumIdx++ % flNums.length]
+    }));
+
+    // Build one day schedule: chain all routes sequentially
+    const daySchedule = [];
+    let cursor = utcDepFrom;
+
+    legsOfCombo.forEach((leg, li) => {
       const btMins = parseBlockTimeToMins(leg.blockTime) || 90;
-      const flOut = String(li * 2 + 1).padStart(4,'0');
-      const flRet = String(li * 2 + 2).padStart(4,'0');
-
-      // Resolve fixed/free times for outbound
-      let outDepMins, outArrMins;
+      const { out: flOut, ret: flRet } = routeFlNums[li];
+      let outDep;
       if (leg.fixedDepTime) {
-        outDepMins = parseTimeToMins(leg.fixedDepTime) ?? depFromMins;
-        outArrMins = outDepMins + btMins;
+        outDep = roundUp5(parseTimeToMins(leg.fixedDepTime) - utcOffsetHours*60);
       } else if (leg.fixedArrTime) {
-        outArrMins = parseTimeToMins(leg.fixedArrTime) ?? (depFromMins + btMins);
-        outDepMins = outArrMins - btMins;
+        outDep = roundUp5(parseTimeToMins(leg.fixedArrTime) - utcOffsetHours*60 - btMins);
       } else {
-        // Free scheduling: place at depFromMins
-        outDepMins = depFromMins;
-        outArrMins = outDepMins + btMins;
+        outDep = roundUp5(Math.max(cursor, utcDepFrom));
       }
+      const outArr = roundUp5(outDep + btMins);
+      const retDep = roundUp5(outArr + ta);
+      const retArr = roundUp5(retDep + btMins);
+      cursor = retArr + ta;
+      daySchedule.push({ outDep, outArr, retDep, retArr, flOut, flRet,
+        depIcao: leg.dep[0], arrIcao: leg.arr[0] });
+    });
 
-      // Return departs after turnaround, respecting operating window
-      let retDepMins = outArrMins + turnaround;
-      // If return departure would exceed arrUntilMins, push to next day's depFromMins
-      if (retDepMins > arrUntilMins) {
-        retDepMins = depFromMins + 24*60; // next day
-      }
-      const retArrMins = retDepMins + btMins;
-
+    // Build full week of segments
+    let allSegs = [];
+    daySchedule.forEach(slot => {
       DAYS.forEach(day => {
-        const dayIdx = DAYS.indexOf(day);
-        const resolveDay = (baseDayIdx, mins) => ({
-          day: DAYS[(baseDayIdx + Math.floor(mins/1440)) % 7],
-          mins: mins % 1440
+        const di = DAYS.indexOf(day);
+        const res = (baseDi, mins) => ({
+          day: DAYS[(baseDi + Math.floor(((mins%1440)+1440)%1440/1440 + Math.floor(mins/1440)))%7],
+          mins: ((mins%1440)+1440)%1440
         });
-        const d1 = resolveDay(dayIdx, outDepMins);
-        const d2 = resolveDay(dayIdx, outArrMins);
-        const d3 = resolveDay(dayIdx, retDepMins);
-        const d4 = resolveDay(dayIdx, retArrMins);
-
-        allSegs.push({ sortKey: dayIdx*1440+outDepMins%1440, day:d1.day, arrDay:d2.day, depMins:d1.mins, arrMins:d2.mins, flNum:flOut, depIcao:leg.dep[0], arrIcao:leg.arr[0] });
-        allSegs.push({ sortKey: dayIdx*1440+retDepMins%1440, day:d3.day, arrDay:d4.day, depMins:d3.mins, arrMins:d4.mins, flNum:flRet, depIcao:leg.arr[0], arrIcao:leg.dep[0] });
+        // simpler resolve
+        const resolve = (mins) => {
+          const total = di*1440 + mins;
+          return { day: DAYS[Math.floor(((total%10080)+10080)%10080/1440)], mins: ((mins%1440)+1440)%1440 };
+        };
+        const d1=resolve(slot.outDep), d2=resolve(slot.outArr);
+        const d3=resolve(slot.retDep), d4=resolve(slot.retArr);
+        allSegs.push({sortKey:di*1440+((slot.outDep%1440+1440)%1440),
+          day:d1.day, arrDay:d2.day, depMins:d1.mins, arrMins:d2.mins,
+          flNum:slot.flOut, depIcao:slot.depIcao, arrIcao:slot.arrIcao});
+        allSegs.push({sortKey:di*1440+((slot.retDep%1440+1440)%1440),
+          day:d3.day, arrDay:d4.day, depMins:d3.mins, arrMins:d4.mins,
+          flNum:slot.flRet, depIcao:slot.arrIcao, arrIcao:slot.depIcao});
       });
     });
 
     allSegs.sort((a,b) => a.sortKey-b.sortKey);
 
-    // Pack into registrations without time overlap (incl. turnaround buffer)
+    // Pack into minimum registrations
     const packed = [];
     allSegs.forEach(seg => {
       let placed = false;
       for (const rot of packed) {
         const last = rot[rot.length-1];
-        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins + turnaround;
+        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins + ta;
         const segStart = DAYS.indexOf(seg.day)*1440 + seg.depMins;
         if (segStart >= lastEnd) { rot.push(seg); placed=true; break; }
       }
@@ -6163,9 +6196,9 @@ async function generateAiFlightplan() {
     });
 
     packed.forEach((rotation, ri) => {
-      const reg = regs[ri] || generateFallbackRegs('',type)[0];
+      const reg = regs[ri % regs.length];
       const segs = rotation.map(s => {
-        const alt = 310 + Math.floor(Math.random()*10)*10;
+        const alt = roundUp5(310 + Math.floor(Math.random()*10)*10);
         return `${s.day}/${minsToHHMM(s.depMins)},${s.arrDay}/${minsToHHMM(s.arrMins)},${alt},F,${s.flNum},${s.arrIcao}`;
       }).join(',');
       fpLines.push(`AC#${acNum},${reg},1%,Week,IFR,${segs}`);
@@ -6183,7 +6216,11 @@ async function generateAiFlightplan() {
   document.getElementById('aigen-dl-flightplans').onclick = () => downloadTxt(fpContent, fpName);
 
   dlArea.style.display = 'flex';
-  statusEl.textContent = `✓ ${fpLines.length-1} registration(s) · ${acTypes.length} aircraft type(s)`;
+  statusEl.textContent = `✓ UTC${utcOffsetHours>=0?'+':''}${utcOffsetHours} · ${fpLines.length-1} registration(s) · ${acCombos.length} type(s)`;
+}
+
+function roundUp5(mins) {
+  return Math.ceil(mins / 5) * 5;
 }
 
 function minsToHHMM(mins) {
