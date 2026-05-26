@@ -5920,26 +5920,23 @@ function updateAiGenMap() {
   aiGenLegs.forEach(leg => {
     if (!leg.dep || !leg.arr) return;
     const from = [leg.dep[3], leg.dep[4]], to = [leg.arr[3], leg.arr[4]];
-    const line = L.polyline([from, to], { color:'#58a6ff', weight:2, opacity:.7, dashArray:'6 4' });
+
+    const line = new L.Geodesic([[from, to]], { color:'#58a6ff', weight:2, opacity:.85, steps:12 });
     line.addTo(aiGenMap); aiGenLayers.push(line);
 
-    const dDot = L.circleMarker(from, { radius:4, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:.9, weight:1 });
+    const dDot = L.circleMarker(from, { radius:3, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:.9, weight:1 });
     dDot.bindTooltip(`${leg.dep[0]}${leg.dep[1]?' / '+leg.dep[1]:''} — ${leg.dep[7]||leg.dep[2]}`, {direction:'top'});
     dDot.addTo(aiGenMap); aiGenLayers.push(dDot);
-
-    const aDot = L.circleMarker(to, { radius:4, color:'#58a6ff', fillColor:'#1a2a3a', fillOpacity:1, weight:2 });
-    aDot.bindTooltip(`${leg.arr[0]}${leg.arr[1]?' / '+leg.arr[1]:''} — ${leg.arr[7]||leg.arr[2]}`, {direction:'top'});
-    aDot.addTo(aiGenMap); aiGenLayers.push(aDot);
 
     bounds.push(from, to);
   });
 
   if (aiGenTarget) {
     const tp = [aiGenTarget[3], aiGenTarget[4]];
-    const tDot = L.circleMarker(tp, { radius:7, color:'#f0883e', fillColor:'#f0883e', fillOpacity:.9, weight:2 });
-    tDot.bindTooltip(`Target: ${aiGenTarget[0]} — ${aiGenTarget[7]||aiGenTarget[2]}`, {direction:'top', permanent:false});
+    const tDot = L.circleMarker(tp, { radius:4, color:'#58a6ff', fillColor:'#58a6ff', fillOpacity:1, weight:2 });
+    tDot.bindTooltip(`Target: ${aiGenTarget[0]} — ${aiGenTarget[7]||aiGenTarget[2]}`, {direction:'top'});
     tDot.addTo(aiGenMap); aiGenLayers.push(tDot);
-    bounds.push(tp);
+    if (!bounds.length) bounds.push(tp);
   }
 
   if (bounds.length > 1) aiGenMap.fitBounds(bounds, { padding:[30,30] });
