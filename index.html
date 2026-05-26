@@ -686,10 +686,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <!-- Routes table -->
         <div style="flex:1;overflow-y:auto;padding:8px 12px;" id="aigen-routes-wrap">
           <div id="aigen-legs-container"></div>
-          <button onclick="aiGenAddLeg()"
-            style="margin-top:6px;font-size:11px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt2);cursor:pointer;">
-            + Add new route
-          </button>
+          <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <button onclick="generateAiFlightplan()"
+              style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">
+              ✦ Generate AI Flightplan
+            </button>
+            <div id="aigen-gen-status" style="font-size:11px;color:var(--txt3);"></div>
+          </div>
+          <div id="aigen-download-area" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:var(--r);display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:#3fb950;font-weight:600;">✓ Files ready:</span>
+            <button id="aigen-dl-aircraft" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Aircraft_CRE_xxx.txt</button>
+            <button id="aigen-dl-flightplans" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Flightplans_CRE_xxx.txt</button>
+          </div>
         </div>
       </div>
 
@@ -5943,6 +5951,168 @@ function updateAiGenMap() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// AI FLIGHTPLAN GENERATOR — TTools format
+// ════════════════════════════════════════════════════════════════════════════
+
+async function generateAiFlightplan() {
+  if (!aiGenTarget) { alert('Please select a Target Airport first.'); return; }
+  const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.schedDepTime && l.blockTime);
+  if (!validLegs.length) { alert('Please fill in at least one complete route (DEP, Airline, EQP, Dep Time, Block Time).'); return; }
+
+  const statusEl = document.getElementById('aigen-gen-status');
+  const dlArea = document.getElementById('aigen-download-area');
+  dlArea.style.display = 'none';
+  statusEl.textContent = '⏳ Searching registrations…';
+
+  const targetIcao = aiGenTarget[0];
+
+  // Unique aircraft types
+  const acTypes = [...new Set(validLegs.map(l => l.aircraft.toUpperCase()))];
+
+  // Aircraft file lines
+  const acLines = acTypes.map((type, i) => {
+    const airline = validLegs.find(l => l.aircraft.toUpperCase() === type)?.airline || '';
+    return `AC#${i+1},490,"AIGAIM_${airline} ${type} NCv2"`;
+  });
+
+  // Fetch registrations via Claude API
+  statusEl.textContent = '⏳ Fetching real registrations via AI…';
+  const regMap = {};
+  const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
+
+  for (const type of acTypes) {
+    const airline = validLegs.find(l => l.aircraft.toUpperCase() === type)?.airline || '';
+    let regs = [];
+    if (apiKey) {
+      try {
+        const resp = await fetch('https://api.anthropic.com/v1/messages', {
+          method:'POST',
+          headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
+            'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+          body:JSON.stringify({
+            model:'claude-sonnet-4-20250514', max_tokens:300,
+            tools:[{type:'web_search_20250305',name:'web_search'}],
+            messages:[{role:'user',content:
+              `Search for real current aircraft registrations of ${airline} ${type}. `+
+              `Return ONLY a JSON array of exactly 6 registration strings like ["F-ABCD","F-EFGH"]. No other text.`
+            }]
+          })
+        });
+        if (resp.ok) {
+          const data = await resp.json();
+          const txt = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ');
+          const m = txt.match(/\[[\s\S]*?\]/);
+          if (m) { try { regs = JSON.parse(m[0]).slice(0,6); } catch(e){} }
+        }
+      } catch(e) {}
+    }
+    if (!regs.length) regs = generateFallbackRegs(airline, type);
+    regMap[type] = regs;
+  }
+
+  // Build rotations
+  statusEl.textContent = '⏳ Building weekly rotations…';
+  const DAYS = [1,2,3,4,5,6,0]; // Mon–Sun
+  const TURNAROUND = 60; // min ground time at target
+
+  const fpLines = ['//FSXDAYS=False'];
+
+  acTypes.forEach((type, typeIdx) => {
+    const acNum = typeIdx + 1;
+    const legsOfType = validLegs.filter(l => l.aircraft.toUpperCase() === type);
+    const regs = regMap[type] || generateFallbackRegs('', type);
+
+    // Build all segments for full week: each leg = daily outbound + return
+    let allSegs = [];
+    legsOfType.forEach((leg, li) => {
+      const btMins = parseBlockTimeToMins(leg.blockTime) || 90;
+      const depMins = parseTimeToMins(leg.schedDepTime) || 480;
+      const arrMins = depMins + btMins;
+      const retDepMins = arrMins + TURNAROUND;
+      const retArrMins = retDepMins + btMins;
+      const flOut = String(li * 2 + 1).padStart(4,'0');
+      const flRet = String(li * 2 + 2).padStart(4,'0');
+
+      DAYS.forEach(day => {
+        const dayIdx = DAYS.indexOf(day);
+        // Helper: resolve overflow across day boundary
+        const resolveDay = (baseDayIdx, mins) => ({
+          day: DAYS[(baseDayIdx + Math.floor(mins/(24*60))) % 7],
+          mins: mins % (24*60)
+        });
+        const d1 = resolveDay(dayIdx, depMins);
+        const d2 = resolveDay(dayIdx, arrMins);
+        const d3 = resolveDay(dayIdx, retDepMins);
+        const d4 = resolveDay(dayIdx, retArrMins);
+
+        allSegs.push({ sortKey: dayIdx*1440+depMins,  day:d1.day, arrDay:d2.day, depMins:d1.mins, arrMins:d2.mins, flNum:flOut, depIcao:leg.dep[0], arrIcao:leg.arr[0] });
+        allSegs.push({ sortKey: dayIdx*1440+retDepMins, day:d3.day, arrDay:d4.day, depMins:d3.mins, arrMins:d4.mins, flNum:flRet, depIcao:leg.arr[0], arrIcao:leg.dep[0] });
+      });
+    });
+
+    allSegs.sort((a,b) => a.sortKey-b.sortKey);
+
+    // Pack into registrations without overlap
+    const packed = []; // array of arrays
+    allSegs.forEach(seg => {
+      // Find first registration where seg fits (no time overlap)
+      let placed = false;
+      for (const rot of packed) {
+        const last = rot[rot.length-1];
+        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins;
+        const segStart = DAYS.indexOf(seg.day)*1440 + seg.depMins;
+        if (segStart >= lastEnd) { rot.push(seg); placed=true; break; }
+      }
+      if (!placed) packed.push([seg]);
+    });
+
+    packed.forEach((rotation, ri) => {
+      const reg = regs[ri] || generateFallbackRegs('',type)[0];
+      const segs = rotation.map(s => {
+        const alt = 310 + Math.floor(Math.random()*10)*10;
+        return `${s.day}/${minsToHHMM(s.depMins)},${s.arrDay}/${minsToHHMM(s.arrMins)},${alt},F,${s.flNum},${s.arrIcao}`;
+      }).join(',');
+      fpLines.push(`AC#${acNum},${reg},1%,Week,IFR,${segs}`);
+    });
+  });
+
+  const acContent = acLines.join('\n') + '\n';
+  const fpContent = fpLines.join('\n') + '\n';
+  const acName  = `Aircraft_CRE_${targetIcao}.txt`;
+  const fpName  = `Flightplans_CRE_${targetIcao}.txt`;
+
+  document.getElementById('aigen-dl-aircraft').textContent   = `⬇ ${acName}`;
+  document.getElementById('aigen-dl-flightplans').textContent = `⬇ ${fpName}`;
+  document.getElementById('aigen-dl-aircraft').onclick   = () => downloadTxt(acContent, acName);
+  document.getElementById('aigen-dl-flightplans').onclick = () => downloadTxt(fpContent, fpName);
+
+  dlArea.style.display = 'flex';
+  statusEl.textContent = `✓ ${fpLines.length-1} registration(s) · ${acTypes.length} aircraft type(s)`;
+}
+
+function minsToHHMM(mins) {
+  const m = ((mins % 1440) + 1440) % 1440;
+  return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+}
+
+function generateFallbackRegs(airline, type) {
+  const prefixes = {'AFR':'F-H','BAW':'G-Z','DLH':'D-A','UAE':'A6-E','AAL':'N',
+    'UAL':'N','DAL':'N','SWR':'HB-J','KLM':'PH-B','IBE':'EC-L'};
+  const p = prefixes[(airline||'').toUpperCase()] || 'OE-L';
+  const L = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  return Array.from({length:6},() => p + L[Math.floor(Math.random()*L.length)] + L[Math.floor(Math.random()*L.length)] + L[Math.floor(Math.random()*L.length)]);
+}
+
+function downloadTxt(content, filename) {
+  const blob = new Blob([content], {type:'text/plain'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download=filename;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 
 </script>
 </body>
