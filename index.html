@@ -672,15 +672,58 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div class="sec-label-sm">AI Traffic Generator</div>
 
         <!-- Target Airport row -->
-        <div style="padding:8px 12px 4px;display:flex;align-items:center;gap:10px;flex-shrink:0;border-bottom:1px solid var(--bdr);">
-          <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Target Airport</span>
-          <div style="position:relative;flex:0 0 auto;">
-            <input id="aigen-target-input" placeholder="ICAO or city…"
-              style="width:220px;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
-              oninput="aiGenTargetSuggest(this)">
-            <div id="aigen-target-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:280px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+        <div style="padding:8px 12px 8px;display:flex;align-items:center;gap:16px;flex-shrink:0;border-bottom:1px solid var(--bdr);flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Target Airport</span>
+            <div style="position:relative;flex:0 0 auto;">
+              <input id="aigen-target-input" placeholder="ICAO or city…"
+                style="width:220px;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
+                oninput="aiGenTargetSuggest(this)">
+              <div id="aigen-target-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:280px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:200px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+            </div>
+            <div id="aigen-target-box" style="display:none;"></div>
           </div>
-          <div id="aigen-target-box" style="display:none;"></div>
+
+          <!-- Operating window + turnaround -->
+          <div style="display:flex;flex-direction:column;gap:5px;">
+            <!-- Row 1: DEP from / ARR until -->
+            <div style="display:flex;align-items:center;gap:8px;">
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">DEP from</span>
+                <input id="aigen-dep-from" type="text" placeholder="06:00" maxlength="5"
+                  style="width:52px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;"
+                  onblur="this.value=formatTimeStr(this.value)||this.value">
+              </div>
+              <div style="display:flex;align-items:center;gap:4px;">
+                <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">ARR until</span>
+                <input id="aigen-arr-until" type="text" placeholder="23:00" maxlength="5"
+                  style="width:52px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;"
+                  onblur="this.value=formatTimeStr(this.value)||this.value">
+              </div>
+            </div>
+            <!-- Row 2: Turnaround times -->
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">Turnaround</span>
+              <div style="display:flex;align-items:center;gap:3px;">
+                <span style="font-size:9px;color:var(--txt3);">Regional</span>
+                <input id="aigen-ta-regional" type="number" placeholder="30" min="0" max="999"
+                  style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
+                <span style="font-size:9px;color:var(--txt3);">min</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:3px;">
+                <span style="font-size:9px;color:var(--txt3);">Narrowbody</span>
+                <input id="aigen-ta-narrow" type="number" placeholder="45" min="0" max="999"
+                  style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
+                <span style="font-size:9px;color:var(--txt3);">min</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:3px;">
+                <span style="font-size:9px;color:var(--txt3);">Heavy</span>
+                <input id="aigen-ta-heavy" type="number" placeholder="90" min="0" max="999"
+                  style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
+                <span style="font-size:9px;color:var(--txt3);">min</span>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- Routes table -->
@@ -5668,7 +5711,7 @@ function aiGenSelectTarget(e, code) {
 // ── Data model ───────────────────────────────────────────────────────────────
 function aiGenEmptyLeg() {
   return { dep: null, arr: null, airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
-           schedDepTime: '', schedArrTime: '' };
+           schedDepTime: '', schedArrTime: '', fixedDepTime: '', fixedArrTime: '' };
 }
 
 // ── Render ───────────────────────────────────────────────────────────────────
@@ -5777,7 +5820,27 @@ function renderAiGen() {
     arrTVal.textContent = leg.schedArrTime||'';
     arrTCell.appendChild(arrTLabel); arrTCell.appendChild(arrTVal);
 
-    // ── Delete button ──
+    // ── Fixed DEP / ARR time (optional) ──
+    const fixCell = document.createElement('div');
+    fixCell.style.cssText = bS + 'width:80px;min-width:80px;gap:4px;align-items:center;';
+    const fixLabel = document.createElement('div');
+    fixLabel.style.cssText = 'font-size:9px;color:var(--txt3);text-align:center;white-space:nowrap;';
+    fixLabel.textContent = 'Fix DEP / ARR';
+    const fixDepInp = document.createElement('input');
+    fixDepInp.type = 'text'; fixDepInp.placeholder = 'DEP'; fixDepInp.value = leg.fixedDepTime||'';
+    fixDepInp.maxLength = 5;
+    fixDepInp.style.cssText = 'background:transparent;border:1px solid rgba(255,165,0,.3);border-radius:4px;color:#ffa500;font-size:11px;padding:2px 4px;width:68px;text-align:center;font-family:monospace;';
+    fixDepInp.title = 'Fix departure time (optional) — overrides free scheduling';
+    fixDepInp.oninput = () => { aiGenLegs[i].fixedDepTime = fixDepInp.value; };
+    fixDepInp.onblur = () => { fixDepInp.value = formatTimeStr(fixDepInp.value)||fixDepInp.value; aiGenLegs[i].fixedDepTime = fixDepInp.value; };
+    const fixArrInp = document.createElement('input');
+    fixArrInp.type = 'text'; fixArrInp.placeholder = 'ARR'; fixArrInp.value = leg.fixedArrTime||'';
+    fixArrInp.maxLength = 5;
+    fixArrInp.style.cssText = 'background:transparent;border:1px solid rgba(100,180,255,.3);border-radius:4px;color:#4a9eda;font-size:11px;padding:2px 4px;width:68px;text-align:center;font-family:monospace;';
+    fixArrInp.title = 'Fix arrival time (optional) — block time is then calculated backwards';
+    fixArrInp.oninput = () => { aiGenLegs[i].fixedArrTime = fixArrInp.value; };
+    fixArrInp.onblur = () => { fixArrInp.value = formatTimeStr(fixArrInp.value)||fixArrInp.value; aiGenLegs[i].fixedArrTime = fixArrInp.value; };
+    fixCell.appendChild(fixLabel); fixCell.appendChild(fixDepInp); fixCell.appendChild(fixArrInp);
     const delCell = document.createElement('div');
     delCell.style.cssText = 'display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 2px;';
     const delBtn = document.createElement('button');
@@ -5789,6 +5852,7 @@ function renderAiGen() {
     row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
     row.appendChild(btCell); row.appendChild(arrCell);
     row.appendChild(depTCell); row.appendChild(arrTCell);
+    row.appendChild(fixCell);
     row.appendChild(delCell);
     wrapper.appendChild(row);
 
@@ -6013,7 +6077,29 @@ async function generateAiFlightplan() {
   // Build rotations
   statusEl.textContent = '⏳ Building weekly rotations…';
   const DAYS = [1,2,3,4,5,6,0]; // Mon–Sun
-  const TURNAROUND = 60; // min ground time at target
+
+  // Read operating window
+  const depFromStr = (document.getElementById('aigen-dep-from')?.value||'').trim();
+  const arrUntilStr = (document.getElementById('aigen-arr-until')?.value||'').trim();
+  const depFromMins = parseTimeToMins(depFromStr) ?? 0;         // default: midnight
+  const arrUntilMins = parseTimeToMins(arrUntilStr) ?? 23*60+59; // default: 23:59
+
+  // Read turnaround times by category
+  const taTimes = {
+    regional:  parseInt(document.getElementById('aigen-ta-regional')?.value||'30') || 30,
+    narrowbody:parseInt(document.getElementById('aigen-ta-narrow')?.value||'45')   || 45,
+    heavy:     parseInt(document.getElementById('aigen-ta-heavy')?.value||'90')    || 90,
+  };
+
+  // Classify EQP type for turnaround
+  function getTurnaround(eqp) {
+    const e = (eqp||'').toUpperCase();
+    // Heavy: widebody types
+    if (/^(B74|B77|B78|B76|B75|A33|A34|A35|A38|A30|IL9|DC1|MD1|B74[789]|77[89]|A38[09]|B78[789])/.test(e)) return taTimes.heavy;
+    // Regional: small jets/turboprops
+    if (/^(AT[47]|DH[48C]|E1[35]|CRJ|ERJ|E[0-9]{3}|SF3|JS4|BE[34]|CS1|CNA)/.test(e)) return taTimes.regional;
+    return taTimes.narrowbody; // default
+  }
 
   const fpLines = ['//FSXDAYS=False'];
 
@@ -6021,45 +6107,64 @@ async function generateAiFlightplan() {
     const acNum = typeIdx + 1;
     const legsOfType = validLegs.filter(l => l.aircraft.toUpperCase() === type);
     const regs = regMap[type] || generateFallbackRegs('', type);
+    const turnaround = getTurnaround(type);
 
-    // Build all segments for full week: each leg = daily outbound + return
+    // Build all segments for full week
     let allSegs = [];
     legsOfType.forEach((leg, li) => {
       const btMins = parseBlockTimeToMins(leg.blockTime) || 90;
-      const depMins = parseTimeToMins(leg.schedDepTime) || 480;
-      const arrMins = depMins + btMins;
-      const retDepMins = arrMins + TURNAROUND;
-      const retArrMins = retDepMins + btMins;
       const flOut = String(li * 2 + 1).padStart(4,'0');
       const flRet = String(li * 2 + 2).padStart(4,'0');
 
+      // Resolve fixed/free times for outbound
+      let outDepMins, outArrMins;
+      if (leg.fixedDepTime) {
+        outDepMins = parseTimeToMins(leg.fixedDepTime) ?? depFromMins;
+        outArrMins = outDepMins + btMins;
+      } else if (leg.fixedArrTime) {
+        outArrMins = parseTimeToMins(leg.fixedArrTime) ?? (depFromMins + btMins);
+        outDepMins = outArrMins - btMins;
+      } else if (leg.schedDepTime) {
+        outDepMins = parseTimeToMins(leg.schedDepTime) ?? depFromMins;
+        outArrMins = outDepMins + btMins;
+      } else {
+        outDepMins = depFromMins;
+        outArrMins = outDepMins + btMins;
+      }
+
+      // Return departs after turnaround, respecting operating window
+      let retDepMins = outArrMins + turnaround;
+      // If return departure would exceed arrUntilMins, push to next day's depFromMins
+      if (retDepMins > arrUntilMins) {
+        retDepMins = depFromMins + 24*60; // next day
+      }
+      const retArrMins = retDepMins + btMins;
+
       DAYS.forEach(day => {
         const dayIdx = DAYS.indexOf(day);
-        // Helper: resolve overflow across day boundary
         const resolveDay = (baseDayIdx, mins) => ({
-          day: DAYS[(baseDayIdx + Math.floor(mins/(24*60))) % 7],
-          mins: mins % (24*60)
+          day: DAYS[(baseDayIdx + Math.floor(mins/1440)) % 7],
+          mins: mins % 1440
         });
-        const d1 = resolveDay(dayIdx, depMins);
-        const d2 = resolveDay(dayIdx, arrMins);
+        const d1 = resolveDay(dayIdx, outDepMins);
+        const d2 = resolveDay(dayIdx, outArrMins);
         const d3 = resolveDay(dayIdx, retDepMins);
         const d4 = resolveDay(dayIdx, retArrMins);
 
-        allSegs.push({ sortKey: dayIdx*1440+depMins,  day:d1.day, arrDay:d2.day, depMins:d1.mins, arrMins:d2.mins, flNum:flOut, depIcao:leg.dep[0], arrIcao:leg.arr[0] });
-        allSegs.push({ sortKey: dayIdx*1440+retDepMins, day:d3.day, arrDay:d4.day, depMins:d3.mins, arrMins:d4.mins, flNum:flRet, depIcao:leg.arr[0], arrIcao:leg.dep[0] });
+        allSegs.push({ sortKey: dayIdx*1440+outDepMins%1440, day:d1.day, arrDay:d2.day, depMins:d1.mins, arrMins:d2.mins, flNum:flOut, depIcao:leg.dep[0], arrIcao:leg.arr[0] });
+        allSegs.push({ sortKey: dayIdx*1440+retDepMins%1440, day:d3.day, arrDay:d4.day, depMins:d3.mins, arrMins:d4.mins, flNum:flRet, depIcao:leg.arr[0], arrIcao:leg.dep[0] });
       });
     });
 
     allSegs.sort((a,b) => a.sortKey-b.sortKey);
 
-    // Pack into registrations without overlap
-    const packed = []; // array of arrays
+    // Pack into registrations without time overlap (incl. turnaround buffer)
+    const packed = [];
     allSegs.forEach(seg => {
-      // Find first registration where seg fits (no time overlap)
       let placed = false;
       for (const rot of packed) {
         const last = rot[rot.length-1];
-        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins;
+        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins + turnaround;
         const segStart = DAYS.indexOf(seg.day)*1440 + seg.depMins;
         if (segStart >= lastEnd) { rot.push(seg); placed=true; break; }
       }
