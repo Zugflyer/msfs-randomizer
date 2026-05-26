@@ -690,13 +690,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <div style="display:flex;align-items:center;gap:8px;">
               <div style="display:flex;align-items:center;gap:4px;">
                 <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">DEP from</span>
-                <input id="aigen-dep-from" type="text" placeholder="06:00" maxlength="5"
+                <input id="aigen-dep-from" type="text" placeholder="06:00" maxlength="5" value="06:00"
                   style="width:52px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;"
                   onblur="this.value=formatTimeStr(this.value)||this.value">
               </div>
               <div style="display:flex;align-items:center;gap:4px;">
                 <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">ARR until</span>
-                <input id="aigen-arr-until" type="text" placeholder="23:00" maxlength="5"
+                <input id="aigen-arr-until" type="text" placeholder="23:00" maxlength="5" value="23:00"
                   style="width:52px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;"
                   onblur="this.value=formatTimeStr(this.value)||this.value">
               </div>
@@ -706,19 +706,19 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">Turnaround</span>
               <div style="display:flex;align-items:center;gap:3px;">
                 <span style="font-size:9px;color:var(--txt3);">Regional</span>
-                <input id="aigen-ta-regional" type="number" placeholder="30" min="0" max="999"
+                <input id="aigen-ta-regional" type="number" placeholder="30" min="0" max="999" value="30"
                   style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
                 <span style="font-size:9px;color:var(--txt3);">min</span>
               </div>
               <div style="display:flex;align-items:center;gap:3px;">
                 <span style="font-size:9px;color:var(--txt3);">Narrowbody</span>
-                <input id="aigen-ta-narrow" type="number" placeholder="45" min="0" max="999"
+                <input id="aigen-ta-narrow" type="number" placeholder="45" min="0" max="999" value="45"
                   style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
                 <span style="font-size:9px;color:var(--txt3);">min</span>
               </div>
               <div style="display:flex;align-items:center;gap:3px;">
                 <span style="font-size:9px;color:var(--txt3);">Heavy</span>
-                <input id="aigen-ta-heavy" type="number" placeholder="90" min="0" max="999"
+                <input id="aigen-ta-heavy" type="number" placeholder="90" min="0" max="999" value="90"
                   style="width:44px;font-size:11px;padding:3px 4px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;">
                 <span style="font-size:9px;color:var(--txt3);">min</span>
               </div>
@@ -5781,22 +5781,9 @@ function renderAiGen() {
     swapBtn.onmouseenter = () => swapBtn.style.color = '#58a6ff';
     swapBtn.onmouseleave = () => swapBtn.style.color = '#555';
     swapBtn.onclick = () => {
-      if (!aiGenTarget) return;
       const oldDep = aiGenLegs[i].dep;
-      const oldTarget = aiGenTarget;
-      // New target = old DEP, new DEP = old target
-      aiGenTarget = oldDep;
-      aiGenLegs.forEach(l => { l.arr = aiGenTarget; });
-      aiGenLegs[i].dep = oldTarget;
-      // Update target input display
-      if (aiGenTarget) {
-        document.getElementById('aigen-target-input').value = `${aiGenTarget[0]}${aiGenTarget[1]?' / '+aiGenTarget[1]:''} — ${aiGenTarget[7]||aiGenTarget[2]}`;
-        const box = document.getElementById('aigen-target-box');
-        box.style.display = 'flex'; box.innerHTML = apBox(aiGenTarget);
-      } else {
-        document.getElementById('aigen-target-input').value = '';
-        document.getElementById('aigen-target-box').style.display = 'none';
-      }
+      aiGenLegs[i].dep = aiGenLegs[i].arr;
+      aiGenLegs[i].arr = oldDep;
       renderAiGen(); updateAiGenMap(); aiGenFetchBlockTime(i);
     };
     const btInp = document.createElement('input');
@@ -5811,11 +5798,16 @@ function renderAiGen() {
     // ── ARR (always = target airport) ──
     const arrCell = document.createElement('div');
     arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
-    if (aiGenTarget) {
-      arrCell.innerHTML = apBox(aiGenTarget);
-      arrCell.title = 'Arrival = Target Airport';
-      // ensure leg.arr is always synced to target
-      aiGenLegs[i].arr = aiGenTarget;
+    // Only force-sync to target if arr isn't already set to something else (e.g. after swap)
+    const arrAp = leg.arr || aiGenTarget;
+    if (arrAp) {
+      arrCell.innerHTML = apBox(arrAp);
+      arrCell.title = arrAp === aiGenTarget ? 'Arrival = Target Airport' : 'Click to reset to Target Airport';
+      if (arrAp !== aiGenTarget) {
+        arrCell.style.cursor = 'pointer';
+        arrCell.onclick = () => { aiGenLegs[i].arr = aiGenTarget; renderAiGen(); updateAiGenMap(); };
+      }
+      aiGenLegs[i].arr = arrAp;
     } else {
       arrCell.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:6px 8px;border:1px dashed rgba(255,255,255,.2);border-radius:5px;">Set Target Airport first</div>';
       aiGenLegs[i].arr = null;
