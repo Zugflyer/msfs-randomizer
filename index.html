@@ -2440,6 +2440,7 @@ function addLogbookLeg() {
     arr_icao: arrDb?arrDb[0]:arr, arr_iata: arrDb?arrDb[1]||'':'',
     arr_lat: arrDb?arrDb[3]:null, arr_lon: arrDb?arrDb[4]:null,
     airline, aircraft,
+    planned: true,
   };
   if (lineNumRaw !== '') {
     const lineNum = Math.max(1, Math.min(parseInt(lineNumRaw, 10), logbookFlights.length + 1));
