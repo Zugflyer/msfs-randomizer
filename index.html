@@ -3456,7 +3456,8 @@ async function saveRoster() {
     if (!leg.dep || !leg.arr) return;
     // Check not already in logbook
     const already = logbookFlights.some(f =>
-      f.dep_icao === leg.dep[0] && f.arr_icao === leg.arr[0] && f.planned
+      f.dep_icao === leg.dep[0] && f.arr_icao === leg.arr[0] && f.planned &&
+      (f.surfaceMode || 'air') === (leg.surfaceMode || 'air')
     );
     if (already) return;
     logbookFlights.push({
