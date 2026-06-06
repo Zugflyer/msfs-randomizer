@@ -2663,6 +2663,14 @@ function airlineLogoHtml(icao) {
   if (!code) return '';
 
   // Special surface-mode icons
+  if (code === 'SHIP') {
+    const url = 'https://zugflyer.github.io/msfs-randomizer/logos/Ship.png';
+    return '<div style="display:inline-flex;align-items:center;justify-content:center;'
+      + 'width:100%;height:100%;border-radius:3px;overflow:hidden;background:#fff;padding:2px 4px;">'
+      + '<img src="' + url + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="SHIP">'
+      + '</div>';
+  }
+
   if (code === 'CAR') {
     return '<div style="display:inline-flex;align-items:center;justify-content:center;'
       + 'width:100%;height:100%;border-radius:3px;overflow:hidden;background:#fff;padding:4px;">'
@@ -3091,8 +3099,9 @@ function renderLegs() {
     row.appendChild(arrCell);
     row.appendChild(arrTimeCell);
     row.appendChild(taGateCell);
-    row.appendChild(navCell);
     row.appendChild(surfaceCell);
+    navCell.style.marginLeft = '10px';
+    row.appendChild(navCell);
     row.appendChild(delCell);
     container.appendChild(row);
 
@@ -3665,11 +3674,13 @@ function toggleSurfaceMode(idx, mode) {
     leg.seaRouteWaypoints = null;
     leg.roadRouteWaypoints = null;
     leg._calculatingRoute = false;
+    if (mode === 'ship' && leg.airline === 'SHIP') leg.airline = '';
     if (mode === 'road' && leg.airline === 'CAR') leg.airline = '';
   } else {
     leg.surfaceMode = mode;
     leg._calculatingRoute = true;
     
+    if (mode === 'ship') leg.airline = 'SHIP';
     if (mode === 'road') leg.airline = 'CAR';
     
     // For ship mode, calculate sea route
