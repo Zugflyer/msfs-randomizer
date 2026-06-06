@@ -4584,11 +4584,14 @@ async function uploadLogoToGitHub(icaoCode, file) {
         var ok = await saveLogoToSupabase(code, smallDataUrl);
         if (ok) {
           _logoExists[code] = true;
-          // Swap all upload buttons to show the logo
           document.querySelectorAll('[data-lgw="' + code + '"]').forEach(function(el) {
             el.style.background = '#fff';
             el.style.padding = '2px 4px';
             el.style.border = '';
+            el.style.cursor = 'pointer';
+            el.setAttribute('title', 'Double-click or right-click to replace logo');
+            el.setAttribute('ondblclick', "triggerLogoUpload('" + code + "')");
+            el.setAttribute('oncontextmenu', "event.preventDefault();triggerLogoUpload('" + code + "');return false;");
             el.innerHTML = '<img src="' + smallDataUrl + '" style="max-width:100%;max-height:28px;object-fit:contain;" alt="' + code + '">';
           });
           resolve(true);
@@ -4613,9 +4616,6 @@ function triggerLogoUpload(icaoCode) {
     if (!file) return;
     const ok = await uploadLogoToGitHub(icaoCode, file);
     if (ok) {
-      // Refresh all views that might show the logo
-      renderLogbook();
-      renderLegs();
       alert('✓ Logo for ' + icaoCode + ' saved to cloud!');
     }
   };
