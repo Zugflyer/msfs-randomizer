@@ -5845,13 +5845,18 @@ function renderAiGenLegs() {
     const depCell = document.createElement('div');
     depCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
     if (leg.swapped) {
-      // Swapped: master airport is DEP (locked), show as box
-      const masterAp = aiGenAirport;
-      if (masterAp) {
-        depCell.innerHTML = apBox(masterAp);
-        depCell.title = 'Departure = master airport';
+      // Swapped: master airport is DEP — editable
+      if (leg.dep) {
+        depCell.innerHTML = apBox(leg.dep);
+        depCell.style.cursor = 'pointer'; depCell.title = 'Click to change';
+        depCell.onclick = () => { aiGenLegs[i].dep = null; aiGenLegs[i].blockTime = ''; renderAiGenLegs(); };
       } else {
-        depCell.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:6px 8px;border:1px dashed rgba(255,255,255,.2);border-radius:5px;">Select airport above</div>';
+        const w = document.createElement('div'); w.style.position = 'relative';
+        const inp2 = document.createElement('input');
+        inp2.placeholder = 'ICAO or city…';
+        inp2.style.cssText = 'width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+        w.appendChild(inp2); depCell.appendChild(w);
+        buildSuggestBox(inp2, ap => { aiGenLegs[i].dep = ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
       }
     } else {
       // Normal: DEP is free input
@@ -5915,13 +5920,19 @@ function renderAiGenLegs() {
     const arrCell = document.createElement('div');
     arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
     if (!leg.swapped) {
-      // Normal: ARR = master airport (locked)
-      const masterAp = aiGenAirport;
-      if (masterAp) {
-        arrCell.innerHTML = apBox(masterAp);
-        arrCell.title = 'Arrival = master airport';
+      // Normal: ARR — editable, pre-filled with master airport
+      if (leg.arr) {
+        arrCell.innerHTML = apBox(leg.arr);
+        arrCell.style.cursor = 'pointer';
+        arrCell.title = leg.arr[0] === aiGenAirport?.[0] ? 'Arrival = master airport (click to change)' : 'Click to change';
+        arrCell.onclick = () => { aiGenLegs[i].arr = null; aiGenLegs[i].blockTime = ''; renderAiGenLegs(); };
       } else {
-        arrCell.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:6px 8px;border:1px dashed rgba(255,255,255,.2);border-radius:5px;">Select airport above</div>';
+        const w = document.createElement('div'); w.style.position = 'relative';
+        const inp2 = document.createElement('input');
+        inp2.placeholder = 'ICAO or city…';
+        inp2.style.cssText = 'width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+        w.appendChild(inp2); arrCell.appendChild(w);
+        buildSuggestBox(inp2, ap => { aiGenLegs[i].arr = ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
       }
     } else {
       // Swapped: ARR is free input
