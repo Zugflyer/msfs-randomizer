@@ -3759,7 +3759,14 @@ async function calculateSeaRoute(legIdx, fromLonLat, toLonLat) {
   console.log('Path found:', path ? path.length + ' nodes' : 'NO PATH');
   
   if (!path || path.length < 2) {
-    console.warn('No sea route found between these points');
+    console.warn('No sea route found — using densified great circle');
+    const waypoints = densifySeaRoute([
+      [fromLonLat[1], fromLonLat[0]],
+      [toLonLat[1], toLonLat[0]]
+    ]);
+    legs[legIdx].seaRouteWaypoints = waypoints;
+    renderLegs();
+    if (rosterMap) updateRosterLines();
     return;
   }
   
