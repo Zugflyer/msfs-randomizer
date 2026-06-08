@@ -351,6 +351,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       Data
     </button>
     <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-aigen" onclick="switchView('aigen')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+      AI Generator
+    </button>
+    <div class="topnav-sep"></div>
 
   </div>
   <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
@@ -662,6 +667,52 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
 
     <!-- ═══ AI GENERATOR ═══ -->
+
+    <!-- ═══ AI GENERATOR ═══ -->
+    <div id="view-aigen" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
+
+      <!-- Mode toggle -->
+      <div style="padding:10px 16px 0;display:flex;align-items:center;gap:8px;flex-shrink:0;">
+        <button id="aigen-btn-airport" onclick="setAiGenMode('airport')"
+          style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">
+          ✈ AIRPORT
+        </button>
+        <button id="aigen-btn-airline" onclick="setAiGenMode('airline')"
+          style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">
+          🏢 AIRLINE
+        </button>
+      </div>
+
+      <!-- Airport mode -->
+      <div id="aigen-airport-mode" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
+
+        <!-- Airport search -->
+        <div style="padding:10px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
+          <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Airport</span>
+          <div style="position:relative;">
+            <input id="aigen-ap-input" placeholder="ICAO, IATA or city…"
+              style="width:260px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
+              oninput="aiGenApSuggest(this)">
+            <div id="aigen-ap-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:300px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:220px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
+          </div>
+          <div id="aigen-ap-box" style="display:none;align-items:center;gap:8px;"></div>
+        </div>
+
+        <!-- Legs will go here (next step) -->
+        <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-legs-wrap">
+          <div id="aigen-legs-container" style="color:var(--txt3);font-size:12px;padding:20px 0;">
+            Select an airport to start adding routes.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Airline mode (placeholder) -->
+      <div id="aigen-airline-mode" style="display:none;flex:1;align-items:center;justify-content:center;color:var(--txt3);font-size:13px;">
+        Airline mode — coming soon
+      </div>
+
+    </div>
 
     <!-- ═══ ROSTER ═══ -->
     <div id="view-roster" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
@@ -2474,7 +2525,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2485,7 +2536,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2502,6 +2553,7 @@ function switchView(view) {
       else initRosterMap();
     }, 120);
   }
+  if (view === 'aigen') initAiGen();
   if (view === 'tovisit') {
     setTimeout(() => {
       if (tovisitMap) tovisitMap.invalidateSize();
@@ -5601,6 +5653,81 @@ function renderGatesTable() {
 function gatesAddRow() {
   gatesData.push({mfr:'New', type:'Type', gates:0});
   renderGatesTable();
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// AI GENERATOR
+// ════════════════════════════════════════════════════════════════════════════
+
+let aiGenMode = 'airport';  // 'airport' | 'airline'
+let aiGenAirport = null;    // selected airport array
+
+function initAiGen() {
+  setAiGenMode(aiGenMode);
+}
+
+function setAiGenMode(mode) {
+  aiGenMode = mode;
+  // Toggle buttons
+  const btnAp = document.getElementById('aigen-btn-airport');
+  const btnAl = document.getElementById('aigen-btn-airline');
+  if (btnAp) {
+    btnAp.style.background    = mode === 'airport' ? 'var(--acc)' : 'transparent';
+    btnAp.style.color         = mode === 'airport' ? '#fff' : 'var(--txt3)';
+    btnAp.style.borderColor   = mode === 'airport' ? 'var(--acc)' : 'var(--bdr)';
+  }
+  if (btnAl) {
+    btnAl.style.background    = mode === 'airline' ? 'var(--acc)' : 'transparent';
+    btnAl.style.color         = mode === 'airline' ? '#fff' : 'var(--txt3)';
+    btnAl.style.borderColor   = mode === 'airline' ? 'var(--acc)' : 'var(--bdr)';
+  }
+  // Toggle panels
+  const apPanel = document.getElementById('aigen-airport-mode');
+  const alPanel = document.getElementById('aigen-airline-mode');
+  if (apPanel) apPanel.style.display = mode === 'airport' ? 'flex' : 'none';
+  if (alPanel) alPanel.style.display = mode === 'airline' ? 'flex' : 'none';
+}
+
+// ── Airport search suggest ────────────────────────────────────────────────────
+function aiGenApSuggest(inp) {
+  const q = inp.value.trim().toUpperCase();
+  const box = document.getElementById('aigen-ap-suggest');
+  aiGenAirport = null;
+  document.getElementById('aigen-ap-box').style.display = 'none';
+  if (q.length < 2) { box.style.display = 'none'; return; }
+  const hits = DB_SCHED.filter(r =>
+    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
+    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().includes(q)
+  ).slice(0, 10);
+  if (!hits.length) { box.style.display = 'none'; return; }
+  box.innerHTML = hits.map(ap =>
+    `<div class="leg-sug-item" onmousedown="aiGenSelectAp(event,'${ap[0]}')">
+      <span class="leg-sug-icao">${ap[0]}</span>
+      ${ap[1] ? `<span style="color:var(--blue);font-size:10px;margin-right:4px;">/${ap[1]}</span>` : ''}
+      ${ap[7] || ap[2]}
+      <span style="color:var(--txt3);font-size:10px;margin-left:3px;">${countryName(ap[6])}</span>
+    </div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+function aiGenSelectAp(e, code) {
+  e.preventDefault();
+  const ap = schedByCode[code]; if (!ap) return;
+  aiGenAirport = ap;
+  const inp = document.getElementById('aigen-ap-input');
+  inp.value = `${ap[0]}${ap[1] ? ' / ' + ap[1] : ''} — ${ap[7] || ap[2]}`;
+  document.getElementById('aigen-ap-suggest').style.display = 'none';
+  // Show selected airport badge
+  const box = document.getElementById('aigen-ap-box');
+  box.style.display = 'flex';
+  box.innerHTML = apBox(ap);
+  // Update legs container placeholder
+  const c = document.getElementById('aigen-legs-container');
+  if (c) c.innerHTML = `<div style="color:var(--txt3);font-size:12px;padding:8px 0;">
+    Airport selected: <strong style="color:#fff;">${ap[0]} — ${ap[7]||ap[2]}</strong>. 
+    Routes will go here in the next step.
+  </div>`;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
