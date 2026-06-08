@@ -671,37 +671,84 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <!-- ═══ AI GENERATOR ═══ -->
     <div id="view-aigen" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
 
-      <!-- Mode toggle -->
-      <div style="padding:10px 16px 0;display:flex;align-items:center;gap:8px;flex-shrink:0;">
-        <button id="aigen-btn-airport" onclick="setAiGenMode('airport')"
-          style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">
-          ✈ AIRPORT
-        </button>
-        <button id="aigen-btn-airline" onclick="setAiGenMode('airline')"
-          style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">
-          🏢 AIRLINE
-        </button>
+      <!-- Header: mode buttons centered + time windows -->
+      <div style="padding:10px 16px 8px;display:flex;align-items:center;justify-content:center;gap:16px;flex-shrink:0;border-bottom:1px solid var(--bdr);flex-wrap:wrap;">
+
+        <!-- Mode buttons -->
+        <div style="display:flex;gap:6px;">
+          <button id="aigen-btn-airport" onclick="setAiGenMode('airport')"
+            style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">
+            ✈ AIRPORT
+          </button>
+          <button id="aigen-btn-airline" onclick="setAiGenMode('airline')"
+            style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">
+            🏢 AIRLINE
+          </button>
+        </div>
+
+        <div style="width:1px;height:28px;background:var(--bdr2);"></div>
+
+        <!-- ARR window -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;">ARR window</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:10px;color:var(--txt3);">from</span>
+              <input id="aigen-arr-from" type="text" value="05:30" maxlength="5"
+                style="width:50px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults();">
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:10px;color:var(--txt3);">until</span>
+              <input id="aigen-arr-until" type="text" value="23:00" maxlength="5"
+                style="width:50px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults();">
+            </div>
+          </div>
+        </div>
+
+        <div style="width:1px;height:28px;background:var(--bdr2);"></div>
+
+        <!-- DEP window -->
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;">DEP window</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:10px;color:var(--txt3);">from</span>
+              <input id="aigen-dep-from" type="text" value="06:00" maxlength="5"
+                style="width:50px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults();">
+            </div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <span style="font-size:10px;color:var(--txt3);">until</span>
+              <input id="aigen-dep-until" type="text" value="22:30" maxlength="5"
+                style="width:50px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults();">
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Airport mode -->
       <div id="aigen-airport-mode" style="display:flex;flex-direction:column;flex:1;overflow:hidden;">
 
-        <!-- Airport search -->
-        <div style="padding:10px 16px 8px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
+        <!-- Airport search row -->
+        <div style="padding:8px 16px;display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
           <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Airport</span>
           <div style="position:relative;">
             <input id="aigen-ap-input" placeholder="ICAO, IATA or city…"
-              style="width:260px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
+              style="width:240px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
               oninput="aiGenApSuggest(this)">
             <div id="aigen-ap-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:300px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:220px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
           </div>
           <div id="aigen-ap-box" style="display:none;align-items:center;gap:8px;"></div>
         </div>
 
-        <!-- Legs will go here (next step) -->
+        <!-- Legs -->
         <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-legs-wrap">
           <div id="aigen-legs-container" style="color:var(--txt3);font-size:12px;padding:20px 0;">
-            Select an airport to start adding routes.
+            Select an airport above to start adding routes.
           </div>
         </div>
 
@@ -5664,9 +5711,30 @@ let aiGenAirport = null;
 let aiGenLegs = [];
 
 function aiGenEmptyLeg() {
+  const arrFrom  = document.getElementById('aigen-arr-from')?.value  || '05:30';
+  const arrUntil = document.getElementById('aigen-arr-until')?.value || '23:00';
+  const depFrom  = document.getElementById('aigen-dep-from')?.value  || '06:00';
+  const depUntil = document.getElementById('aigen-dep-until')?.value || '22:30';
   return { dep: null, arr: null, airline: '', aircraft: '',
            blockTime: '', blockTimeReal: false,
-           arrFrom: '05:30', arrUntil: '23:00' };
+           swapped: false,   // true = master airport is DEP, not ARR
+           arrFrom, arrUntil, depFrom, depUntil };
+}
+
+// Called when header time fields change — update legs that still have default values
+function syncAiGenDefaults() {
+  const arrFrom  = document.getElementById('aigen-arr-from')?.value  || '05:30';
+  const arrUntil = document.getElementById('aigen-arr-until')?.value || '23:00';
+  const depFrom  = document.getElementById('aigen-dep-from')?.value  || '06:00';
+  const depUntil = document.getElementById('aigen-dep-until')?.value || '22:30';
+  aiGenLegs.forEach(l => {
+    // Only update if they haven't been manually changed from previous defaults
+    if (!l._arrFromCustom)  l.arrFrom  = arrFrom;
+    if (!l._arrUntilCustom) l.arrUntil = arrUntil;
+    if (!l._depFromCustom)  l.depFrom  = depFrom;
+    if (!l._depUntilCustom) l.depUntil = depUntil;
+  });
+  renderAiGenLegs();
 }
 
 function initAiGen() {
@@ -5726,8 +5794,11 @@ function aiGenSelectAp(e, code) {
   document.getElementById('aigen-ap-suggest').style.display = 'none';
   const box = document.getElementById('aigen-ap-box');
   box.style.display = 'flex'; box.innerHTML = apBox(ap);
-  // Sync all legs arr to new airport
-  aiGenLegs.forEach(l => l.arr = ap);
+  // Sync all legs to new airport respecting swap state
+  aiGenLegs.forEach(l => {
+    if (!l.swapped) l.arr = ap;
+    else            l.dep = ap;
+  });
   renderAiGenLegs();
 }
 
@@ -5741,8 +5812,11 @@ function renderAiGenLegs() {
   const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
 
   aiGenLegs.forEach((leg, i) => {
-    // Ensure arr is always the selected airport
-    if (aiGenAirport) leg.arr = aiGenAirport;
+    // Sync master airport: if not swapped → arr = master; if swapped → dep = master
+    if (aiGenAirport) {
+      if (!leg.swapped) leg.arr = aiGenAirport;
+      else              leg.dep = aiGenAirport;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
@@ -5797,57 +5871,88 @@ function renderAiGenLegs() {
       });
     }
 
-    // ── Block time ──
+    // ── Block time + Swap button ──
     const btCell = document.createElement('div');
-    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 5px;min-height:54px;gap:3px;';
+    btCell.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 4px;min-height:54px;gap:3px;';
+    // Swap button
+    const swapBtn = document.createElement('button');
+    swapBtn.innerHTML = '⇄';
+    swapBtn.title = leg.swapped ? 'Airport is DEP — click to make it ARR again' : 'Swap: make airport DEP instead of ARR';
+    swapBtn.style.cssText = 'font-size:15px;background:transparent;border:none;color:#555;cursor:pointer;padding:1px 4px;line-height:1;';
+    swapBtn.onmouseenter = () => swapBtn.style.color = '#58a6ff';
+    swapBtn.onmouseleave = () => swapBtn.style.color = '#555';
+    swapBtn.onclick = () => {
+      aiGenLegs[i].swapped = !aiGenLegs[i].swapped;
+      // Swap dep and arr for this leg only
+      const tmp = aiGenLegs[i].dep;
+      aiGenLegs[i].dep = aiGenLegs[i].arr;
+      aiGenLegs[i].arr = tmp;
+      aiGenLegs[i].blockTime = ''; aiGenLegs[i].blockTimeReal = false;
+      renderAiGenLegs();
+      if (aiGenLegs[i].dep && aiGenLegs[i].arr) aiGenFetchBlockTime(i);
+    };
+    // Block time input
     const btColor = leg.blockTimeReal ? '#3fb950' : '#777';
     const btWeight = leg.blockTimeReal ? '700' : '400';
     const btItalic = leg.blockTimeReal ? '' : 'font-style:italic;';
     const arrowDiv = document.createElement('div');
-    arrowDiv.style.cssText = 'font-size:20px;color:#555;line-height:1;cursor:pointer;';
+    arrowDiv.style.cssText = 'font-size:18px;color:#555;line-height:1;cursor:pointer;';
     arrowDiv.title = 'Click to search block time';
     arrowDiv.textContent = '→';
     arrowDiv.onclick = () => aiGenFetchBlockTime(i);
     const btInp = document.createElement('input');
     btInp.type = 'text'; btInp.id = 'aigen-bt-'+i;
     btInp.value = leg.blockTime || ''; btInp.placeholder = 'H:MM';
-    btInp.style.cssText = `width:50px;font-size:11px;font-family:monospace;color:${btColor};font-weight:${btWeight};${btItalic}background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;`;
+    btInp.style.cssText = `width:48px;font-size:11px;font-family:monospace;color:${btColor};font-weight:${btWeight};${btItalic}background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;`;
     btInp.oninput = () => { aiGenLegs[i].blockTime = btInp.value; aiGenLegs[i].blockTimeReal = false; };
-    btCell.appendChild(arrowDiv); btCell.appendChild(btInp);
+    btCell.appendChild(swapBtn); btCell.appendChild(arrowDiv); btCell.appendChild(btInp);
 
-    // ── ARR airport (locked to selected airport) ──
+    // ── ARR airport (or DEP if swapped) — locked to master airport ──
     const arrCell = document.createElement('div');
     arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
-    if (leg.arr) {
-      arrCell.innerHTML = apBox(leg.arr);
-      arrCell.title = 'Arrival = selected airport';
+    const masterAp = leg.swapped ? leg.dep : leg.arr;
+    if (masterAp) {
+      arrCell.innerHTML = apBox(masterAp);
+      arrCell.title = leg.swapped ? 'Departure = master airport (swapped)' : 'Arrival = master airport';
     } else {
       arrCell.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:6px 8px;border:1px dashed rgba(255,255,255,.2);border-radius:5px;">Select airport above</div>';
     }
 
-    // ── ARR from / ARR until ──
+    // ── Time window cell — ARR from/until OR DEP from/until depending on swap ──
     const timeCell = document.createElement('div');
-    timeCell.style.cssText = bS + 'width:82px;min-width:82px;gap:4px;align-items:center;';
-    const timeLbl1 = document.createElement('div');
-    timeLbl1.style.cssText = 'font-size:9px;color:var(--txt3);width:100%;display:flex;align-items:center;gap:4px;';
-    timeLbl1.innerHTML = '<span style="white-space:nowrap;">ARR from</span>';
-    const arrFromInp = document.createElement('input');
-    arrFromInp.type = 'text'; arrFromInp.value = leg.arrFrom || '05:30'; arrFromInp.maxLength = 5;
-    arrFromInp.style.cssText = 'width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    arrFromInp.oninput = () => { aiGenLegs[i].arrFrom = arrFromInp.value; };
-    arrFromInp.onblur  = () => { arrFromInp.value = formatTimeStr(arrFromInp.value)||arrFromInp.value; aiGenLegs[i].arrFrom = arrFromInp.value; };
+    timeCell.style.cssText = bS + 'width:86px;min-width:86px;gap:4px;align-items:center;';
+    const isSwapped = leg.swapped;
+    const lbl1 = isSwapped ? 'DEP from' : 'ARR from';
+    const lbl2 = isSwapped ? 'DEP until' : 'ARR until';
+    const val1 = isSwapped ? (leg.depFrom  || '06:00') : (leg.arrFrom  || '05:30');
+    const val2 = isSwapped ? (leg.depUntil || '22:30') : (leg.arrUntil || '23:00');
 
-    const timeLbl2 = document.createElement('div');
-    timeLbl2.style.cssText = 'font-size:9px;color:var(--txt3);width:100%;';
-    timeLbl2.textContent = 'ARR until';
-    const arrUntilInp = document.createElement('input');
-    arrUntilInp.type = 'text'; arrUntilInp.value = leg.arrUntil || '23:00'; arrUntilInp.maxLength = 5;
-    arrUntilInp.style.cssText = 'width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    arrUntilInp.oninput = () => { aiGenLegs[i].arrUntil = arrUntilInp.value; };
-    arrUntilInp.onblur  = () => { arrUntilInp.value = formatTimeStr(arrUntilInp.value)||arrUntilInp.value; aiGenLegs[i].arrUntil = arrUntilInp.value; };
+    const tLbl1 = document.createElement('div');
+    tLbl1.style.cssText = 'font-size:9px;color:var(--txt3);white-space:nowrap;';
+    tLbl1.textContent = lbl1;
+    const tInp1 = document.createElement('input');
+    tInp1.type = 'text'; tInp1.value = val1; tInp1.maxLength = 5;
+    tInp1.style.cssText = 'width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    tInp1.oninput = () => {
+      if (isSwapped) { aiGenLegs[i].depFrom  = tInp1.value; aiGenLegs[i]._depFromCustom  = true; }
+      else           { aiGenLegs[i].arrFrom  = tInp1.value; aiGenLegs[i]._arrFromCustom  = true; }
+    };
+    tInp1.onblur = () => { tInp1.value = formatTimeStr(tInp1.value)||tInp1.value; };
 
-    timeCell.appendChild(timeLbl1); timeCell.appendChild(arrFromInp);
-    timeCell.appendChild(timeLbl2); timeCell.appendChild(arrUntilInp);
+    const tLbl2 = document.createElement('div');
+    tLbl2.style.cssText = 'font-size:9px;color:var(--txt3);white-space:nowrap;';
+    tLbl2.textContent = lbl2;
+    const tInp2 = document.createElement('input');
+    tInp2.type = 'text'; tInp2.value = val2; tInp2.maxLength = 5;
+    tInp2.style.cssText = 'width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    tInp2.oninput = () => {
+      if (isSwapped) { aiGenLegs[i].depUntil = tInp2.value; aiGenLegs[i]._depUntilCustom = true; }
+      else           { aiGenLegs[i].arrUntil = tInp2.value; aiGenLegs[i]._arrUntilCustom = true; }
+    };
+    tInp2.onblur = () => { tInp2.value = formatTimeStr(tInp2.value)||tInp2.value; };
+
+    timeCell.appendChild(tLbl1); timeCell.appendChild(tInp1);
+    timeCell.appendChild(tLbl2); timeCell.appendChild(tInp2);
 
     // ── Delete ──
     const delCell = document.createElement('div');
