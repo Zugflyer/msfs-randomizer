@@ -5698,7 +5698,7 @@ function aiGenSelectTarget(e, code) {
   box.style.display = 'flex';
   box.innerHTML = apBox(ap);
   // Sync all existing legs to new target
-  aiGenLegs.forEach(l => { l.arr = ap; });
+  aiGenLegs.forEach(l => { if (!l.arr) l.arr = ap; });
   renderAiGen();
   updateAiGenMap();
 }
@@ -5791,11 +5791,10 @@ function renderAiGen() {
     btInp.oninput = () => { aiGenLegs[i].blockTime = btInp.value; aiGenLegs[i].blockTimeReal = false; };
     btCell.appendChild(swapBtn); btCell.appendChild(btInp);
 
-    // ── ARR — always editable, pre-filled with target if empty ──
+    // ── ARR — always editable ──
     const arrCell = document.createElement('div');
     arrCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
-    const arrAp = leg.arr || aiGenTarget;
-    if (!aiGenLegs[i].arr && aiGenTarget) aiGenLegs[i].arr = aiGenTarget; // pre-fill once
+    const arrAp = leg.arr;
     if (arrAp) {
       arrCell.innerHTML = apBox(arrAp);
       arrCell.style.cursor = 'pointer';
