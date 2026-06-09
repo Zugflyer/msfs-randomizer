@@ -5705,7 +5705,7 @@ function aiGenSelectTarget(e, code) {
 
 // ── Data model ───────────────────────────────────────────────────────────────
 function aiGenEmptyLeg() {
-  return { dep: null, arr: null, airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
+  return { dep: null, arr: aiGenTarget || null, airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
            schedDepTime: '', schedArrTime: '', fixedDepTime: '', fixedArrTime: '' };
 }
 
