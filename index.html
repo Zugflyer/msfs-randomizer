@@ -703,30 +703,34 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <!-- ARR window -->
           <div style="display:flex;flex-direction:column;gap:3px;">
-            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;">ARR window</div>
-            <div style="display:flex;align-items:center;gap:5px;">
-              <span style="font-size:10px;color:var(--txt3);">from</span>
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">ARR window</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
               <input id="aigen-arr-from" type="text" value="05:30" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
                 onblur="this.value=formatTimeStr(this.value)||this.value;">
-              <span style="font-size:10px;color:var(--txt3);">until</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
               <input id="aigen-arr-until" type="text" value="23:00" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
                 onblur="this.value=formatTimeStr(this.value)||this.value;">
             </div>
           </div>
 
-          <div style="width:1px;height:28px;background:var(--bdr2);flex-shrink:0;"></div>
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
           <!-- DEP window -->
           <div style="display:flex;flex-direction:column;gap:3px;">
-            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;">DEP window</div>
-            <div style="display:flex;align-items:center;gap:5px;">
-              <span style="font-size:10px;color:var(--txt3);">from</span>
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">DEP window</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
               <input id="aigen-dep-from" type="text" value="06:00" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
                 onblur="this.value=formatTimeStr(this.value)||this.value;">
-              <span style="font-size:10px;color:var(--txt3);">until</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
               <input id="aigen-dep-until" type="text" value="22:30" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
                 onblur="this.value=formatTimeStr(this.value)||this.value;">
@@ -5668,7 +5672,8 @@ let aiGenLegs = [];
 
 function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
-           airline: '', aircraft: '', blockTime: '', blockTimeReal: false };
+           airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
+           t1:'', t2:'', t3:'', t4:'', _swapped: false };
 }
 
 function initAiGen() {
@@ -5775,7 +5780,7 @@ function renderAiGenLegs() {
     swapBtn.style.cssText='font-size:15px;background:transparent;border:none;color:#555;cursor:pointer;padding:1px 4px;';
     swapBtn.onmouseenter=()=>swapBtn.style.color='#58a6ff';
     swapBtn.onmouseleave=()=>swapBtn.style.color='#555';
-    swapBtn.onclick=()=>{ const t=leg.dep; leg.dep=leg.arr; leg.arr=t; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenLegs(); aiGenFetchBlockTime(i); };
+    swapBtn.onclick=()=>{ const t=leg.dep; leg.dep=leg.arr; leg.arr=t; leg._swapped=!leg._swapped; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenLegs(); aiGenFetchBlockTime(i); };
     const arrowDiv=document.createElement('div');
     arrowDiv.style.cssText='font-size:16px;color:#555;cursor:pointer;line-height:1;'; arrowDiv.textContent='→'; arrowDiv.title='Search block time';
     arrowDiv.onclick=()=>aiGenFetchBlockTime(i);
@@ -5799,23 +5804,38 @@ function renderAiGenLegs() {
       buildSuggestBox(inp, ap=>{ leg.arr=ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
     }
 
-    // ── Time window cell ──
+    // ── Time window cell (ARR or DEP depending on swap state) ──
     const timeCell = document.createElement('div');
     timeCell.style.cssText=bS+'width:86px;min-width:86px;gap:4px;align-items:center;';
-    const arrFrom = document.getElementById('aigen-arr-from')?.value||'05:30';
-    const arrUntil= document.getElementById('aigen-arr-until')?.value||'23:00';
-    const depFrom = document.getElementById('aigen-dep-from')?.value||'06:00';
-    const depUntil= document.getElementById('aigen-dep-until')?.value||'22:30';
+    const arrFrom  = document.getElementById('aigen-arr-from')?.value  || '05:30';
+    const arrUntil = document.getElementById('aigen-arr-until')?.value || '23:00';
+    const depFrom  = document.getElementById('aigen-dep-from')?.value  || '06:00';
+    const depUntil = document.getElementById('aigen-dep-until')?.value || '22:30';
+    // Pre-fill from master if not yet set
     if (!leg.t1) leg.t1 = arrFrom;
     if (!leg.t2) leg.t2 = arrUntil;
-    const lbl1 = document.createElement('div'); lbl1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl1.textContent='ARR from';
-    const ti1 = document.createElement('input'); ti1.type='text'; ti1.value=leg.t1; ti1.maxLength=5;
+    if (!leg.t3) leg.t3 = depFrom;
+    if (!leg.t4) leg.t4 = depUntil;
+
+    // Determine which pair to show based on swap state
+    const isSwapped = leg._swapped;
+    const lbl1txt = isSwapped ? 'DEP from'  : 'ARR from';
+    const lbl2txt = isSwapped ? 'DEP until' : 'ARR until';
+    const val1    = isSwapped ? leg.t3 : leg.t1;
+    const val2    = isSwapped ? leg.t4 : leg.t2;
+
+    const lbl1=document.createElement('div'); lbl1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl1.textContent=lbl1txt;
+    const ti1=document.createElement('input'); ti1.type='text'; ti1.value=val1; ti1.maxLength=5;
     ti1.style.cssText='width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    ti1.oninput=()=>leg.t1=ti1.value; ti1.onblur=()=>{ ti1.value=formatTimeStr(ti1.value)||ti1.value; leg.t1=ti1.value; };
-    const lbl2 = document.createElement('div'); lbl2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl2.textContent='ARR until';
-    const ti2 = document.createElement('input'); ti2.type='text'; ti2.value=leg.t2; ti2.maxLength=5;
+    ti1.oninput=()=>{ if(isSwapped) leg.t3=ti1.value; else leg.t1=ti1.value; };
+    ti1.onblur=()=>{ ti1.value=formatTimeStr(ti1.value)||ti1.value; if(isSwapped) leg.t3=ti1.value; else leg.t1=ti1.value; };
+
+    const lbl2=document.createElement('div'); lbl2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl2.textContent=lbl2txt;
+    const ti2=document.createElement('input'); ti2.type='text'; ti2.value=val2; ti2.maxLength=5;
     ti2.style.cssText='width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    ti2.oninput=()=>leg.t2=ti2.value; ti2.onblur=()=>{ ti2.value=formatTimeStr(ti2.value)||ti2.value; leg.t2=ti2.value; };
+    ti2.oninput=()=>{ if(isSwapped) leg.t4=ti2.value; else leg.t2=ti2.value; };
+    ti2.onblur=()=>{ ti2.value=formatTimeStr(ti2.value)||ti2.value; if(isSwapped) leg.t4=ti2.value; else leg.t2=ti2.value; };
+
     timeCell.appendChild(lbl1); timeCell.appendChild(ti1); timeCell.appendChild(lbl2); timeCell.appendChild(ti2);
 
     // ── Delete ──
