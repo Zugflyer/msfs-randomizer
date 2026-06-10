@@ -708,13 +708,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
               <input id="aigen-arr-from" type="text" value="05:30" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
-                onblur="this.value=formatTimeStr(this.value)||this.value;">
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults('t1',this.value);">
             </div>
             <div style="display:flex;align-items:center;gap:4px;">
               <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
               <input id="aigen-arr-until" type="text" value="23:00" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
-                onblur="this.value=formatTimeStr(this.value)||this.value;">
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults('t2',this.value);">
             </div>
           </div>
 
@@ -727,13 +727,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
               <input id="aigen-dep-from" type="text" value="06:00" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
-                onblur="this.value=formatTimeStr(this.value)||this.value;">
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults('t3',this.value);">
             </div>
             <div style="display:flex;align-items:center;gap:4px;">
               <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
               <input id="aigen-dep-until" type="text" value="22:30" maxlength="5"
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
-                onblur="this.value=formatTimeStr(this.value)||this.value;">
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenDefaults('t4',this.value);">
             </div>
           </div>
 
@@ -5718,7 +5718,18 @@ function setAiGenMode(mode) {
   if (mode === 'airport') renderAiGenLegs();
 }
 
-// ── Airport suggest ───────────────────────────────────────────────────────────
+// Called when a master time field changes — update all leg fields that haven't been manually edited
+function syncAiGenDefaults(field, value) {
+  aiGenLegs.forEach(l => {
+    if (!l['_custom_'+field]) {
+      l[field] = value;
+      // Also sync r1/r2 from t3/t4 if not custom
+      if (field === 't3' && !l['_custom_r1']) l.r1 = value;
+      if (field === 't4' && !l['_custom_r2']) l.r2 = value;
+    }
+  });
+  renderAiGenLegs();
+}
 function aiGenApSuggest(inp) {
   const q = inp.value.trim().toUpperCase();
   const box = document.getElementById('aigen-ap-suggest');
@@ -5799,11 +5810,13 @@ function renderAiGenLegs() {
     const dwL1=document.createElement('div'); dwL1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; dwL1.textContent='DEP from';
     const dwI1=document.createElement('input'); dwI1.type='text'; dwI1.value=leg.t3; dwI1.maxLength=5;
     dwI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    dwI1.oninput=()=>leg.t3=dwI1.value; dwI1.onblur=()=>{dwI1.value=formatTimeStr(dwI1.value)||dwI1.value;leg.t3=dwI1.value;};
+    dwI1.oninput=()=>{ leg.t3=dwI1.value; leg._custom_t3=true; };
+    dwI1.onblur=()=>{dwI1.value=formatTimeStr(dwI1.value)||dwI1.value;leg.t3=dwI1.value;};
     const dwL2=document.createElement('div'); dwL2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; dwL2.textContent='DEP until';
     const dwI2=document.createElement('input'); dwI2.type='text'; dwI2.value=leg.t4; dwI2.maxLength=5;
     dwI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    dwI2.oninput=()=>leg.t4=dwI2.value; dwI2.onblur=()=>{dwI2.value=formatTimeStr(dwI2.value)||dwI2.value;leg.t4=dwI2.value;};
+    dwI2.oninput=()=>{ leg.t4=dwI2.value; leg._custom_t4=true; };
+    dwI2.onblur=()=>{dwI2.value=formatTimeStr(dwI2.value)||dwI2.value;leg.t4=dwI2.value;};
     depWinCell.appendChild(dwL1); depWinCell.appendChild(dwI1); depWinCell.appendChild(dwL2); depWinCell.appendChild(dwI2);
 
     // ── DEP ──
@@ -5858,11 +5871,13 @@ function renderAiGenLegs() {
     const awL1=document.createElement('div'); awL1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; awL1.textContent='ARR from';
     const awI1=document.createElement('input'); awI1.type='text'; awI1.value=leg.t1; awI1.maxLength=5;
     awI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    awI1.oninput=()=>leg.t1=awI1.value; awI1.onblur=()=>{awI1.value=formatTimeStr(awI1.value)||awI1.value;leg.t1=awI1.value;};
+    awI1.oninput=()=>{ leg.t1=awI1.value; leg._custom_t1=true; };
+    awI1.onblur=()=>{awI1.value=formatTimeStr(awI1.value)||awI1.value;leg.t1=awI1.value;};
     const awL2=document.createElement('div'); awL2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; awL2.textContent='ARR until';
     const awI2=document.createElement('input'); awI2.type='text'; awI2.value=leg.t2; awI2.maxLength=5;
     awI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    awI2.oninput=()=>leg.t2=awI2.value; awI2.onblur=()=>{awI2.value=formatTimeStr(awI2.value)||awI2.value;leg.t2=awI2.value;};
+    awI2.oninput=()=>{ leg.t2=awI2.value; leg._custom_t2=true; };
+    awI2.onblur=()=>{awI2.value=formatTimeStr(awI2.value)||awI2.value;leg.t2=awI2.value;};
     arrWinCell.appendChild(awL1); arrWinCell.appendChild(awI1); arrWinCell.appendChild(awL2); arrWinCell.appendChild(awI2);
 
     // ── RET DEP FROM/UNTIL (when aircraft departs ARR airport back) ──
@@ -5873,13 +5888,15 @@ function renderAiGenLegs() {
     rwI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(88,166,255,.3);background:var(--bg);color:#4a9eda;text-align:center;outline:none;';
     rwI1.title='Departure window at ARR airport for return flight';
     if (!leg.r1) leg.r1 = leg.t3;
-    rwI1.oninput=()=>leg.r1=rwI1.value; rwI1.onblur=()=>{rwI1.value=formatTimeStr(rwI1.value)||rwI1.value;leg.r1=rwI1.value;};
+    rwI1.oninput=()=>{ leg.r1=rwI1.value; leg._custom_r1=true; };
+    rwI1.onblur=()=>{rwI1.value=formatTimeStr(rwI1.value)||rwI1.value;leg.r1=rwI1.value;};
     const rwL2=document.createElement('div'); rwL2.style.cssText='font-size:9px;color:#4a9eda;white-space:nowrap;'; rwL2.textContent='↩ DEP until';
     const rwI2=document.createElement('input'); rwI2.type='text'; rwI2.value=leg.r2||leg.t4; rwI2.maxLength=5;
     rwI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(88,166,255,.3);background:var(--bg);color:#4a9eda;text-align:center;outline:none;';
     rwI2.title='Latest departure from ARR airport for return flight';
     if (!leg.r2) leg.r2 = leg.t4;
-    rwI2.oninput=()=>leg.r2=rwI2.value; rwI2.onblur=()=>{rwI2.value=formatTimeStr(rwI2.value)||rwI2.value;leg.r2=rwI2.value;};
+    rwI2.oninput=()=>{ leg.r2=rwI2.value; leg._custom_r2=true; };
+    rwI2.onblur=()=>{rwI2.value=formatTimeStr(rwI2.value)||rwI2.value;leg.r2=rwI2.value;};
 
     retWinCell.appendChild(rwL1); retWinCell.appendChild(rwI1); retWinCell.appendChild(rwL2); retWinCell.appendChild(rwI2);
 
