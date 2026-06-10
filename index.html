@@ -760,6 +760,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               style="font-size:12px;font-weight:600;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;">
               ✦ Generate TTools
             </button>
+            <button id="aigen-abort" style="display:none;font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">
+              ✕ Abort
+            </button>
             <div id="aigen-status" style="font-size:11px;color:var(--txt3);transition:opacity .3s;"></div>
           </div>
           <div id="aigen-dl-area" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:var(--r);gap:10px;align-items:center;flex-wrap:wrap;">
@@ -6080,6 +6083,19 @@ async function generateTTools() {
     regMap[combo.key] = regs;
   }
 
+  // Stopwatch + abort
+  let _aborted = false;
+  const abortBtn = document.getElementById('aigen-abort');
+  if (abortBtn) { abortBtn.style.display='inline-block'; abortBtn.onclick=()=>{ _aborted=true; clearInterval(_pulse); clearInterval(_stopwatch); abortBtn.style.display='none'; setStatus('⚠ Aborted.'); }; }
+  let _swSecs = 0;
+  const _stopwatch = setInterval(()=>{
+    _swSecs++;
+    const el = document.getElementById('aigen-status');
+    const et = document.getElementById('aigen-status-top');
+    const t = ' ('+_swSecs+'s)';
+    if (el && el.textContent.includes('Building')) el.textContent = '⏳ Building rotations…'+t;
+    if (et && et.textContent.includes('Building')) et.textContent = '⏳ Building rotations…'+t;
+  }, 1000);
   setStatus('⏳ Building rotations…');
 
   const hmmToMins = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
@@ -6150,10 +6166,10 @@ async function generateTTools() {
         const d1ret = DAYS[(di + Math.floor(u.depRet/1440))%7] || day;
         const d2ret = DAYS[(di + Math.floor(u.arrRet/1440))%7] || day;
 
-        const resolve = (baseDi, mins) => ({
-          day: DAYS[(baseDi + Math.floor(((mins%10080)+10080)%10080/1440))%7],
-          mins: ((mins%1440)+1440)%1440
-        });
+        const resolve = (baseDi, mins) => {
+          const d = DAYS[(baseDi + Math.floor(mins / 1440) % 7 + 7) % 7];
+          return { day: d || DAYS[baseDi % 7], mins: ((mins % 1440) + 1440) % 1440 };
+        };
 
         const out1 = resolve(di, u.depOut);
         const out2 = resolve(di, u.arrOut);
@@ -6179,7 +6195,8 @@ async function generateTTools() {
 
     // Pack into registrations using greedy algorithm with GROUND buffer
     const packed = [];
-    allSegs.forEach(seg => {
+    for (const seg of allSegs) {
+      if (_aborted) break;
       let placed = false;
       for (const rot of packed) {
         const last = rot[rot.length-1];
@@ -6187,7 +6204,7 @@ async function generateTTools() {
         if (seg.sortKey >= lastEnd) { rot.push(seg); placed=true; break; }
       }
       if (!placed) packed.push([seg]);
-    });
+    }
 
     packed.forEach((rot, ri) => {
       const reg = regs[ri % regs.length];
