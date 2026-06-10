@@ -1005,7 +1005,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 </div>
 </div><!-- app -->
 
-<script src="airports.js" onload="airportsLoaded=true;initAfterAirports()"></script>
+<script src="airports.js" onload="airportsLoaded=true;if(typeof initAfterAirports==='function')initAfterAirports()"></script>
 <script>
 let airportsLoaded = false;
 let pendingInit = false;
@@ -2621,11 +2621,7 @@ function switchView(view) {
     }, 120);
   }
   if (view === 'aigen') {
-    renderAiGen();
-    setTimeout(() => {
-      if (aiGenMap) aiGenMap.invalidateSize();
-      else initAiGenMap();
-    }, 120);
+    initAiGen();
   }
   if (view === 'tovisit') {
     setTimeout(() => {
@@ -4555,6 +4551,8 @@ window.addEventListener('load', async () => {
   switchView('logbook');
   initDST();
   initLbMap();
+  // In case airports.js loaded before initAfterAirports was defined
+  if (airportsLoaded && typeof initAfterAirports === 'function') initAfterAirports();
   // Pre-fill departure from last logbook arrival
   prefillDepartFromLogbook();
 });
