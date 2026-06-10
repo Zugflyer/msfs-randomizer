@@ -6005,219 +6005,110 @@ async function generateTTools() {
   const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.blockTime);
   if (!validLegs.length) { alert('Please fill in at least one complete route.'); return; }
 
-  const icao    = aiGenTarget[0];
-  const apiKey  = typeof getApiKey === 'function' ? getApiKey() : null;
-  const dlArea  = document.getElementById('aigen-dl-area');
+  const icao   = aiGenTarget[0];
+  const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
+  if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
+
+  const dlArea = document.getElementById('aigen-dl-area');
   if (dlArea) dlArea.style.display = 'none';
+  const setStatus = txt => { ['aigen-status','aigen-status-top'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=txt;}); };
 
-  const nCombos = [...new Set(validLegs.map(l=>l.airline+'|'+l.aircraft))].length;
-  const estSecs = 10 + nCombos * 15;
-  const setStatus = txt => {
-    ['aigen-status','aigen-status-top'].forEach(id=>{
-      const el=document.getElementById(id); if(el) el.textContent=txt;
-    });
-  };
-
-  // Pulse
-  let _pulseI=0;
-  const _pulse = setInterval(()=>{
-    const el=document.getElementById('aigen-status');
-    if(el&&el.textContent.startsWith('⏳')) el.style.opacity=(_pulseI++%2===0)?'0.6':'1';
-  },600);
-
-  // Abort
-  let _aborted=false;
+  // Pulse + stopwatch
+  let _pulseI=0, _swSecs=0, _aborted=false;
+  const _pulse=setInterval(()=>{const el=document.getElementById('aigen-status');if(el&&el.textContent.startsWith('⏳'))el.style.opacity=(_pulseI++%2===0)?'0.5':'1';},600);
+  const _sw=setInterval(()=>{_swSecs++;},1000);
   const abortBtn=document.getElementById('aigen-abort');
-  if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_pulse);clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};};
+  if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_pulse);clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
 
-  setStatus('⏳ [1/'+(nCombos+2)+'] UTC offset… (est. '+estSecs+'s)');
+  // ── Build the leg description for the model ──
+  const legDesc = validLegs.map((l,idx) => {
+    const dep = l.dep[0], arr = l.arr[0];
+    const depName = l.dep[7]||l.dep[2], arrName = l.arr[7]||l.arr[2];
+    return `Route ${idx+1}: ${l.airline} (${l.aircraft}) from ${dep} (${depName}) to ${arr} (${arrName}). `
+      + `Block time entered: ${l.blockTime||'unknown'}. `
+      + `DEP window at ${dep}: ${l.t3||'06:00'}–${l.t4||'22:30'} local. `
+      + `ARR window at ${arr}: ${l.t1||'05:30'}–${l.t2||'23:00'} local. `
+      + `Return DEP window at ${arr}: ${l.r1||l.t3||'06:00'}–${l.r2||l.t4||'22:30'} local. `
+      + `Min ground time: ${l.groundTime||'90'} min. Each route operates as a round trip ${dep}→${arr}→${dep}, every day of the week.`;
+  }).join('\n');
 
-  // ── 1. UTC offset ──────────────────────────────────────────────────────────
-  let utcOff = 0;
-  if (apiKey) {
-    try {
-      const r = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
-          'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:30,
-          messages:[{role:'user',content:'Summer UTC offset for airport '+icao+'? Reply ONLY a number e.g. 2 or -5.'}]})});
-      if(r.ok){const d=await r.json();const t=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('').trim();const m=t.match(/^-?\d+/);if(m)utcOff=parseFloat(m[0]);}
-    }catch(e){}
-  }
-  if(_aborted)return;
-
-  // ── 2. Aircraft combos ─────────────────────────────────────────────────────
-  const combos=[];
+  const combos = [];
   validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
-  const acLines=combos.map((c,i)=>'AC#'+(i+1)+',490,"AIGAIM_'+c.airline+' '+c.eqp+' NCv2"');
 
-  // ── 3. Fetch registrations from airfleets.net ─────────────────────────────
-  const regMap={};
-  for(let ci=0;ci<combos.length;ci++){
-    if(_aborted)break;
-    const combo=combos[ci];
-    setStatus('⏳ ['+(ci+2)+'/'+(nCombos+2)+'] airfleets.net: '+combo.airline+' '+combo.eqp+'…');
-    let regs=[];
-    if(apiKey){
-      try{
-        const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-          headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
-            'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-          body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:600,
-            tools:[{type:'web_search_20250305',name:'web_search'}],
-            messages:[{role:'user',content:
-              'Go to airfleets.net and search for the fleet list of airline "'+combo.airline+'" aircraft type "'+combo.eqp+'". '+
-              'Find the EXACT registration series (e.g. if fleet has G-XWBA to G-XWBK, the pattern is G-XWB+letter). '+
-              'Then provide 10 NEW registrations that CONTINUE this series sequentially (do NOT repeat existing ones). '+
-              'Reply ONLY as a JSON array of 10 strings like ["G-XWBL","G-XWBM",...]. No other text.'}]})});
-        if(r.ok){const d=await r.json();const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');const m=txt.match(/\[[\s\S]*?\]/);if(m){try{regs=JSON.parse(m[0]).filter(s=>typeof s==='string'&&s.length>2).slice(0,10);}catch(e){}}}
-      }catch(e){}
+  const prompt = `You are an expert flight-schedule planner building AI traffic for Microsoft Flight Simulator in TTools format. Master airport: ${icao} (${aiGenTarget[7]||aiGenTarget[2]}).
+
+ROUTES (all times LOCAL, summer/DST):
+${legDesc}
+
+Build a complete weekly flightplan. Follow this EXACT process and use web_search where needed:
+
+STEP 1 — REGISTRATIONS: For each airline+aircraft type, search airfleets.net for the real fleet. Identify the exact registration series pattern and CONTINUE it sequentially (e.g. if BA A350-1000 ends at G-XWBS, continue G-XWBT, G-XWBU…). Generate as many as you need.
+
+STEP 2 — FLIGHT NUMBERS: Search the web for the airline's REAL flight numbers to each destination. Use a nearby unused number (e.g. if BA flies BA45/BA47 to Cape Town, use BA49 outbound / BA50 inbound). For destinations the airline doesn't serve, find their flight number to a nearby airport/country and adapt. Use a different number for outbound vs inbound.
+
+STEP 3 — BLOCK TIMES: Search for real nonstop block times for each route, using NORTHERN SUMMER schedule (April–September). If a route doesn't exist in reality, estimate from distance and add 30 min for taxiing.
+
+STEP 4 — UTC CONVERSION: Convert ALL local times to UTC. ${icao} and each airport may have different offsets — look them up. TTools times are UTC.
+
+STEP 5 — ROTATION PUZZLE (most important): For each route compute round-trip duration (outbound block + ground + return block + ground). The longest rotations decide how many aircraft you need so the flight departs at the SAME time every day. Example: if a Cape Town round trip spans ~36h, you need 3 aircraft (plane 1 departs Mon, back Wed, departs Wed, back Fri…; plane 2 staggered; plane 3 covers the rest). Then PUZZLE the shorter routes (day trips etc.) onto the free time-slots of those same aircraft, adjusting departure times within the allowed windows and ground times so nothing overlaps. Times should be realistic: overnight to Africa, midday-out/overnight-back to South America, daytrip to Europe fitting between the long-haul rotations.
+
+STEP 6 — VALIDATE: Every flight must (a) operate all 7 days (0–6) at the SAME time with the SAME flight number, (b) have rotations that chain with no overlap and respect min ground time, (c) respect the entered time windows, (d) use realistic flight numbers and registrations.
+
+OUTPUT FORMAT — reply with ONLY a JSON object, no other text:
+{
+  "aircraft": [ {"acNum":1, "pax":490, "title":"AIGAIM_BAW A35K NCv2"} ],
+  "flightplans": [ {"acNum":1, "reg":"G-XWBT", "segments":"0/09:30,0/12:00,330,F,0492,LEPA,0/14:30,..."} ]
+}
+
+Each segment group is: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICAO (times UTC, day 0=Sun..6=Sat, but list Monday-start order 1,2,3,4,5,6,0). The "segments" string concatenates all flights for that registration across the whole week, comma-separated. Build it carefully so each aircraft's rotation is continuous.`;
+
+  setStatus('⏳ Planning rotations with AI… this can take 1–3 min (0s)');
+  const _statusTick=setInterval(()=>{ if(!_aborted) setStatus('⏳ Planning rotations with AI… this can take 1–3 min ('+_swSecs+'s)'); },1000);
+
+  let result=null;
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
+        'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:8000,
+        tools:[{type:'web_search_20250305',name:'web_search'}],
+        messages:[{role:'user',content:prompt}]
+      })});
+    if(resp.ok){
+      const d=await resp.json();
+      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      const m=txt.match(/\{[\s\S]*\}/);
+      if(m){ try{ result=JSON.parse(m[0]); }catch(e){ console.error('JSON parse failed',e); } }
+    } else {
+      const errTxt = await resp.text();
+      console.error('API error', errTxt);
     }
-    if(!regs.length)regs=ttoolsFallbackRegs(combo.airline,combo.eqp);
-    regMap[combo.key]=regs;
-  }
-  if(_aborted)return;
+  } catch(e){ console.error(e); }
 
-  // ── 4. Build rotations ─────────────────────────────────────────────────────
-  // Stopwatch
-  let _swSecs=0;
-  const _sw=setInterval(()=>{_swSecs++;const t='('+_swSecs+'s)';['aigen-status','aigen-status-top'].forEach(id=>{const el=document.getElementById(id);if(el&&el.textContent.includes('Building'))el.textContent='⏳ Building rotations… '+t;});},1000);
-  setStatus('⏳ Building rotations…');
-
-  const hm  = s=>{const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/);return m?+m[1]*60+ +m[2]:null;};
-  const hmm = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
-  const r5  = m=>Math.round(m/5)*5;
-  const DAYS=[1,2,3,4,5,6,0]; // Mon..Sun
-
-  // Per leg: fixed daily times (same every day), UTC
-  // Key insight from example: every flight departs at the SAME time every day
-  const fpLines=['//FSXDAYS=False'];
-
-  // Group legs by combo
-  const byCombo={};
-  validLegs.forEach((leg,li)=>{
-    const k=leg.airline+'|'+leg.aircraft;
-    if(!byCombo[k])byCombo[k]=[];
-
-    const bt   = hm(leg.blockTime)||90;
-    const gnd  = Math.max(90,parseInt(leg.groundTime||'90')||90);
-
-    // Fixed outbound dep time: pick midpoint of DEP window, UTC, rounded to 5
-    const depFromUTC  = r5((hm(leg.t3||'06:00')??360) - utcOff*60);
-    const depUntilUTC = r5((hm(leg.t4||'22:30')??1350)- utcOff*60);
-    const depOut = r5(depFromUTC + Math.round((depUntilUTC-depFromUTC-bt)/2/5)*5);
-    const arrOut = r5(depOut+bt);
-
-    // Fixed return dep: earliest of (arrOut+gnd) snapped to ↩ window
-    const retFromUTC  = r5((hm(leg.r1||leg.t3||'06:00')??360) - utcOff*60);
-    const retUntilUTC = r5((hm(leg.r2||leg.t4||'22:30')??1350)- utcOff*60);
-    let depRet = r5(Math.max(arrOut+gnd, retFromUTC));
-    if(depRet>retUntilUTC) depRet=retFromUTC+1440; // next day
-    const arrRet = r5(depRet+bt);
-
-    // Cycle: how many days does one round trip take?
-    // e.g. depOut=1030(17:25 UTC), arrRet=1520 next day → 2 days needed per aircraft
-    const cycleEndMins = arrRet+gnd; // absolute from start of day 0
-    const cycleDays = Math.ceil(cycleEndMins/1440); // 1 = fits same day, 2 = needs 2 days, etc.
-
-    const flOut=String(1000+li*7).padStart(4,'0');
-    const flRet=String(1000+li*7+3).padStart(4,'0');
-
-    byCombo[k].push({leg,bt,gnd,depOut,arrOut,depRet,arrRet,cycleDays,flOut,flRet,
-      depIcao:leg.dep[0],arrIcao:leg.arr[0],
-      acNum:combos.findIndex(c=>c.key===k)+1});
-  });
-
-  // For each combo: assign registrations using cycle-based rotation
-  // Like the example: a 2-day rotation needs 2 planes (plane A does Mon, plane B does Tue, etc.)
-  Object.entries(byCombo).forEach(([key,units])=>{
-    if(_aborted)return;
-    const acNum=units[0].acNum;
-    const regs=regMap[key]||ttoolsFallbackRegs('','');
-
-    // Build each unit's weekly schedule
-    // For a cycleDays=N route: plane 0 starts Mon, plane 1 starts Tue, etc.
-    // Each plane gets a segment every N days
-
-    // Collect all (plane_slot, abs_dep, abs_end, day, arrDay, depMins, arrMins, flNum, dep, arr)
-    const planeSlots={}; // slot → array of segs
-
-    units.forEach(u=>{
-      // How many planes needed for this route alone = cycleDays
-      const nPlanes = u.cycleDays;
-
-      for(let p=0;p<nPlanes;p++){
-        // This plane starts on day p (0=Mon) and then every nPlanes days
-        for(let di=p;di<7;di+=nPlanes){
-          const base=di*1440;
-          const absDepOut=base+((u.depOut%1440)+1440)%1440;
-          const absArrOut=absDepOut+u.bt;
-
-          // Return: depRet is relative to start of same day as depOut
-          const retBase = absDepOut - ((u.depOut%1440+1440)%1440); // start of that absolute day
-          let absDepRet=retBase+((u.depRet%1440)+1440)%1440;
-          if(u.depRet>=1440) absDepRet=retBase+1440+((u.depRet%1440)+1440)%1440; // next day
-          const absArrRet=absDepRet+u.bt;
-
-          const dayOf=abs=>DAYS[Math.floor(((abs%10080)+10080)%10080/1440)];
-          const mof=abs=>((abs%1440)+1440)%1440;
-
-          const slotKey=key+'_'+p;
-          if(!planeSlots[slotKey])planeSlots[slotKey]={acNum,regs,p,segs:[]};
-          planeSlots[slotKey].segs.push(
-            {abs:absDepOut,absEnd:absArrOut+u.gnd,day:dayOf(absDepOut),arrDay:dayOf(absArrOut),depMins:mof(absDepOut),arrMins:mof(absArrOut),flNum:u.flOut,depIcao:u.depIcao,arrIcao:u.arrIcao},
-            {abs:absDepRet,absEnd:absArrRet+u.gnd,day:dayOf(absDepRet),arrDay:dayOf(absArrRet),depMins:mof(absDepRet),arrMins:mof(absArrRet),flNum:u.flRet,depIcao:u.arrIcao,arrIcao:u.depIcao}
-          );
-        }
-      }
-    });
-
-    // Now greedily pack planeSlots into registrations
-    const sortedSlots=Object.values(planeSlots).sort((a,b)=>a.p-b.p);
-    const packed=[]; // array of {regIdx, segs:[]}
-
-    sortedSlots.forEach(slot=>{
-      slot.segs.sort((a,b)=>a.abs-b.abs);
-      // Try to add to existing registration without overlap
-      let placed=false;
-      for(const rot of packed){
-        const lastEnd=rot.segs.length?rot.segs[rot.segs.length-1].absEnd:0;
-        if(!slot.segs.length||slot.segs[0].abs>=lastEnd){
-          rot.segs.push(...slot.segs);
-          rot.segs.sort((a,b)=>a.abs-b.abs);
-          placed=true; break;
-        }
-      }
-      if(!placed) packed.push({segs:[...slot.segs]});
-    });
-
-    packed.forEach((rot,ri)=>{
-      const reg=regs[ri%regs.length];
-      rot.segs.sort((a,b)=>a.abs-b.abs);
-      const segs=rot.segs.map(s=>{
-        const alt=310+Math.floor(Math.random()*9)*10;
-        return s.day+'/'+hmm(s.depMins)+','+s.arrDay+'/'+hmm(s.arrMins)+','+alt+',F,'+s.flNum+','+s.arrIcao;
-      }).join(',');
-      fpLines.push('AC#'+acNum+','+reg+',1%,Week,IFR,'+segs);
-    });
-  });
-
-  clearInterval(_sw);
-  clearInterval(_pulse);
+  clearInterval(_statusTick); clearInterval(_pulse); clearInterval(_sw);
   if(abortBtn)abortBtn.style.display='none';
   if(_aborted)return;
   document.querySelectorAll('#aigen-status,#aigen-status-top').forEach(el=>el.style.opacity='1');
 
-  const acContent=acLines.join('\n')+'\n';
-  const fpContent=fpLines.join('\n')+'\n';
+  if(!result || !result.aircraft || !result.flightplans){
+    setStatus('✗ Generation failed — try again (the model may have returned invalid data).');
+    return;
+  }
+
+  // Build files
+  const acContent = result.aircraft.map(a=>`AC#${a.acNum},${a.pax||490},"${a.title}"`).join('\n')+'\n';
+  const fpContent = '//FSXDAYS=False\n' + result.flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
   const acName='Aircraft_CRE_'+icao+'.txt';
   const fpName='Flightplans_CRE_'+icao+'.txt';
+
   const setDl=(acId,fpId,areaId,statId)=>{
     const a=document.getElementById(acId),f=document.getElementById(fpId),ar=document.getElementById(areaId),s=document.getElementById(statId);
     if(a){a.textContent='⬇ '+acName;a.onclick=()=>ttoolsDownload(acContent,acName);}
     if(f){f.textContent='⬇ '+fpName;f.onclick=()=>ttoolsDownload(fpContent,fpName);}
     if(ar)ar.style.display='flex';
-    if(s)s.textContent='✓ UTC'+(utcOff>=0?'+':'')+utcOff+' · '+(fpLines.length-1)+' reg(s) · '+combos.length+' type(s)';
+    if(s)s.textContent='✓ Done · '+result.flightplans.length+' aircraft · '+result.aircraft.length+' type(s) · '+_swSecs+'s';
   };
   setDl('aigen-dl-ac','aigen-dl-fp','aigen-dl-area','aigen-status');
   setDl('aigen-dl-ac-top','aigen-dl-fp-top','aigen-dl-area-top','aigen-status-top');
