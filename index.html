@@ -6065,27 +6065,43 @@ Each segment group is: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICA
   setStatus('⏳ Planning rotations with AI… this can take 1–3 min (0s)');
   const _statusTick=setInterval(()=>{ if(!_aborted) setStatus('⏳ Planning rotations with AI… this can take 1–3 min ('+_swSecs+'s)'); },1000);
 
-  let result=null;
+  let result=null, errMsg='';
   try {
     const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:8000,
+        max_tokens:16000,
         tools:[{type:'web_search_20250305',name:'web_search'}],
         messages:[{role:'user',content:prompt}]
       })});
     if(resp.ok){
       const d=await resp.json();
       const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-      const m=txt.match(/\{[\s\S]*\}/);
-      if(m){ try{ result=JSON.parse(m[0]); }catch(e){ console.error('JSON parse failed',e); } }
+      window._aigenLastResponse = txt; // for debugging
+      const stopReason = d.stop_reason || '';
+      // Extract JSON: try fenced code block first, then largest {...}
+      let jsonStr = '';
+      const fence = txt.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (fence) jsonStr = fence[1];
+      else { const m=txt.match(/\{[\s\S]*\}/); if(m) jsonStr=m[0]; }
+      if (jsonStr) {
+        try { result=JSON.parse(jsonStr); }
+        catch(e){
+          errMsg = 'JSON parse error: '+e.message;
+          if (stopReason === 'max_tokens') errMsg += ' (response was cut off — too many flights)';
+          console.error('JSON parse failed', e, jsonStr.slice(0,500));
+        }
+      } else {
+        errMsg = 'No JSON found in response. First 200 chars: '+txt.slice(0,200);
+      }
     } else {
       const errTxt = await resp.text();
+      errMsg = 'API error '+resp.status+': '+errTxt.slice(0,200);
       console.error('API error', errTxt);
     }
-  } catch(e){ console.error(e); }
+  } catch(e){ errMsg='Network error: '+e.message; console.error(e); }
 
   clearInterval(_statusTick); clearInterval(_pulse); clearInterval(_sw);
   if(abortBtn)abortBtn.style.display='none';
@@ -6093,7 +6109,7 @@ Each segment group is: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICA
   document.querySelectorAll('#aigen-status,#aigen-status-top').forEach(el=>el.style.opacity='1');
 
   if(!result || !result.aircraft || !result.flightplans){
-    setStatus('✗ Generation failed — try again (the model may have returned invalid data).');
+    setStatus('✗ Failed: '+(errMsg||'invalid data')+' — see console (F12) for details. Try again.');
     return;
   }
 
