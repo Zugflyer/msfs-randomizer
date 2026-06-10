@@ -6022,43 +6022,55 @@ async function generateTTools() {
   const legDesc = validLegs.map((l,idx) => {
     const dep = l.dep[0], arr = l.arr[0];
     const depName = l.dep[7]||l.dep[2], arrName = l.arr[7]||l.arr[2];
-    return `Route ${idx+1}: ${l.airline} (${l.aircraft}) from ${dep} (${depName}) to ${arr} (${arrName}). `
-      + `Block time entered: ${l.blockTime||'unknown'}. `
-      + `DEP window at ${dep}: ${l.t3||'06:00'}–${l.t4||'22:30'} local. `
-      + `ARR window at ${arr}: ${l.t1||'05:30'}–${l.t2||'23:00'} local. `
-      + `Return DEP window at ${arr}: ${l.r1||l.t3||'06:00'}–${l.r2||l.t4||'22:30'} local. `
-      + `Min ground time: ${l.groundTime||'90'} min. Each route operates as a round trip ${dep}→${arr}→${dep}, every day of the week.`;
+    return `Route ${idx+1}: ${l.airline} ${l.aircraft} | ${dep} (${depName}) ⇄ ${arr} (${arrName}) | `
+      + `entered block time = ${l.blockTime||'unknown'} | `
+      + `DEP from ${dep}: must depart between ${l.t3||'06:00'} and ${l.t4||'22:30'} local | `
+      + `ARR at ${arr}: must arrive between ${l.t1||'05:30'} and ${l.t2||'23:00'} local | `
+      + `Return DEP from ${arr}: between ${l.r1||l.t3||'06:00'} and ${l.r2||l.t4||'22:30'} local | `
+      + `min ground = ${l.groundTime||'90'} min`;
   }).join('\n');
 
   const combos = [];
   validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+  const comboList = combos.map((c,i)=>`AC#${i+1} = ${c.airline} ${c.eqp}`).join('\n');
 
-  const prompt = `You are an expert flight-schedule planner building AI traffic for Microsoft Flight Simulator in TTools format. Master airport: ${icao} (${aiGenTarget[7]||aiGenTarget[2]}).
+  const prompt = `You are an expert airline network planner. Build AI traffic for Microsoft Flight Simulator in TTools format. Master airport: ${icao} (${aiGenTarget[7]||aiGenTarget[2]}).
 
-ROUTES (all times LOCAL, summer/DST):
+ROUTES (times are LOCAL summer/DST; each route is a daily round trip ${icao} area):
 ${legDesc}
 
-Build a complete weekly flightplan. Follow this EXACT process and use web_search where needed:
+AIRCRAFT TYPES (these are the ONLY AC# entries — group identical airline+type together, NEVER create duplicate AC# with same title):
+${comboList}
 
-STEP 1 — REGISTRATIONS: For each airline+aircraft type, search airfleets.net for the real fleet. Identify the exact registration series pattern and CONTINUE it sequentially (e.g. if BA A350-1000 ends at G-XWBS, continue G-XWBT, G-XWBU…). Generate as many as you need.
+═══ HARD RULES (violating any = failure) ═══
+1. SAME TIME EVERY DAY: every distinct flight departs at the identical UTC time on all 7 days (0=Sun,1=Mon..6=Sat) with the same flight number. List days in order 1,2,3,4,5,6,0.
+2. BLOCK TIMES: web_search the REAL nonstop block time for every route (northern summer schedule, April–September). If a real scheduled flight exists, USE that block time and do NOT alter it afterwards. If no real flight exists for that route, calculate the block time from great-circle distance and cruise speed, then add 30 minutes for taxi. Once set, keep each route's block time fixed across all 7 days.
+3. RESPECT TIME WINDOWS ABSOLUTELY: a departure/arrival outside its stated local window is forbidden. Convert windows to UTC using each airport's summer offset (look up offsets).
+4. NO OVERLAP: within one registration, each next departure must be ≥ previous arrival + min ground time. A leg may cross midnight (e.g. 6/20:00→0/05:00).
+5. MINIMUM AIRCRAFT: use as FEW registrations as possible. Compute the longest rotation first, then PUZZLE shorter routes onto the same aircraft's idle days.
 
-STEP 2 — FLIGHT NUMBERS: Search the web for the airline's REAL flight numbers to each destination. Use a nearby unused number (e.g. if BA flies BA45/BA47 to Cape Town, use BA49 outbound / BA50 inbound). For destinations the airline doesn't serve, find their flight number to a nearby airport/country and adapt. Use a different number for outbound vs inbound.
+═══ HOW TO COMPUTE AIRCRAFT COUNT (do this carefully) ═══
+For each route: round-trip time = outbound block + ground + return block + ground (+ any forced wait to hit the return window). 
+- If round-trip ≤ ~24h → 1 aircraft can do it daily.
+- If round-trip needs N calendar days → you need N aircraft for THAT route alone, each staggered by one day (plane A: Mon-dep, plane B: Tue-dep, … plane covers every Nth day). 
+Then fit the SHORT routes into the gaps of those same N aircraft instead of adding new ones. Only add an aircraft if no existing one has a free, non-overlapping slot.
+Worked example (Cape Town from London, ~11.5h each way): a round trip is dep Mon evening → arrive Tue morning → ground → dep Tue evening → arrive Wed morning. That ties up a plane ~36h, so 3 aircraft cover the daily service (each flies it every 2nd day). The day-trips to Spain and the South America run get slotted onto those 3 planes' free hours — total stays at 3, NOT 5.
 
-STEP 3 — BLOCK TIMES: Search for real nonstop block times for each route, using NORTHERN SUMMER schedule (April–September). If a route doesn't exist in reality, estimate from distance and add 30 min for taxiing.
+═══ FLIGHT NUMBERS ═══
+web_search the airline's real flight numbers to each destination; pick a nearby unused number (e.g. BA45/47 to Cape Town → use 49 out / 50 back). For unserved destinations, adapt the airline's number to a nearby country. Different number outbound vs return.
 
-STEP 4 — UTC CONVERSION: Convert ALL local times to UTC. ${icao} and each airport may have different offsets — look them up. TTools times are UTC.
+═══ REGISTRATIONS ═══
+web_search airfleets.net for the exact fleet of each airline+type. Continue the real series (e.g. BA A350-1000 ends G-XWBS → use G-XWBT, G-XWBU, …). One registration = one aircraft = one flightplan line.
 
-STEP 5 — ROTATION PUZZLE (most important): For each route compute round-trip duration (outbound block + ground + return block + ground). The longest rotations decide how many aircraft you need so the flight departs at the SAME time every day. Example: if a Cape Town round trip spans ~36h, you need 3 aircraft (plane 1 departs Mon, back Wed, departs Wed, back Fri…; plane 2 staggered; plane 3 covers the rest). Then PUZZLE the shorter routes (day trips etc.) onto the free time-slots of those same aircraft, adjusting departure times within the allowed windows and ground times so nothing overlaps. Times should be realistic: overnight to Africa, midday-out/overnight-back to South America, daytrip to Europe fitting between the long-haul rotations.
+═══ SELF-CHECK before answering ═══
+Re-read every flightplan line and verify: (a) all 7 days present at same times, (b) no departure before its window opens or after it closes, (c) every gap ≥ ground time, (d) block times match what was entered, (e) aircraft count is minimal, (f) no duplicate AC# titles. Fix any violation before outputting.
 
-STEP 6 — VALIDATE: Every flight must (a) operate all 7 days (0–6) at the SAME time with the SAME flight number, (b) have rotations that chain with no overlap and respect min ground time, (c) respect the entered time windows, (d) use realistic flight numbers and registrations.
-
-OUTPUT FORMAT — reply with ONLY a JSON object, no other text:
+═══ OUTPUT — ONLY this JSON, nothing else ═══
 {
   "aircraft": [ {"acNum":1, "pax":490, "title":"AIGAIM_BAW A35K NCv2"} ],
-  "flightplans": [ {"acNum":1, "reg":"G-XWBT", "segments":"0/09:30,0/12:00,330,F,0492,LEPA,0/14:30,..."} ]
+  "flightplans": [ {"acNum":1, "reg":"G-XWBT", "segments":"1/20:30,2/08:00,370,F,0049,FACT,..."} ]
 }
-
-Each segment group is: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICAO (times UTC, day 0=Sun..6=Sat, but list Monday-start order 1,2,3,4,5,6,0). The "segments" string concatenates all flights for that registration across the whole week, comma-separated. Build it carefully so each aircraft's rotation is continuous.`;
+Segment format: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICAO — times UTC, comma-separated, one continuous weekly chain per registration. acNum refers to the AIRCRAFT TYPE list above (multiple registrations share the same acNum if same type).`;
 
   setStatus('⏳ Planning rotations with AI… this can take 1–3 min (0s)');
   const _statusTick=setInterval(()=>{ if(!_aborted) setStatus('⏳ Planning rotations with AI… this can take 1–3 min ('+_swSecs+'s)'); },1000);
@@ -6070,7 +6082,7 @@ Each segment group is: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICA
         'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
       body:JSON.stringify({
         model:'claude-sonnet-4-20250514',
-        max_tokens:16000,
+        max_tokens:20000,
         tools:[{type:'web_search_20250305',name:'web_search'}],
         messages:[{role:'user',content:prompt}]
       })});
