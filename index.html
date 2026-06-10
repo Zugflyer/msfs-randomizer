@@ -743,6 +743,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap;">
             ✦ Generate TTools
           </button>
+          <div id="aigen-status-top" style="font-size:11px;color:var(--txt3);"></div>
+          <div id="aigen-dl-area-top" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;">
+            <span style="font-size:11px;color:#3fb950;font-weight:600;">✓</span>
+            <button id="aigen-dl-ac-top" style="font-size:11px;padding:3px 10px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Aircraft</button>
+            <button id="aigen-dl-fp-top" style="font-size:11px;padding:3px 10px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Flightplans</button>
+          </div>
 
         </div>
         <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-legs-wrap">
@@ -5690,7 +5696,7 @@ let aiGenLegs = [];
 function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
            airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
-           t1:'', t2:'', t3:'', t4:'', _swapped: false };
+           t1:'', t2:'', t3:'', t4:'', _swapped: false, groundTime: '90' };
 }
 
 function initAiGen() {
@@ -5775,96 +5781,113 @@ function renderAiGenLegs() {
     acInp.oninput=()=>{ leg.aircraft=acInp.value=acInp.value.toUpperCase(); };
     alCell.appendChild(alInp); alCell.appendChild(acInp);
 
+    // ── Get master times ──
+    const mArrFrom  = document.getElementById('aigen-arr-from')?.value  || '05:30';
+    const mArrUntil = document.getElementById('aigen-arr-until')?.value || '23:00';
+    const mDepFrom  = document.getElementById('aigen-dep-from')?.value  || '06:00';
+    const mDepUntil = document.getElementById('aigen-dep-until')?.value || '22:30';
+    if (!leg.t1) leg.t1 = mArrFrom;
+    if (!leg.t2) leg.t2 = mArrUntil;
+    if (!leg.t3) leg.t3 = mDepFrom;
+    if (!leg.t4) leg.t4 = mDepUntil;
+    if (!leg.groundTime) leg.groundTime = '90';
+
+    // ── DEP FROM/UNTIL ──
+    const depWinCell = document.createElement('div');
+    depWinCell.style.cssText = bS+'width:82px;min-width:82px;gap:3px;align-items:center;';
+    const dwL1=document.createElement('div'); dwL1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; dwL1.textContent='DEP from';
+    const dwI1=document.createElement('input'); dwI1.type='text'; dwI1.value=leg.t3; dwI1.maxLength=5;
+    dwI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    dwI1.oninput=()=>leg.t3=dwI1.value; dwI1.onblur=()=>{dwI1.value=formatTimeStr(dwI1.value)||dwI1.value;leg.t3=dwI1.value;};
+    const dwL2=document.createElement('div'); dwL2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; dwL2.textContent='DEP until';
+    const dwI2=document.createElement('input'); dwI2.type='text'; dwI2.value=leg.t4; dwI2.maxLength=5;
+    dwI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    dwI2.oninput=()=>leg.t4=dwI2.value; dwI2.onblur=()=>{dwI2.value=formatTimeStr(dwI2.value)||dwI2.value;leg.t4=dwI2.value;};
+    depWinCell.appendChild(dwL1); depWinCell.appendChild(dwI1); depWinCell.appendChild(dwL2); depWinCell.appendChild(dwI2);
+
     // ── DEP ──
     const depCell = document.createElement('div');
-    depCell.style.cssText='display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
+    depCell.style.cssText='display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:130px;width:130px;';
     if (leg.dep) {
       depCell.innerHTML=apBox(leg.dep); depCell.style.cursor='pointer'; depCell.title='Click to change';
       depCell.onclick=()=>{ leg.dep=null; leg.blockTime=''; renderAiGenLegs(); };
     } else {
       const w=document.createElement('div'); w.style.position='relative';
       const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
-      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
       w.appendChild(inp); depCell.appendChild(w);
       buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
     }
 
     // ── Swap + blocktime ──
     const btCell = document.createElement('div');
-    btCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 4px;min-height:54px;gap:2px;';
-    const swapBtn = document.createElement('button');
+    btCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
+    const swapBtn=document.createElement('button');
     swapBtn.innerHTML='⇄'; swapBtn.title='Swap DEP ↔ ARR';
-    swapBtn.style.cssText='font-size:15px;background:transparent;border:none;color:#555;cursor:pointer;padding:1px 4px;';
+    swapBtn.style.cssText='font-size:14px;background:transparent;border:none;color:'+(leg._swapped?'#58a6ff':'#555')+';cursor:pointer;padding:1px 3px;';
     swapBtn.onmouseenter=()=>swapBtn.style.color='#58a6ff';
-    swapBtn.onmouseleave=()=>swapBtn.style.color='#555';
+    swapBtn.onmouseleave=()=>swapBtn.style.color=leg._swapped?'#58a6ff':'#555';
     swapBtn.onclick=()=>{ const t=leg.dep; leg.dep=leg.arr; leg.arr=t; leg._swapped=!leg._swapped; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenLegs(); aiGenFetchBlockTime(i); };
     const arrowDiv=document.createElement('div');
-    arrowDiv.style.cssText='font-size:16px;color:#555;cursor:pointer;line-height:1;'; arrowDiv.textContent='→'; arrowDiv.title='Search block time';
+    arrowDiv.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrowDiv.textContent='→'; arrowDiv.title='Search block time';
     arrowDiv.onclick=()=>aiGenFetchBlockTime(i);
     const btInp=document.createElement('input');
     btInp.type='text'; btInp.id='aigen-bt-'+i; btInp.value=leg.blockTime||''; btInp.placeholder='H:MM';
-    btInp.style.cssText='width:48px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?700:400)+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 4px;outline:none;';
+    btInp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?700:400)+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
     btInp.oninput=()=>{ leg.blockTime=btInp.value; leg.blockTimeReal=false; };
     btCell.appendChild(swapBtn); btCell.appendChild(arrowDiv); btCell.appendChild(btInp);
 
     // ── ARR ──
     const arrCell = document.createElement('div');
-    arrCell.style.cssText='display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:140px;width:140px;';
+    arrCell.style.cssText='display:flex;flex-direction:column;justify-content:center;min-height:54px;flex-shrink:0;min-width:130px;width:130px;';
     if (leg.arr) {
       arrCell.innerHTML=apBox(leg.arr); arrCell.style.cursor='pointer'; arrCell.title='Click to change';
       arrCell.onclick=()=>{ leg.arr=null; leg.blockTime=''; renderAiGenLegs(); };
     } else {
       const w=document.createElement('div'); w.style.position='relative';
       const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
-      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:6px 8px;box-sizing:border-box;';
+      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
       w.appendChild(inp); arrCell.appendChild(w);
       buildSuggestBox(inp, ap=>{ leg.arr=ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
     }
 
-    // ── Time window cell (ARR or DEP depending on swap state) ──
-    const timeCell = document.createElement('div');
-    timeCell.style.cssText=bS+'width:86px;min-width:86px;gap:4px;align-items:center;';
-    const arrFrom  = document.getElementById('aigen-arr-from')?.value  || '05:30';
-    const arrUntil = document.getElementById('aigen-arr-until')?.value || '23:00';
-    const depFrom  = document.getElementById('aigen-dep-from')?.value  || '06:00';
-    const depUntil = document.getElementById('aigen-dep-until')?.value || '22:30';
-    // Pre-fill from master if not yet set
-    if (!leg.t1) leg.t1 = arrFrom;
-    if (!leg.t2) leg.t2 = arrUntil;
-    if (!leg.t3) leg.t3 = depFrom;
-    if (!leg.t4) leg.t4 = depUntil;
+    // ── ARR FROM/UNTIL ──
+    const arrWinCell = document.createElement('div');
+    arrWinCell.style.cssText = bS+'width:82px;min-width:82px;gap:3px;align-items:center;';
+    const awL1=document.createElement('div'); awL1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; awL1.textContent='ARR from';
+    const awI1=document.createElement('input'); awI1.type='text'; awI1.value=leg.t1; awI1.maxLength=5;
+    awI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    awI1.oninput=()=>leg.t1=awI1.value; awI1.onblur=()=>{awI1.value=formatTimeStr(awI1.value)||awI1.value;leg.t1=awI1.value;};
+    const awL2=document.createElement('div'); awL2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; awL2.textContent='ARR until';
+    const awI2=document.createElement('input'); awI2.type='text'; awI2.value=leg.t2; awI2.maxLength=5;
+    awI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    awI2.oninput=()=>leg.t2=awI2.value; awI2.onblur=()=>{awI2.value=formatTimeStr(awI2.value)||awI2.value;leg.t2=awI2.value;};
+    arrWinCell.appendChild(awL1); arrWinCell.appendChild(awI1); arrWinCell.appendChild(awL2); arrWinCell.appendChild(awI2);
 
-    // Determine which pair to show based on swap state
-    const isSwapped = leg._swapped;
-    const lbl1txt = isSwapped ? 'DEP from'  : 'ARR from';
-    const lbl2txt = isSwapped ? 'DEP until' : 'ARR until';
-    const val1    = isSwapped ? leg.t3 : leg.t1;
-    const val2    = isSwapped ? leg.t4 : leg.t2;
-
-    const lbl1=document.createElement('div'); lbl1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl1.textContent=lbl1txt;
-    const ti1=document.createElement('input'); ti1.type='text'; ti1.value=val1; ti1.maxLength=5;
-    ti1.style.cssText='width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    ti1.oninput=()=>{ if(isSwapped) leg.t3=ti1.value; else leg.t1=ti1.value; };
-    ti1.onblur=()=>{ ti1.value=formatTimeStr(ti1.value)||ti1.value; if(isSwapped) leg.t3=ti1.value; else leg.t1=ti1.value; };
-
-    const lbl2=document.createElement('div'); lbl2.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; lbl2.textContent=lbl2txt;
-    const ti2=document.createElement('input'); ti2.type='text'; ti2.value=val2; ti2.maxLength=5;
-    ti2.style.cssText='width:54px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-    ti2.oninput=()=>{ if(isSwapped) leg.t4=ti2.value; else leg.t2=ti2.value; };
-    ti2.onblur=()=>{ ti2.value=formatTimeStr(ti2.value)||ti2.value; if(isSwapped) leg.t4=ti2.value; else leg.t2=ti2.value; };
-
-    timeCell.appendChild(lbl1); timeCell.appendChild(ti1); timeCell.appendChild(lbl2); timeCell.appendChild(ti2);
+    // ── Ground time ──
+    const groundCell = document.createElement('div');
+    groundCell.style.cssText = bS+'width:58px;min-width:58px;gap:3px;align-items:center;';
+    const gLbl=document.createElement('div'); gLbl.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;text-align:center;'; gLbl.textContent='GND';
+    const gInp=document.createElement('input'); gInp.type='number'; gInp.value=leg.groundTime||'90'; gInp.min=30; gInp.max=480;
+    gInp.style.cssText='width:48px;font-size:11px;font-family:monospace;padding:2px 3px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    gInp.title='Ground time at destination (minutes)';
+    gInp.oninput=()=>leg.groundTime=gInp.value;
+    const gLbl2=document.createElement('div'); gLbl2.style.cssText='font-size:9px;color:var(--txt3);text-align:center;'; gLbl2.textContent='min';
+    groundCell.appendChild(gLbl); groundCell.appendChild(gInp); groundCell.appendChild(gLbl2);
 
     // ── Delete ──
     const delCell = document.createElement('div');
     delCell.style.cssText='display:flex;align-items:center;padding:0 2px;flex-shrink:0;';
-    const delBtn = document.createElement('button'); delBtn.textContent='✕';
+    const delBtn=document.createElement('button'); delBtn.textContent='✕';
     delBtn.style.cssText='font-size:11px;padding:3px 7px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;';
     delBtn.onclick=()=>{ aiGenLegs.splice(i,1); if(!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg()); renderAiGenLegs(); };
     delCell.appendChild(delBtn);
 
-    row.appendChild(logoCell); row.appendChild(alCell); row.appendChild(depCell);
-    row.appendChild(btCell);   row.appendChild(arrCell); row.appendChild(timeCell); row.appendChild(delCell);
+    row.appendChild(logoCell); row.appendChild(alCell);
+    row.appendChild(depWinCell); row.appendChild(depCell);
+    row.appendChild(btCell);
+    row.appendChild(arrCell); row.appendChild(arrWinCell);
+    row.appendChild(groundCell); row.appendChild(delCell);
     wrapper.appendChild(row);
 
     // Sub-buttons
@@ -5992,9 +6015,9 @@ async function generateTTools() {
           body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
             tools:[{type:'web_search_20250305',name:'web_search'}],
             messages:[{role:'user',content:
-              'Search for real '+combo.airline+' '+combo.eqp+' aircraft registrations in their current fleet. '+
-              'Find the pattern (e.g. HB-JHA to HB-JHD) and continue the series with 10 more sequential registrations. '+
-              'Reply ONLY as JSON array of 10 registration strings. No other text.'}]})
+              'Search airfleets.net for '+combo.airline+' '+combo.eqp+' fleet registrations. '+
+              'Find the actual registration series pattern (e.g. OE-LNA to OE-LNF) and continue with 10 new sequential registrations that follow the same pattern. '+
+              'Reply ONLY as JSON array of 10 registration strings, no duplicates of existing ones. No other text.'}]})
         });
         if (r.ok) {
           const d = await r.json();
@@ -6020,7 +6043,8 @@ async function generateTTools() {
   // Duration = outbound_bt + GROUND + return_bt + GROUND (total cycle time)
   const rotUnits = validLegs.map((leg, li) => {
     const bt = hmmToMins(leg.blockTime) || 90;
-    const cycleMins = bt * 2 + GROUND * 2; // out + ground at dest + back + ground at home
+    const gnd = Math.max(GROUND, parseInt(leg.groundTime||'90')||GROUND);
+    const cycleMins = bt * 2 + gnd * 2; // out + ground at dest + back + ground at home
     const spansMultipleDays = cycleMins > 1440;
 
     // Pick random departure time from window (UTC)
@@ -6031,7 +6055,7 @@ async function generateTTools() {
     const window   = Math.max(10, untilUTC - fromUTC - bt);
     const depOut   = round5(fromUTC + Math.floor(Math.random() * window / 5) * 5);
     const arrOut   = round5(depOut + bt);
-    const depRet   = round5(arrOut + GROUND);
+    const depRet   = round5(arrOut + gnd);
     const arrRet   = round5(depRet + bt);
 
     const flOut = String(1000 + li*7).padStart(4,'0');
@@ -6087,13 +6111,13 @@ async function generateTTools() {
           sortKey: di*1440 + ((u.depOut%1440+1440)%1440),
           day:out1.day, arrDay:out2.day, depMins:out1.mins, arrMins:out2.mins,
           flNum:u.flOut, depIcao:u.depIcao, arrIcao:u.arrIcao,
-          endAbsMins: di*1440 + u.arrOut  // for overlap detection
+          endAbsMins: di*1440 + u.arrOut + gnd  // includes ground time buffer
         });
         allSegs.push({
           sortKey: di*1440 + ((u.depRet%1440+1440)%1440),
           day:ret1.day, arrDay:ret2.day, depMins:ret1.mins, arrMins:ret2.mins,
           flNum:u.flRet, depIcao:u.arrIcao, arrIcao:u.depIcao,
-          endAbsMins: di*1440 + u.arrRet
+          endAbsMins: di*1440 + u.arrRet + gnd  // includes ground time at home
         });
       });
     });
@@ -6129,10 +6153,16 @@ async function generateTTools() {
 
   const dlAc = document.getElementById('aigen-dl-ac');
   const dlFp = document.getElementById('aigen-dl-fp');
-  if (dlAc) { dlAc.textContent='⬇ '+acName; dlAc.onclick=()=>ttoolsDownload(acContent,acName); }
-  if (dlFp) { dlFp.textContent='⬇ '+fpName; dlFp.onclick=()=>ttoolsDownload(fpContent,fpName); }
-  if (dlArea) dlArea.style.display='flex';
-  if (statusEl) statusEl.textContent='✓ UTC'+(utcOff>=0?'+':'')+utcOff+' · '+(fpLines.length-1)+' reg(s) · '+combos.length+' type(s)';
+  const setDl = (acId, fpId, areaId, statusId) => {
+    const a=document.getElementById(acId), f=document.getElementById(fpId);
+    const ar=document.getElementById(areaId), s=document.getElementById(statusId);
+    if (a) { a.textContent='⬇ '+acName; a.onclick=()=>ttoolsDownload(acContent,acName); }
+    if (f) { f.textContent='⬇ '+fpName; f.onclick=()=>ttoolsDownload(fpContent,fpName); }
+    if (ar) ar.style.display='flex';
+    if (s) s.textContent='✓ UTC'+(utcOff>=0?'+':'')+utcOff+' · '+(fpLines.length-1)+' reg(s) · '+combos.length+' type(s)';
+  };
+  setDl('aigen-dl-ac','aigen-dl-fp','aigen-dl-area','aigen-status');
+  setDl('aigen-dl-ac-top','aigen-dl-fp-top','aigen-dl-area-top','aigen-status-top');
 }
 
 function ttoolsFallbackRegs(airline, eqp) {
