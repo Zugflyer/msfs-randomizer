@@ -5696,7 +5696,8 @@ let aiGenLegs = [];
 function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
            airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
-           t1:'', t2:'', t3:'', t4:'', _swapped: false, groundTime: '90' };
+           t1:'', t2:'', t3:'', t4:'', r1:'', r2:'',
+           _swapped: false, groundTime: '90' };
 }
 
 function initAiGen() {
@@ -5851,7 +5852,7 @@ function renderAiGenLegs() {
       buildSuggestBox(inp, ap=>{ leg.arr=ap; renderAiGenLegs(); aiGenFetchBlockTime(i); });
     }
 
-    // ── ARR FROM/UNTIL ──
+    // ── ARR FROM/UNTIL + RET DEP FROM/UNTIL ──
     const arrWinCell = document.createElement('div');
     arrWinCell.style.cssText = bS+'width:82px;min-width:82px;gap:3px;align-items:center;';
     const awL1=document.createElement('div'); awL1.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; awL1.textContent='ARR from';
@@ -5863,6 +5864,24 @@ function renderAiGenLegs() {
     awI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
     awI2.oninput=()=>leg.t2=awI2.value; awI2.onblur=()=>{awI2.value=formatTimeStr(awI2.value)||awI2.value;leg.t2=awI2.value;};
     arrWinCell.appendChild(awL1); arrWinCell.appendChild(awI1); arrWinCell.appendChild(awL2); arrWinCell.appendChild(awI2);
+
+    // ── RET DEP FROM/UNTIL (when aircraft departs ARR airport back) ──
+    const retWinCell = document.createElement('div');
+    retWinCell.style.cssText = bS+'width:82px;min-width:82px;gap:3px;align-items:center;';
+    const rwL1=document.createElement('div'); rwL1.style.cssText='font-size:9px;color:#4a9eda;white-space:nowrap;'; rwL1.textContent='↩ DEP from';
+    const rwI1=document.createElement('input'); rwI1.type='text'; rwI1.value=leg.r1||leg.t3; rwI1.maxLength=5;
+    rwI1.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(88,166,255,.3);background:var(--bg);color:#4a9eda;text-align:center;outline:none;';
+    rwI1.title='Departure window at ARR airport for return flight';
+    if (!leg.r1) leg.r1 = leg.t3;
+    rwI1.oninput=()=>leg.r1=rwI1.value; rwI1.onblur=()=>{rwI1.value=formatTimeStr(rwI1.value)||rwI1.value;leg.r1=rwI1.value;};
+    const rwL2=document.createElement('div'); rwL2.style.cssText='font-size:9px;color:#4a9eda;white-space:nowrap;'; rwL2.textContent='↩ DEP until';
+    const rwI2=document.createElement('input'); rwI2.type='text'; rwI2.value=leg.r2||leg.t4; rwI2.maxLength=5;
+    rwI2.style.cssText='width:52px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(88,166,255,.3);background:var(--bg);color:#4a9eda;text-align:center;outline:none;';
+    rwI2.title='Latest departure from ARR airport for return flight';
+    if (!leg.r2) leg.r2 = leg.t4;
+    rwI2.oninput=()=>leg.r2=rwI2.value; rwI2.onblur=()=>{rwI2.value=formatTimeStr(rwI2.value)||rwI2.value;leg.r2=rwI2.value;};
+
+    retWinCell.appendChild(rwL1); retWinCell.appendChild(rwI1); retWinCell.appendChild(rwL2); retWinCell.appendChild(rwI2);
 
     // ── Ground time ──
     const groundCell = document.createElement('div');
@@ -5886,7 +5905,7 @@ function renderAiGenLegs() {
     row.appendChild(logoCell); row.appendChild(alCell);
     row.appendChild(depWinCell); row.appendChild(depCell);
     row.appendChild(btCell);
-    row.appendChild(arrCell); row.appendChild(arrWinCell);
+    row.appendChild(arrCell); row.appendChild(arrWinCell); row.appendChild(retWinCell);
     row.appendChild(groundCell); row.appendChild(delCell);
     wrapper.appendChild(row);
 
@@ -6044,19 +6063,23 @@ async function generateTTools() {
   const rotUnits = validLegs.map((leg, li) => {
     const bt = hmmToMins(leg.blockTime) || 90;
     const gnd = Math.max(GROUND, parseInt(leg.groundTime||'90')||GROUND);
-    const cycleMins = bt * 2 + gnd * 2; // out + ground at dest + back + ground at home
+    const cycleMins = bt * 2 + gnd * 2;
     const spansMultipleDays = cycleMins > 1440;
 
-    // Pick random departure time from window (UTC)
-    const fromLocal  = hmmToMins(leg._swapped ? (leg.t3||'06:00') : (leg.t1||'05:30')) ?? 360;
-    const untilLocal = hmmToMins(leg._swapped ? (leg.t4||'22:30') : (leg.t2||'23:00')) ?? 1380;
-    const fromUTC  = fromLocal  - utcOff*60;
-    const untilUTC = untilLocal - utcOff*60;
-    const window   = Math.max(10, untilUTC - fromUTC - bt);
-    const depOut   = round5(fromUTC + Math.floor(Math.random() * window / 5) * 5);
-    const arrOut   = round5(depOut + bt);
-    const depRet   = round5(arrOut + gnd);
-    const arrRet   = round5(depRet + bt);
+    // Outbound: random dep time within DEP window (t3/t4), UTC
+    const depFromUTC  = (hmmToMins(leg.t3||'06:00') ?? 360)  - utcOff*60;
+    const depUntilUTC = (hmmToMins(leg.t4||'22:30') ?? 1350) - utcOff*60;
+    const depWin = Math.max(10, depUntilUTC - depFromUTC - bt);
+    const depOut = round5(depFromUTC + Math.floor(Math.random() * depWin / 5) * 5);
+    const arrOut = round5(depOut + bt);
+
+    // Return: depart ARR airport within r1/r2 window, no earlier than arrOut+gnd
+    const retFromUTC  = (hmmToMins(leg.r1||leg.t3||'06:00') ?? 360)  - utcOff*60;
+    const retUntilUTC = (hmmToMins(leg.r2||leg.t4||'22:30') ?? 1350) - utcOff*60;
+    const earliestRet = arrOut + gnd;
+    let depRet = round5(Math.max(earliestRet, retFromUTC));
+    if (depRet > retUntilUTC) depRet = retFromUTC + 1440; // push to next day
+    const arrRet = round5(depRet + bt);
 
     const flOut = String(1000 + li*7).padStart(4,'0');
     const flRet = String(1000 + li*7+3).padStart(4,'0');
