@@ -6131,8 +6131,9 @@ async function generateTTools() {
     const flRet = String(1000 + li*7+3).padStart(4,'0');
 
     return {
-      leg, bt, cycleMins, spansMultipleDays,
+      leg, bt, gnd, cycleMins, spansMultipleDays,
       depOut, arrOut, depRet, arrRet,
+      retFromUTC,
       flOut, flRet,
       depIcao: leg.dep[0], arrIcao: leg.arr[0],
       comboKey: leg.airline+'|'+leg.aircraft,
@@ -6148,60 +6149,48 @@ async function generateTTools() {
   rotUnits.forEach(u => { if (!byCombo[u.comboKey]) byCombo[u.comboKey]=[]; byCombo[u.comboKey].push(u); });
 
   Object.entries(byCombo).forEach(([key, units]) => {
+    if (_aborted) return;
     const acNum = units[0].acNum;
     const regs  = regMap[key] || ttoolsFallbackRegs('','');
 
-    // Build all week segments (each unit = out+ret, every day of week)
+    // Each unit fires once per day. Build 7-day absolute schedule.
+    // Use absolute minutes: Mon=0..1439, Tue=1440..2879, ... Sun=8640..10079
+    const DAY_OFFSET = [0,1440,2880,4320,5760,7200,8640]; // DAYS[i] offset
+
     let allSegs = [];
-    let flightNumCounter = 0;
-
     units.forEach(u => {
-      DAYS.forEach(day => {
-        const di = DAYS.indexOf(day);
+      for (let di = 0; di < 7; di++) {
+        const base = DAY_OFFSET[di];
+        const absDepOut = base + ((u.depOut % 1440) + 1440) % 1440;
+        const absArrOut = absDepOut + u.bt;
+        const absDepRet = Math.max(absArrOut + u.gnd, base + ((u.retFromUTC % 1440) + 1440) % 1440);
+        const absArrRet = absDepRet + u.bt;
 
-        // Outbound segment
-        const d1out = DAYS[(di + Math.floor(((u.depOut%1440)+1440)%1440/1440 + Math.floor(u.depOut < 0 ? 0 : u.depOut/1440)))%7] || day;
-        const d2out = DAYS[(di + Math.floor(u.arrOut/1440))%7] || day;
-        // Return segment
-        const d1ret = DAYS[(di + Math.floor(u.depRet/1440))%7] || day;
-        const d2ret = DAYS[(di + Math.floor(u.arrRet/1440))%7] || day;
+        const dayOf = abs => DAYS[Math.floor(((abs % 10080) + 10080) % 10080 / 1440)];
+        const minsOf = abs => ((abs % 1440) + 1440) % 1440;
 
-        const resolve = (baseDi, mins) => {
-          const d = DAYS[(baseDi + Math.floor(mins / 1440) % 7 + 7) % 7];
-          return { day: d || DAYS[baseDi % 7], mins: ((mins % 1440) + 1440) % 1440 };
-        };
-
-        const out1 = resolve(di, u.depOut);
-        const out2 = resolve(di, u.arrOut);
-        const ret1 = resolve(di, u.depRet);
-        const ret2 = resolve(di, u.arrRet);
-
-        allSegs.push({
-          sortKey: di*1440 + ((u.depOut%1440+1440)%1440),
-          day:out1.day, arrDay:out2.day, depMins:out1.mins, arrMins:out2.mins,
-          flNum:u.flOut, depIcao:u.depIcao, arrIcao:u.arrIcao,
-          endAbsMins: di*1440 + u.arrOut + gnd  // includes ground time buffer
-        });
-        allSegs.push({
-          sortKey: di*1440 + ((u.depRet%1440+1440)%1440),
-          day:ret1.day, arrDay:ret2.day, depMins:ret1.mins, arrMins:ret2.mins,
-          flNum:u.flRet, depIcao:u.arrIcao, arrIcao:u.depIcao,
-          endAbsMins: di*1440 + u.arrRet + gnd  // includes ground time at home
-        });
-      });
+        allSegs.push({ abs: absDepOut, absEnd: absArrOut + u.gnd,
+          day: dayOf(absDepOut), arrDay: dayOf(absArrOut),
+          depMins: minsOf(absDepOut), arrMins: minsOf(absArrOut),
+          flNum: u.flOut, depIcao: u.depIcao, arrIcao: u.arrIcao });
+        allSegs.push({ abs: absDepRet, absEnd: absArrRet + u.gnd,
+          day: dayOf(absDepRet), arrDay: dayOf(absArrRet),
+          depMins: minsOf(absDepRet), arrMins: minsOf(absArrRet),
+          flNum: u.flRet, depIcao: u.arrIcao, arrIcao: u.depIcao });
+      }
     });
 
-    allSegs.sort((a,b) => a.sortKey - b.sortKey);
+    allSegs.sort((a,b) => a.abs - b.abs);
 
-    // Pack into registrations using greedy algorithm with GROUND buffer
+    // Greedy pack: find first registration with no overlap
     const packed = [];
     for (const seg of allSegs) {
       if (_aborted) break;
       let placed = false;
       for (const rot of packed) {
-        const last = rot[rot.length-1];
-        const lastEnd = last.endAbsMins + GROUND;
-        if (seg.sortKey >= lastEnd) { rot.push(seg); placed=true; break; }
+        if (seg.abs >= rot[rot.length-1].absEnd) {
+          rot.push(seg); placed = true; break;
+        }
       }
       if (!placed) packed.push([seg]);
     }
@@ -6210,9 +6199,9 @@ async function generateTTools() {
       const reg = regs[ri % regs.length];
       const segs = rot.map(s => {
         const alt = 310 + Math.floor(Math.random()*9)*10;
-        return s.day+'/'+minsToHHMM(s.depMins)+','+s.arrDay+'/'+minsToHHMM(s.arrMins)+','+alt+',F,'+s.flNum+','+s.arrIcao;
+        return `${s.day}/${minsToHHMM(s.depMins)},${s.arrDay}/${minsToHHMM(s.arrMins)},${alt},F,${s.flNum},${s.arrIcao}`;
       }).join(',');
-      fpLines.push('AC#'+acNum+','+reg+',1%,Week,IFR,'+segs);
+      fpLines.push(`AC#${acNum},${reg},1%,Week,IFR,${segs}`);
     });
   });
 
