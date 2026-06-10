@@ -760,7 +760,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               style="font-size:12px;font-weight:600;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;">
               ✦ Generate TTools
             </button>
-            <div id="aigen-status" style="font-size:11px;color:var(--txt3);"></div>
+            <div id="aigen-status" style="font-size:11px;color:var(--txt3);transition:opacity .3s;"></div>
           </div>
           <div id="aigen-dl-area" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:var(--r);gap:10px;align-items:center;flex-wrap:wrap;">
             <span style="font-size:11px;color:#3fb950;font-weight:600;">✓ Ready:</span>
@@ -6005,7 +6005,18 @@ async function generateTTools() {
   const statusEl = document.getElementById('aigen-status');
   const dlArea   = document.getElementById('aigen-dl-area');
   if (dlArea) dlArea.style.display = 'none';
-  if (statusEl) statusEl.textContent = '⏳ Looking up UTC offset…';
+  const nCombos = [...new Set(validLegs.map(l=>l.airline+'|'+l.aircraft))].length;
+  const estSecs = 10 + nCombos * 15;
+  const setStatus = txt => {
+    if (statusEl) statusEl.textContent = txt;
+    const st = document.getElementById('aigen-status-top');
+    if (st) st.textContent = txt;
+  };
+  setStatus('⏳ [1/'+(nCombos+2)+'] Looking up UTC offset… (est. '+estSecs+'s total)');
+  // Pulse the status indicator while running
+  let _pulseI = 0;
+  const _pulseEl = () => document.getElementById('aigen-status');
+  const _pulse = setInterval(()=>{ const el=_pulseEl(); if(el&&el.textContent.startsWith('⏳')) el.style.opacity=(_pulseI++%2===0)?'0.6':'1'; }, 600);
 
   const icao = aiGenTarget[0];
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
@@ -6028,7 +6039,7 @@ async function generateTTools() {
       }
     } catch(e) {}
   }
-  if (statusEl) statusEl.textContent = `⏳ UTC${utcOff>=0?'+':''}${utcOff} — fetching registrations…`;
+  setStatus(`⏳ [2/${nCombos+2}] UTC${utcOff>=0?'+':''}${utcOff} confirmed — fetching registrations (${nCombos} type(s), ~${nCombos*15}s)…`);
 
   // Unique airline+EQP combos → Aircraft.txt
   const combos = [];
@@ -6040,7 +6051,9 @@ async function generateTTools() {
 
   // Fetch registrations
   const regMap = {};
-  for (const combo of combos) {
+  for (let ci=0; ci<combos.length; ci++) {
+    const combo = combos[ci];
+    setStatus(`⏳ [${ci+3}/${nCombos+2}] Searching airfleets.net: ${combo.airline} ${combo.eqp}…`);
     let regs = [];
     if (apiKey) {
       try {
@@ -6067,7 +6080,7 @@ async function generateTTools() {
     regMap[combo.key] = regs;
   }
 
-  if (statusEl) statusEl.textContent = '⏳ Building rotations…';
+  setStatus('⏳ Building rotations…');
 
   const hmmToMins = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
   const minsToHHMM = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
