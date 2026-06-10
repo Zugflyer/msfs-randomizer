@@ -5960,7 +5960,7 @@ async function generateTTools() {
         headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
           'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
         body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:30,
-          messages:[{role:'user',content:`UTC summer offset for airport ${icao}? Reply ONLY a number like 2 or -5.`}]})
+          messages:[{role:'user',content:'UTC summer offset for airport '+icao+'? Reply ONLY a number like 2 or -5.'}]})
       });
       if (r.ok) {
         const d = await r.json();
@@ -5971,7 +5971,7 @@ async function generateTTools() {
   }
   if (statusEl) statusEl.textContent = `⏳ UTC${utcOff>=0?'+':''}${utcOff} — fetching registrations…`;
 
-  // Unique airline+EQP combos
+  // Unique airline+EQP combos → Aircraft.txt
   const combos = [];
   validLegs.forEach(l => {
     const key = l.airline+'|'+l.aircraft;
@@ -5992,9 +5992,9 @@ async function generateTTools() {
           body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
             tools:[{type:'web_search_20250305',name:'web_search'}],
             messages:[{role:'user',content:
-              'Search for real '+combo.airline+' '+combo.eqp+' aircraft registrations currently in fleet. '+
-              'Find the highest registration in the series and continue with 10 new sequential ones. '+
-              'Reply ONLY as JSON array of 10 strings. No other text.'}]})
+              'Search for real '+combo.airline+' '+combo.eqp+' aircraft registrations in their current fleet. '+
+              'Find the pattern (e.g. HB-JHA to HB-JHD) and continue the series with 10 more sequential registrations. '+
+              'Reply ONLY as JSON array of 10 registration strings. No other text.'}]})
         });
         if (r.ok) {
           const d = await r.json();
@@ -6013,56 +6013,105 @@ async function generateTTools() {
   const hmmToMins = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?parseInt(m[1])*60+parseInt(m[2]):null; };
   const minsToHHMM = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
   const round5 = m => Math.round(m/5)*5;
-  const DAYS = [1,2,3,4,5,6,0];
+  const DAYS = [1,2,3,4,5,6,0]; // Mon=1 … Sun=0
+  const GROUND = 90; // minimum ground time in minutes
 
-  // Build daily pattern per leg
-  const legPatterns = validLegs.map((leg, li) => {
+  // Build rotation units: each leg = outbound + return (a round trip)
+  // Duration = outbound_bt + GROUND + return_bt + GROUND (total cycle time)
+  const rotUnits = validLegs.map((leg, li) => {
     const bt = hmmToMins(leg.blockTime) || 90;
+    const cycleMins = bt * 2 + GROUND * 2; // out + ground at dest + back + ground at home
+    const spansMultipleDays = cycleMins > 1440;
+
+    // Pick random departure time from window (UTC)
     const fromLocal  = hmmToMins(leg._swapped ? (leg.t3||'06:00') : (leg.t1||'05:30')) ?? 360;
     const untilLocal = hmmToMins(leg._swapped ? (leg.t4||'22:30') : (leg.t2||'23:00')) ?? 1380;
     const fromUTC  = fromLocal  - utcOff*60;
     const untilUTC = untilLocal - utcOff*60;
-    const window = Math.max(5, untilUTC - fromUTC - bt);
-    const depMins = round5(fromUTC + Math.floor(Math.random() * window / 5) * 5);
-    const arrMins = round5(depMins + bt);
-    const flNum = String(1000 + li*7).padStart(4,'0');
-    return { leg, depMins, arrMins, flNum,
-             depIcao: leg.dep[0], arrIcao: leg.arr[0],
-             comboKey: leg.airline+'|'+leg.aircraft,
-             acNum: combos.findIndex(c=>c.key===leg.airline+'|'+leg.aircraft)+1 };
+    const window   = Math.max(10, untilUTC - fromUTC - bt);
+    const depOut   = round5(fromUTC + Math.floor(Math.random() * window / 5) * 5);
+    const arrOut   = round5(depOut + bt);
+    const depRet   = round5(arrOut + GROUND);
+    const arrRet   = round5(depRet + bt);
+
+    const flOut = String(1000 + li*7).padStart(4,'0');
+    const flRet = String(1000 + li*7+3).padStart(4,'0');
+
+    return {
+      leg, bt, cycleMins, spansMultipleDays,
+      depOut, arrOut, depRet, arrRet,
+      flOut, flRet,
+      depIcao: leg.dep[0], arrIcao: leg.arr[0],
+      comboKey: leg.airline+'|'+leg.aircraft,
+      acNum: combos.findIndex(c=>c.key===leg.airline+'|'+leg.aircraft)+1
+    };
   });
+
+  // Sort rotation units: long rotations (>24h cycle) first, then short ones
+  rotUnits.sort((a,b) => b.cycleMins - a.cycleMins);
 
   const fpLines = ['//FSXDAYS=False'];
   const byCombo = {};
-  legPatterns.forEach(p => { if (!byCombo[p.comboKey]) byCombo[p.comboKey]=[]; byCombo[p.comboKey].push(p); });
+  rotUnits.forEach(u => { if (!byCombo[u.comboKey]) byCombo[u.comboKey]=[]; byCombo[u.comboKey].push(u); });
 
-  Object.entries(byCombo).forEach(([key, patterns]) => {
-    const acNum = patterns[0].acNum;
+  Object.entries(byCombo).forEach(([key, units]) => {
+    const acNum = units[0].acNum;
     const regs  = regMap[key] || ttoolsFallbackRegs('','');
+
+    // Build all week segments (each unit = out+ret, every day of week)
     let allSegs = [];
-    patterns.forEach(p => {
+    let flightNumCounter = 0;
+
+    units.forEach(u => {
       DAYS.forEach(day => {
         const di = DAYS.indexOf(day);
-        const d1 = DAYS[(di + Math.floor(((p.depMins%1440)+1440)%1440/1440))%7] || day;
-        const d2 = DAYS[(di + Math.floor(((p.arrMins%1440)+1440)%1440/1440))%7] || day;
-        const dep = ((p.depMins%1440)+1440)%1440;
-        const arr = ((p.arrMins%1440)+1440)%1440;
-        allSegs.push({sortKey:di*1440+dep, day:d1, arrDay:d2, depMins:dep, arrMins:arr,
-          flNum:p.flNum, depIcao:p.depIcao, arrIcao:p.arrIcao});
+
+        // Outbound segment
+        const d1out = DAYS[(di + Math.floor(((u.depOut%1440)+1440)%1440/1440 + Math.floor(u.depOut < 0 ? 0 : u.depOut/1440)))%7] || day;
+        const d2out = DAYS[(di + Math.floor(u.arrOut/1440))%7] || day;
+        // Return segment
+        const d1ret = DAYS[(di + Math.floor(u.depRet/1440))%7] || day;
+        const d2ret = DAYS[(di + Math.floor(u.arrRet/1440))%7] || day;
+
+        const resolve = (baseDi, mins) => ({
+          day: DAYS[(baseDi + Math.floor(((mins%10080)+10080)%10080/1440))%7],
+          mins: ((mins%1440)+1440)%1440
+        });
+
+        const out1 = resolve(di, u.depOut);
+        const out2 = resolve(di, u.arrOut);
+        const ret1 = resolve(di, u.depRet);
+        const ret2 = resolve(di, u.arrRet);
+
+        allSegs.push({
+          sortKey: di*1440 + ((u.depOut%1440+1440)%1440),
+          day:out1.day, arrDay:out2.day, depMins:out1.mins, arrMins:out2.mins,
+          flNum:u.flOut, depIcao:u.depIcao, arrIcao:u.arrIcao,
+          endAbsMins: di*1440 + u.arrOut  // for overlap detection
+        });
+        allSegs.push({
+          sortKey: di*1440 + ((u.depRet%1440+1440)%1440),
+          day:ret1.day, arrDay:ret2.day, depMins:ret1.mins, arrMins:ret2.mins,
+          flNum:u.flRet, depIcao:u.arrIcao, arrIcao:u.depIcao,
+          endAbsMins: di*1440 + u.arrRet
+        });
       });
     });
-    allSegs.sort((a,b)=>a.sortKey-b.sortKey);
+
+    allSegs.sort((a,b) => a.sortKey - b.sortKey);
+
+    // Pack into registrations using greedy algorithm with GROUND buffer
     const packed = [];
     allSegs.forEach(seg => {
       let placed = false;
       for (const rot of packed) {
         const last = rot[rot.length-1];
-        const lastEnd = DAYS.indexOf(last.arrDay)*1440 + last.arrMins + 30;
-        const segStart = DAYS.indexOf(seg.day)*1440 + seg.depMins;
-        if (segStart >= lastEnd) { rot.push(seg); placed=true; break; }
+        const lastEnd = last.endAbsMins + GROUND;
+        if (seg.sortKey >= lastEnd) { rot.push(seg); placed=true; break; }
       }
       if (!placed) packed.push([seg]);
     });
+
     packed.forEach((rot, ri) => {
       const reg = regs[ri % regs.length];
       const segs = rot.map(s => {
@@ -6083,7 +6132,7 @@ async function generateTTools() {
   if (dlAc) { dlAc.textContent='⬇ '+acName; dlAc.onclick=()=>ttoolsDownload(acContent,acName); }
   if (dlFp) { dlFp.textContent='⬇ '+fpName; dlFp.onclick=()=>ttoolsDownload(fpContent,fpName); }
   if (dlArea) dlArea.style.display='flex';
-  if (statusEl) statusEl.textContent='✓ UTC'+(utcOff>=0?'+':'')+utcOff+' · '+fpLines.length-1+' reg(s) · '+combos.length+' type(s)';
+  if (statusEl) statusEl.textContent='✓ UTC'+(utcOff>=0?'+':'')+utcOff+' · '+(fpLines.length-1)+' reg(s) · '+combos.length+' type(s)';
 }
 
 function ttoolsFallbackRegs(airline, eqp) {
