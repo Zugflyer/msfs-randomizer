@@ -753,16 +753,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
-          <button onclick="generateTTools()"
+          <button onclick="createRotations()"
             style="font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap;">
-            ✦ Generate TTools
+            ⊞ Create Rotations
           </button>
           <div id="aigen-status-top" style="font-size:11px;color:var(--txt3);"></div>
-          <div id="aigen-dl-area-top" style="display:none;gap:8px;align-items:center;flex-wrap:wrap;">
-            <span style="font-size:11px;color:#3fb950;font-weight:600;">✓</span>
-            <button id="aigen-dl-ac-top" style="font-size:11px;padding:3px 10px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Aircraft</button>
-            <button id="aigen-dl-fp-top" style="font-size:11px;padding:3px 10px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Flightplans</button>
-          </div>
 
         </div>
         <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-legs-wrap">
@@ -770,19 +765,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             Select an airport above to start adding routes.
           </div>
           <div style="margin-top:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-            <button onclick="generateTTools()"
+            <button onclick="createRotations()"
               style="font-size:12px;font-weight:600;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;">
-              ✦ Generate TTools
+              ⊞ Create Rotations
             </button>
             <button id="aigen-abort" style="display:none;font-size:12px;font-weight:600;padding:6px 14px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">
               ✕ Abort
             </button>
             <div id="aigen-status" style="font-size:11px;color:var(--txt3);transition:opacity .3s;"></div>
-          </div>
-          <div id="aigen-dl-area" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.3);border-radius:var(--r);gap:10px;align-items:center;flex-wrap:wrap;">
-            <span style="font-size:11px;color:#3fb950;font-weight:600;">✓ Ready:</span>
-            <button id="aigen-dl-ac" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Aircraft_CRE_xxx.txt</button>
-            <button id="aigen-dl-fp" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;">⬇ Flightplans_CRE_xxx.txt</button>
           </div>
         </div>
 
@@ -793,6 +783,21 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         Airline mode — coming soon
       </div>
 
+    </div>
+
+    <!-- ═══ ROTATIONS (drag & drop planner) ═══ -->
+    <div id="view-rotations" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--bg);">
+      <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
+        <button onclick="switchView('aigen')" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">← Back to routes</button>
+        <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
+        <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
+        <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
+      </div>
+      <!-- Top half: time bars -->
+      <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Time bars — one per leg (outbound &amp; return)</div>
+        <div id="rot-bars-container" style="flex:1;overflow-y:auto;padding:6px 16px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
     </div>
 
         <!-- ═══ ROSTER ═══ -->
@@ -2606,7 +2611,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','aigen'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2617,7 +2622,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -6033,37 +6038,34 @@ function formatTimeStr(t) {
 // ════════════════════════════════════════════════════════════════════════════
 
 // ── Generate TTools flightplans ───────────────────────────────────────────────
-async function generateTTools() {
+let rotBars = [];        // built time bars
+let rotResearch = null;  // cached research so we don't re-call API
+
+async function createRotations() {
   if (!aiGenTarget) { alert('Please select a master airport first.'); return; }
   const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.blockTime);
   if (!validLegs.length) { alert('Please fill in at least one complete route.'); return; }
 
-  const icao   = aiGenTarget[0];
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
   if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
 
-  const dlArea = document.getElementById('aigen-dl-area');
-  const dlAreaTop = document.getElementById('aigen-dl-area-top');
-  if (dlArea) dlArea.style.display = 'none';
-  if (dlAreaTop) dlAreaTop.style.display = 'none';
-  const setStatus = txt => { ['aigen-status','aigen-status-top'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=txt;}); };
+  // Switch to the rotations view
+  switchView('rotations');
+  const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
+  const container = document.getElementById('rot-bars-container');
+  if (container) container.innerHTML = '';
 
-  let _pulseI=0, _swSecs=0, _aborted=false;
-  const _pulse=setInterval(()=>{const el=document.getElementById('aigen-status');if(el&&el.textContent.startsWith('⏳'))el.style.opacity=(_pulseI++%2===0)?'0.5':'1';},600);
+  let _swSecs=0, _aborted=false;
   const _sw=setInterval(()=>{_swSecs++;},1000);
-  const abortBtn=document.getElementById('aigen-abort');
-  if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_pulse);clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
-  const stop=()=>{clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';};
+  const abortBtn=document.getElementById('rot-abort');
+  if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
 
-  // ════════════════════════════════════════════════════════════════════
-  // PHASE 1 — single research call (UTC offsets, block times, regs, flight numbers)
-  // ════════════════════════════════════════════════════════════════════
-  setStatus('⏳ Researching real-world data (UTC, block times, registrations)… (0s)');
-  const _t1=setInterval(()=>{if(!_aborted)setStatus('⏳ Researching real-world data… ('+_swSecs+'s)');},1000);
+  // ── Research (UTC, block times, flight numbers, registrations) — single call ──
+  setStatus('⏳ Researching (UTC, block times, flight numbers, registrations)… (0s)');
+  const _t=setInterval(()=>{if(!_aborted)setStatus('⏳ Researching real-world data… ('+_swSecs+'s)');},1000);
 
   const combos=[];
   validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
-
   const airportSet={}; validLegs.forEach(l=>{airportSet[l.dep[0]]=l.dep[7]||l.dep[2];airportSet[l.arr[0]]=l.arr[7]||l.arr[2];});
   const apList=Object.entries(airportSet).map(([ic,nm])=>ic+' ('+nm+')').join(', ');
   const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}->${l.arr[0]}, entered block ${l.blockTime}`).join('\n');
@@ -6075,7 +6077,7 @@ ROUTES:
 ${routeList}
 AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
 
-For each route: real nonstop block time (northern summer; if route is not real, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (search the airline's real numbers to that destination, pick nearby unused; if unserved adapt a nearby country's number).
+For each route: real nonstop block time (northern summer; if not a real route, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (search the airline's real numbers to that destination, pick nearby unused; if unserved adapt a nearby country's number).
 For each type: search airfleets.net, find the registration series, give 8 NEW sequential regs continuing it.
 For each airport: summer UTC offset number.
 
@@ -6094,33 +6096,28 @@ JSON shape:
     const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:(txt.match(/\{[\s\S]*\}/)||[])[0];
     if(s) research=JSON.parse(s);
-  } catch(e){ clearInterval(_t1);stop();setStatus('✗ Research failed: '+e.message);return; }
-  clearInterval(_t1);
+  } catch(e){ clearInterval(_t);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Research failed: '+e.message);return; }
+  clearInterval(_t); clearInterval(_sw);
+  if(abortBtn)abortBtn.style.display='none';
   if(_aborted)return;
-  if(!research||!research.routes){ stop();setStatus('✗ Research returned no usable data. Try again.');return; }
+  if(!research||!research.routes){ setStatus('✗ Research returned no usable data. Try again.');return; }
+  rotResearch = research;
 
-  // ════════════════════════════════════════════════════════════════════
-  // PHASE 2 — deterministic scheduling (pure JS, no API)
-  // ════════════════════════════════════════════════════════════════════
-  setStatus('⏳ Building rotations (local scheduler)…');
-  await new Promise(r=>setTimeout(r,50));
+  // ── Build time bars (one per leg-direction: outbound bar + return bar) ──
+  buildRotationBars(validLegs, research);
+  setStatus('✓ '+rotBars.length+' bars ready · drag onto aircraft (coming next) · '+_swSecs+'s');
+}
 
+function buildRotationBars(validLegs, research) {
   const utc = research.utc||{};
-  const regsByType = research.registrations||{};
   const rinfo={}; (research.routes||[]).forEach(r=>{rinfo[r.r]=r;});
-
   const hm = s=>{const m=String(s||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;};
   const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
   const inWin=(min,from,to)=>{ if(from==null||to==null)return true; return from<=to ? (min>=from&&min<=to) : (min>=from||min<=to); };
 
-  // Build a "rotation bar" for each leg: find dep/arr times (UTC) satisfying all windows + day/night
-  // Times are minutes from Monday 00:00 UTC over a virtual single day (0..1439); day assignment comes later.
-  const DAYS=[1,2,3,4,5,6,0];
-  const bars=[]; // one template bar per leg (before 7x copy)
-  const warnings=[];
+  rotBars = [];
 
-  for(let idx=0; idx<validLegs.length; idx++){
-    const l=validLegs[idx];
+  validLegs.forEach((l,idx)=>{
     const ri=rinfo[idx+1]||{};
     const block = hm(ri.block_time)||hm(l.blockTime)||120;
     const ground = parseInt(l.groundTime||'90')||90;
@@ -6129,180 +6126,117 @@ JSON shape:
     const fnumOut = ri.fnum_out || String(1000+idx*7).padStart(4,'0');
     const fnumIn  = ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0');
 
-    // Windows in LOCAL minutes
-    const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];   // depart DEP airport
-    const arrWin=[hm(l.aa1)??330, hm(l.aa2)??1380];   // arrive ARR airport
-    const retWin=[hm(l.ad1)??360, hm(l.ad2)??1350];   // depart ARR airport (return)
-    const homeWin=[hm(l.da1)??330, hm(l.da2)??1380];  // arrive DEP airport (return)
+    // Windows (local minutes)
+    const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];
+    const arrWin=[hm(l.aa1)??330, hm(l.aa2)??1380];
+    const retWin=[hm(l.ad1)??360, hm(l.ad2)??1350];
+    const homeWin=[hm(l.da1)??330, hm(l.da2)??1380];
 
-    // Search for an outbound departure (local at DEP) that lands inside arrWin (local at ARR), respecting day/night
-    // Convert: depLocalDEP -> depUTC = depLocal - depUtc*60 ; arrUTC = depUTC + block ; arrLocalARR = arrUTC + arrUtc*60
-    // night out = arrival local calendar day is +1 vs departure local day
-    function findDep(depWinL, arrWinL, depOff, arrOff, dayNight, blockMin){
-      // iterate candidate local dep times in 5-min steps within window
+    // Find outbound dep (local at DEP) so arrival (local at ARR) is within window + day/night
+    const findTime=(depWinL,arrWinL,depOff,arrOff,dayNight,blockMin)=>{
       const lo=depWinL[0], hi=depWinL[1];
-      const span = (lo<=hi)? (hi-lo) : (1440-lo+hi);
-      for(let step=0; step<=span; step+=5){
-        const depLocal = ((lo+step)%1440+1440)%1440;
-        const depUTCm  = depLocal - depOff*60;
-        const arrUTCm  = depUTCm + blockMin;
-        const arrLocal = ((arrUTCm + arrOff*60)%1440+1440)%1440;
-        // day offset: how many local-midnights crossed at arrival airport
-        const arrLocalAbs = (depLocal) + blockMin + (arrOff-depOff)*60; // local-arr clock vs dep-local clock
-        const crossesMidnight = arrLocalAbs >= 1440 || arrLocal < depLocal && (depLocal+blockMin)>=1440;
-        const dayCross = Math.floor((depLocal + blockMin + (arrOff-depOff)*60)/1440); // 0 same day, 1 next day...
-        const isNight = dayCross>=1;
-        if(!inWin(arrLocal, arrWinL[0], arrWinL[1])) continue;
-        if(dayNight==='night' && !isNight) continue;
-        if(dayNight==='day' && isNight) continue;
-        return { depLocal, depUTC:depUTCm, arrUTC:arrUTCm, arrLocal, dayCross };
-      }
-      return null;
-    }
-
-    const out = findDep(depWin, arrWin, depUtc, arrUtc, l.dnOut, block);
-    if(!out){ warnings.push(`Route ${idx+1} (${l.dep[0]}→${l.arr[0]}): no outbound time fits the windows/day-night — used best effort.`); }
-    const outResolved = out || (()=>{ const depLocal=depWin[0]; const depUTCm=depLocal-depUtc*60; return {depLocal,depUTC:depUTCm,arrUTC:depUTCm+block,arrLocal:((depUTCm+block+arrUtc*60)%1440+1440)%1440,dayCross:Math.floor((depLocal+block+(arrUtc-depUtc)*60)/1440)}; })();
-
-    // Return: depart ARR airport after outbound arrival + ground, inside retWin, land DEP inside homeWin
-    // earliest return local-at-ARR = outbound arrLocal + ground
-    function findRet(retWinL, homeWinL, arrOff, depOff, dayNight, blockMin, earliestLocalArr){
-      const lo=retWinL[0], hi=retWinL[1];
       const span=(lo<=hi)?(hi-lo):(1440-lo+hi);
       for(let step=0; step<=span; step+=5){
         const depLocal=((lo+step)%1440+1440)%1440;
-        // must be after earliest (with ground) — compare on a linear scale within the day-of-arrival
-        // (we allow the return to be next local day, so we don't hard-block here; ground is enforced in packing)
-        const depUTCm=depLocal-arrOff*60;
+        const depUTCm=depLocal-depOff*60;
         const arrUTCm=depUTCm+blockMin;
-        const arrLocal=((arrUTCm+depOff*60)%1440+1440)%1440;
-        const dayCross=Math.floor((depLocal+blockMin+(depOff-arrOff)*60)/1440);
+        const arrLocal=((arrUTCm+arrOff*60)%1440+1440)%1440;
+        const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
         const isNight=dayCross>=1;
-        if(!inWin(arrLocal, homeWinL[0], homeWinL[1])) continue;
+        if(!inWin(arrLocal,arrWinL[0],arrWinL[1])) continue;
         if(dayNight==='night' && !isNight) continue;
         if(dayNight==='day' && isNight) continue;
-        return { depLocal, depUTC:depUTCm, arrUTC:arrUTCm, arrLocal, dayCross };
+        return {depLocal,arrLocal,dayCross};
       }
       return null;
-    }
-
-    const ret = findRet(retWin, homeWin, arrUtc, depUtc, l.dnRet, block, outResolved.arrLocal+ground);
-    if(!ret){ warnings.push(`Route ${idx+1} (${l.arr[0]}→${l.dep[0]}): no return time fits — used best effort.`); }
-    const retResolved = ret || (()=>{ const depLocal=retWin[0]; const depUTCm=depLocal-arrUtc*60; return {depLocal,depUTC:depUTCm,arrUTC:depUTCm+block,arrLocal:((depUTCm+block+depUtc*60)%1440+1440)%1440,dayCross:Math.floor((depLocal+block+(depUtc-arrUtc)*60)/1440)}; })();
-
-    // Build the bar in UTC absolute minutes relative to "outbound departs at minute X on day D"
-    // outbound: depUTC (normalize to 0..1439) ; outArrOffset = block ; ground ; return offset...
-    const outDepUTC = ((outResolved.depUTC%1440)+1440)%1440;
-    const outArrUTC = outDepUTC + block;
-    // return departs: relative to outbound. We want first valid retDepUTC >= outArrUTC + ground
-    let retDepUTC = ((retResolved.depUTC%1440)+1440)%1440;
-    // lift retDepUTC into the timeline after outArr+ground
-    while(retDepUTC < outArrUTC + ground) retDepUTC += 1440;
-    const retArrUTC = retDepUTC + block;
-    const barEnd = retArrUTC + ground; // bar includes trailing ground
-
-    bars.push({
-      legIdx:idx, acKey:l.airline+'|'+l.aircraft,
-      airline:l.airline, eqp:l.aircraft,
-      depIcao:l.dep[0], arrIcao:l.arr[0],
-      block, ground, fnumOut, fnumIn,
-      outDepUTC, outArrUTC, retDepUTC, retArrUTC, barEnd,
-      durationFromMon0: barEnd  // total span of one rotation (mins)
-    });
-  }
-
-  // Group bars by aircraft type; schedule each type's bars onto aircraft (resources)
-  const byType={};
-  bars.forEach(b=>{ if(!byType[b.acKey])byType[b.acKey]=[]; byType[b.acKey].push(b); });
-
-  const acTypeNum={}; combos.forEach((c,i)=>{ acTypeNum[c.key]=i+1; });
-  const flightplans=[];
-
-  Object.entries(byType).forEach(([key, typeBars])=>{
-    const acNum=acTypeNum[key];
-    const regList=(regsByType[key]||regsByType[key.replace('|',' ')]||[]).slice();
-    const fallback=ttoolsFallbackRegs(typeBars[0].airline, typeBars[0].eqp);
-    const getReg=i=> regList[i] || fallback[i%fallback.length] || (typeBars[0].airline.slice(0,2)+'-'+String(i).padStart(3,'0'));
-
-    // Each resource (aircraft) holds a list of placed segments with absolute week-minute intervals.
-    // Week minute: day index (0..6 for Mon..Sun) *1440 + UTC minute.
-    const resources=[]; // each = { segments:[{depAbs,arrAbs,...}], busy:[{s,e}] }
-
-    const tryPlace=(res, depAbs, arrAbs)=>{
-      // check overlap against busy intervals (with no extra buffer; ground already in bar)
-      for(const b of res.busy){ if(depAbs < b.e && arrAbs > b.s) return false; }
-      return true;
     };
 
-    // Sort bars by duration descending (longest rotations first)
-    typeBars.sort((a,b)=>b.durationFromMon0-a.durationFromMon0);
-
-    // For each leg's bar, place 7 daily copies
-    typeBars.forEach(bar=>{
-      for(let di=0; di<7; di++){
-        const dayBase=di*1440;
-        // absolute UTC week-minutes for this day's rotation
-        const oDep=dayBase+bar.outDepUTC;
-        const oArr=dayBase+bar.outArrUTC;
-        const rDep=dayBase+bar.retDepUTC;
-        const rArr=dayBase+bar.retArrUTC;
-        const barS=oDep, barE=dayBase+bar.barEnd;
-
-        // find a resource that's free for the whole bar span
-        let placed=false;
-        for(const res of resources){
-          if(tryPlace(res, barS, barE)){
-            res.busy.push({s:barS,e:barE});
-            res.segments.push({oDep,oArr,rDep,rArr,bar});
-            placed=true; break;
-          }
-        }
-        if(!placed){
-          const res={busy:[{s:barS,e:barE}], segments:[{oDep,oArr,rDep,rArr,bar}]};
-          resources.push(res);
-        }
-      }
+    // Outbound
+    const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,block);
+    const oDepL = out? out.depLocal : depWin[0];
+    const oArrL = out? out.arrLocal : ((depWin[0]+block+(arrUtc-depUtc)*60)%1440+1440)%1440;
+    const oCross = out? out.dayCross : Math.floor((depWin[0]+block+(arrUtc-depUtc)*60)/1440);
+    rotBars.push({
+      legIdx:idx, dir:'out', airline:l.airline, eqp:l.aircraft,
+      depIcao:l.dep[0], arrIcao:l.arr[0],
+      depLocal:oDepL, arrLocal:oArrL, dayCross:oCross,
+      block, ground, fnum:fnumOut,
+      ok: !!out, assigned:0
     });
 
-    // Emit each resource as a flightplan line
-    resources.forEach((res,ri)=>{
-      // sort segments by absolute departure
-      res.segments.sort((a,b)=>a.oDep-b.oDep);
-      const segStrs=[];
-      res.segments.forEach(s=>{
-        const b=s.bar;
-        const dayName=abs=>DAYS[Math.floor((((abs%10080)+10080)%10080)/1440)];
-        const mn=abs=>((abs%1440)+1440)%1440;
-        const alt1=310+Math.floor(Math.random()*9)*10;
-        const alt2=310+Math.floor(Math.random()*9)*10;
-        segStrs.push(`${dayName(s.oDep)}/${fmt(mn(s.oDep))},${dayName(s.oArr)}/${fmt(mn(s.oArr))},${alt1},F,${b.fnumOut},${b.arrIcao}`);
-        segStrs.push(`${dayName(s.rDep)}/${fmt(mn(s.rDep))},${dayName(s.rArr)}/${fmt(mn(s.rArr))},${alt2},F,${b.fnumIn},${b.depIcao}`);
-      });
-      flightplans.push({ acNum, reg:getReg(ri), segments:segStrs.join(',') });
+    // Return
+    const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,block);
+    const rDepL = ret? ret.depLocal : retWin[0];
+    const rArrL = ret? ret.arrLocal : ((retWin[0]+block+(depUtc-arrUtc)*60)%1440+1440)%1440;
+    const rCross = ret? ret.dayCross : Math.floor((retWin[0]+block+(depUtc-arrUtc)*60)/1440);
+    rotBars.push({
+      legIdx:idx, dir:'ret', airline:l.airline, eqp:l.aircraft,
+      depIcao:l.arr[0], arrIcao:l.dep[0],
+      depLocal:rDepL, arrLocal:rArrL, dayCross:rCross,
+      block, ground, fnum:fnumIn,
+      ok: !!ret, assigned:0
     });
   });
 
-  stop();
-  if(_aborted)return;
-  document.querySelectorAll('#aigen-status,#aigen-status-top').forEach(el=>el.style.opacity='1');
+  renderRotationBars();
+}
 
-  const aircraft = combos.map((c,i)=>({acNum:i+1, pax:490, title:'AIGAIM_'+c.airline+' '+c.eqp+' NCv2'}));
-  const acContent = aircraft.map(a=>`AC#${a.acNum},${a.pax},"${a.title}"`).join('\n')+'\n';
-  const fpContent = '//FSXDAYS=False\n' + flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
-  const acName='Aircraft_CRE_'+icao+'.txt';
-  const fpName='Flightplans_CRE_'+icao+'.txt';
-  const note = warnings.length ? (' ⚠ '+warnings.length+' window warning(s)') : '';
-  if(warnings.length) console.warn('Scheduling warnings:', warnings);
+function renderRotationBars() {
+  const container = document.getElementById('rot-bars-container');
+  if (!container) return;
+  container.innerHTML = '';
+  const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
-  const setDl=(acId,fpId,areaId,statId)=>{
-    const a=document.getElementById(acId),f=document.getElementById(fpId),ar=document.getElementById(areaId),s=document.getElementById(statId);
-    if(a){a.textContent='⬇ '+acName;a.onclick=()=>ttoolsDownload(acContent,acName);}
-    if(f){f.textContent='⬇ '+fpName;f.onclick=()=>ttoolsDownload(fpContent,fpName);}
-    if(ar)ar.style.display='flex';
-    if(s)s.textContent='✓ '+flightplans.length+' aircraft · '+aircraft.length+' type(s) · '+_swSecs+'s'+note;
-  };
-  setDl('aigen-dl-ac','aigen-dl-fp','aigen-dl-area','aigen-status');
-  setDl('aigen-dl-ac-top','aigen-dl-fp-top','aigen-dl-area-top','aigen-status-top');
+  // Group bars by leg so outbound + return sit side by side
+  const byLeg={};
+  rotBars.forEach((b)=>{ if(!byLeg[b.legIdx])byLeg[b.legIdx]=[]; byLeg[b.legIdx].push(b); });
+
+  Object.keys(byLeg).sort((a,b)=>a-b).forEach(legIdx=>{
+    const pair = byLeg[legIdx];
+    const rowWrap = document.createElement('div');
+    rowWrap.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+
+    pair.forEach(bar=>{
+      // counter chip
+      const counter = document.createElement('div');
+      counter.style.cssText='display:flex;align-items:center;justify-content:center;min-width:40px;height:34px;border:1.5px solid var(--bdr2);border-radius:6px;font-size:12px;font-weight:700;font-family:monospace;color:'+(bar.assigned>=7?'#3fb950':'var(--txt3)')+';background:'+(bar.assigned>=7?'rgba(63,185,80,.1)':'transparent')+';flex-shrink:0;';
+      counter.textContent = bar.assigned+'/7';
+      counter.id = 'rot-counter-'+bar.legIdx+'-'+bar.dir;
+
+      // the bar itself
+      const barEl = document.createElement('div');
+      const nightTint = bar.dayCross>=1;
+      barEl.draggable = true;
+      barEl.style.cssText='display:flex;align-items:center;gap:0;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.6),rgba(30,35,55,.6))':'linear-gradient(90deg,rgba(60,70,90,.4),rgba(45,52,68,.4))')+';min-height:42px;user-select:none;';
+      barEl.title = bar.ok ? (nightTint?'Overnight flight':'Daytime flight') : '⚠ Could not fit all windows — adjust route times';
+
+      // left: dep time + dep icao
+      const left=document.createElement('div');
+      left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 12px;background:rgba(0,0,0,.18);min-width:74px;';
+      left.innerHTML='<div style="font-size:14px;font-weight:700;font-family:monospace;color:#fff;">'+fmt(bar.depLocal)+'</div><div style="font-size:12px;font-weight:700;color:#9fc7ff;letter-spacing:.04em;">'+bar.depIcao+'</div>';
+
+      // middle: airline + eqp
+      const mid=document.createElement('div');
+      mid.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 18px;flex:1;';
+      mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;">'+bar.airline+' '+bar.eqp+'</div>'
+        +'<div style="font-size:9px;color:var(--txt3);">'+(nightTint?'☾ +'+bar.dayCross+'d':'☀ same day')+' · '+fmt(bar.block)+' block · '+bar.ground+'m gnd</div>';
+
+      // right: arr icao + arr time (+ground shown)
+      const right=document.createElement('div');
+      right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 12px;background:rgba(0,0,0,.18);min-width:74px;';
+      right.innerHTML='<div style="font-size:12px;font-weight:700;color:#9fc7ff;letter-spacing:.04em;">'+bar.arrIcao+'</div><div style="font-size:14px;font-weight:700;font-family:monospace;color:#fff;">'+fmt(bar.arrLocal)+(bar.dayCross>=1?'<span style="font-size:9px;color:#f0b400;">+'+bar.dayCross+'</span>':'')+'</div>';
+
+      barEl.appendChild(left); barEl.appendChild(mid); barEl.appendChild(right);
+
+      barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', bar.legIdx+'|'+bar.dir); barEl.style.opacity='0.5'; });
+      barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
+
+      rowWrap.appendChild(counter);
+      rowWrap.appendChild(barEl);
+    });
+
+    container.appendChild(rowWrap);
+  });
 }
 
 
