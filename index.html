@@ -790,6 +790,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
         <button onclick="switchView('aigen')" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">← Back to routes</button>
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
+        <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files generieren</button>
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
@@ -6131,7 +6132,7 @@ Output exactly this shape (one line is fine):
   try {
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:6000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
     if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,160)); }
     const d=await r.json();
     rawTxt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
@@ -6727,6 +6728,66 @@ function showBarPopup(bar) {
   document.body.appendChild(pop);
 }
 
+
+function generateTToolsFromRotations() {
+  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
+  const icao = (aiGenTarget && aiGenTarget[0]) ? aiGenTarget[0] : 'XXXX';
+  const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);  // 0=Sun..6=Sat
+
+  // ── 1) Aircraft file: one AC# per unique aircraft TYPE (airline+eqp) ──
+  // collect types in first-seen order
+  const types=[];
+  rotAircraft.forEach(ac=>{ if(!types.find(t=>t.key===ac.key)) types.push({key:ac.key, airline:ac.airline, eqp:ac.eqp}); });
+  // map type key -> AC number (1-based)
+  const acNumOf={}; types.forEach((t,i)=>{ acNumOf[t.key]=i+1; });
+
+  // default pax per type (rough): widebody vs narrowbody by eqp letter heuristics
+  const paxFor = eqp => {
+    const e=(eqp||'').toUpperCase();
+    if(/A35|A33|A34|A38|B74|B77|B78|B76/.test(e)) return 300;
+    if(/A30|A31/.test(e)) return 250;
+    return 180; // narrowbody default
+  };
+
+  const aircraftLines = types.map(t=>{
+    const n=acNumOf[t.key];
+    return `AC#${n},${paxFor(t.eqp)},"AIGAIM_${t.airline} ${t.eqp} NCv2"`;
+  });
+  const aircraftTxt = aircraftLines.join('\n')+'\n';
+
+  // ── 2) Flightplans file: one line per registration that has assignments ──
+  const fpLines=[];
+  rotAircraft.forEach(ac=>{
+    // gather all segments assigned to this specific registration
+    const segs=[];
+    Object.keys(ac.assignments).forEach(di=>{
+      ac.assignments[di].forEach(asg=>{
+        asg.segs.forEach(s=> segs.push(s));
+      });
+    });
+    if(!segs.length) return; // skip aircraft with no flights
+    // sort chronologically by absolute departure
+    segs.sort((a,b)=> a.absDep - b.absDep);
+    const acNum = acNumOf[ac.key];
+    const segStr = segs.map(s=>{
+      const dDay=dayOf(s.absDep), aDay=dayOf(s.absArr);
+      const alt = 320 + Math.floor(Math.random()*9)*10; // FL320..FL400 random cruise
+      return `${dDay}/${fmtU(s.absDep)},${aDay}/${fmtU(s.absArr)},${alt},F,${s.fnum},${s.arrIcao}`;
+    }).join(',');
+    fpLines.push(`AC#${acNum},${ac.reg},1%,Week,IFR,${segStr}`);
+  });
+
+  if(!fpLines.length){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+
+  const flightplansTxt = '//FSXDAYS=False\n//SUMMER TIME\n' + fpLines.join('\n')+'\n';
+
+  ttoolsDownload(aircraftTxt, 'Aircraft_CRE_'+icao+'.txt');
+  setTimeout(()=> ttoolsDownload(flightplansTxt, 'Flightplans_CRE_'+icao+'.txt'), 400);
+
+  const st=document.getElementById('rot-status');
+  if(st) st.textContent='✓ Generated Aircraft_CRE_'+icao+'.txt ('+types.length+' type'+(types.length>1?'s':'')+') and Flightplans_CRE_'+icao+'.txt ('+fpLines.length+' aircraft).';
+}
 
 function ttoolsFallbackRegs(airline, eqp) {
   const pfx = {'AFR':'F-H','BAW':'G-Z','DLH':'D-A','SWR':'HB-J','KLM':'PH-B',
