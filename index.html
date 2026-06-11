@@ -6302,7 +6302,9 @@ function renderRotationBars() {
             bar.arrLocal=((newMin%1440)+1440)%1440;
             bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440;
           }
+          syncBarTimesToLanes(bar.legIdx);
           renderRotationBars();
+          renderRotationLanes();
         };
         inp.onkeydown=e=>{ if(e.key==='Enter'){ inp.blur(); } };
         return inp;
@@ -6402,38 +6404,45 @@ function renderRotationLanes() {
     track.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:'+ROW_H+'px;background:repeating-linear-gradient(90deg,transparent,transparent '+(DAYW-1)+'px,var(--bdr2) '+(DAYW-1)+'px,var(--bdr2) '+DAYW+'px);';
     track.dataset.ac=acIdx;
 
-    // drop handler — compute UTC day+time from drop x position
+    // drop handler — new bar from top OR move of existing assignment
     track.addEventListener('dragover', e=>{ e.preventDefault(); track.style.background='rgba(88,166,255,.06)'; });
     track.addEventListener('dragleave', e=>{ track.style.background=''; });
     track.addEventListener('drop', e=>{
       e.preventDefault(); track.style.background='';
       const data=e.dataTransfer.getData('text/plain');
-      const [legIdx]=data.split('|');
       const rect=track.getBoundingClientRect();
-      const x=e.clientX-rect.left;
-      const dropMinAbs = Math.max(0, Math.min(10079, Math.round(x/pxPerMin))); // absolute week minute where dropped
-      dropPairOnAircraft(parseInt(legIdx), acIdx, dropMinAbs);
+      const x=e.clientX-rect.left + track.scrollLeft;
+      const dropMinAbs = Math.max(0, Math.min(10079, Math.round(x/pxPerMin)));
+      if(data.startsWith('move|')){
+        const [,fromAcIdx,uid]=data.split('|');
+        moveAssignment(parseInt(fromAcIdx), uid, acIdx, dropMinAbs);
+      } else {
+        const [legIdx]=data.split('|');
+        dropPairOnAircraft(parseInt(legIdx), acIdx, dropMinAbs);
+      }
     });
 
-    // render assignments as absolutely-positioned bars
+    // render assignments as absolutely-positioned bars (draggable to move)
     Object.keys(ac.assignments).forEach(di=>{
       (ac.assignments[di]||[]).forEach(asg=>{
-        asg.segs.forEach(seg=>{
-          // absolute start minute in the week = startDayAbs already stored
-          const startAbs = seg.absDep;   // 0..10079
+        asg.segs.forEach((seg,segIdx)=>{
+          const startAbs = seg.absDep;
           const durMin = seg.block + seg.ground;
           const leftPx = startAbs*pxPerMin;
           const wPx = Math.max(8, durMin*pxPerMin);
           const night=seg.utcDayCross>=1;
           const seg1=document.createElement('div');
-          seg1.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:4px;background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
-          seg1.title='Click to remove this rotation pair';
-          // flight block portion vs ground portion: show ground as a lighter tail
-          const blockW = seg.block*pxPerMin;
+          seg1.draggable=true;
+          seg1.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:4px;background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
+          seg1.title='Drag to move · right-click to remove';
           seg1.innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtU(seg.arrUTC)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
             +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>'
             +'<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
-          seg1.onclick=()=>removeAssignment(acIdx, asg.uid);
+          // dragging either segment moves the whole pair
+          seg1.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); seg1.style.opacity='0.5'; });
+          seg1.addEventListener('dragend', e=>{ seg1.style.opacity='1'; });
+          // right-click → trash popup
+          seg1.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
           track.appendChild(seg1);
         });
       });
@@ -6473,42 +6482,107 @@ function barToUTCSeg(bar) {
   return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground };
 }
 
-// Drop a leg pair (outbound+return) onto an aircraft starting on day `di` (UTC weekday)
+// Compute outbound+return segments for a leg pair, starting on UTC weekday dropDay
+function computePairSegs(legIdx, dropDay) {
+  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
+  if(!pair.length) return null;
+  const outSeg = barToUTCSeg(pair[0]);
+  const retSeg = barToUTCSeg(pair[1]);
+  const outAbsDep = dropDay*1440 + outSeg.depUTC;
+  const outAbsArr = outAbsDep + outSeg.block;
+  let retAbsDep = Math.ceil((outAbsArr + outSeg.ground)/1440)*1440 + retSeg.depUTC;
+  while(retAbsDep < outAbsArr + outSeg.ground) retAbsDep += 1440;
+  const sameDayRet = Math.floor(outAbsArr/1440)*1440 + retSeg.depUTC;
+  if(sameDayRet >= outAbsArr + outSeg.ground) retAbsDep = sameDayRet;
+  const retAbsArr = retAbsDep + retSeg.block;
+  return {
+    pair,
+    segs: [
+      {...outSeg, absDep: outAbsDep%10080, absArr: outAbsArr%10080},
+      {...retSeg, absDep: retAbsDep%10080, absArr: retAbsArr%10080}
+    ]
+  };
+}
+
+// Drop a leg pair onto an aircraft at an absolute week-minute position
 function dropPairOnAircraft(legIdx, acIdx, dropMinAbs) {
+  const ac = rotAircraft[acIdx];
   const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
   if(!pair.length) return;
-  const ac = rotAircraft[acIdx];
   if(ac.key !== (pair[0].airline+'|'+pair[0].eqp)){
     alert('This aircraft type ('+ac.eqp+') does not match the flight ('+pair[0].eqp+').');
     return;
   }
-  // dropMinAbs = where on the week (0..10079 UTC minutes) the user dropped.
-  // Snap the OUTBOUND so it departs on the dropped day at its fixed UTC departure time.
-  const outSeg = barToUTCSeg(pair[0]);
-  const retSeg = barToUTCSeg(pair[1]);
-  const dropDay = Math.floor(dropMinAbs/1440);             // 0..6 (UTC weekday, 0=Sun shown first)
-  const outAbsDep = dropDay*1440 + outSeg.depUTC;          // outbound departs this UTC day at its UTC time
-  const outAbsArr = outAbsDep + outSeg.block;
-  // Return departs after outbound arrival + ground, at the return's fixed UTC departure time on the next suitable day
-  // Find the first UTC slot at/after (outAbsArr + ground) whose minute-of-day equals retSeg.depUTC
-  let retAbsDep = Math.ceil((outAbsArr + outSeg.ground)/1440)*1440 + retSeg.depUTC;
-  // if that lands too early (same day before ready), push a day
-  while(retAbsDep < outAbsArr + outSeg.ground) retAbsDep += 1440;
-  // but prefer the EARLIEST valid: also check same UTC day as outbound arrival
-  const sameDayRet = Math.floor(outAbsArr/1440)*1440 + retSeg.depUTC;
-  if(sameDayRet >= outAbsArr + outSeg.ground) retAbsDep = sameDayRet;
-  const retAbsArr = retAbsDep + retSeg.block;
-
+  const dropDay = Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
+  const res = computePairSegs(legIdx, dropDay);
+  if(!res) return;
   const uid = 'asg-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
-  const segs = [
-    {...outSeg, absDep: outAbsDep%10080, absArr: outAbsArr%10080},
-    {...retSeg, absDep: retAbsDep%10080, absArr: retAbsArr%10080}
-  ];
-  ac.assignments[dropDay].push({ uid, legIdx, segs });
-
+  ac.assignments[dropDay].push({ uid, legIdx, dropDay, segs: res.segs });
   pair.forEach(b=>{ b.assigned = Math.min(7, (b.assigned||0)+1); });
   renderRotationBars();
   renderRotationLanes();
+}
+
+// Move an existing assignment to another aircraft and/or day
+function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
+  const fromAc = rotAircraft[fromAcIdx];
+  let asg=null, fromDay=null;
+  Object.keys(fromAc.assignments).forEach(di=>{
+    const idx=fromAc.assignments[di].findIndex(a=>a.uid===uid);
+    if(idx>=0){ asg=fromAc.assignments[di][idx]; fromDay=di; }
+  });
+  if(!asg) return;
+  const toAc = rotAircraft[toAcIdx];
+  const pair = rotBars.filter(b=>b.legIdx===asg.legIdx).sort((a,b)=> a.dir==='out'?-1:1);
+  if(toAc.key !== (pair[0].airline+'|'+pair[0].eqp)){
+    alert('This aircraft type ('+toAc.eqp+') does not match the flight ('+pair[0].eqp+').');
+    return;
+  }
+  // remove from old
+  const oldArr=fromAc.assignments[fromDay];
+  oldArr.splice(oldArr.findIndex(a=>a.uid===uid),1);
+  // recompute at new day
+  const dropDay=Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
+  const res=computePairSegs(asg.legIdx, dropDay);
+  toAc.assignments[dropDay].push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, segs:res.segs });
+  // counter unchanged (still one copy total)
+  renderRotationBars();
+  renderRotationLanes();
+}
+
+// When a bar's time is edited, recompute every placed copy of that leg (keep their dropDay)
+function syncBarTimesToLanes(legIdx) {
+  rotAircraft.forEach(ac=>{
+    Object.keys(ac.assignments).forEach(di=>{
+      ac.assignments[di].forEach(asg=>{
+        if(asg.legIdx===legIdx){
+          const res=computePairSegs(legIdx, asg.dropDay!=null?asg.dropDay:parseInt(di));
+          if(res) asg.segs=res.segs;
+        }
+      });
+    });
+  });
+}
+
+function showTrashPopup(x, y, acIdx, uid) {
+  let pop=document.getElementById('rot-trash-popup');
+  if(pop) pop.remove();
+  pop=document.createElement('div');
+  pop.id='rot-trash-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;';
+  pop.onclick=()=>pop.remove();
+  const menu=document.createElement('div');
+  menu.style.cssText='position:absolute;left:'+x+'px;top:'+y+'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:4px;';
+  menu.onclick=e=>e.stopPropagation();
+  const btn=document.createElement('button');
+  btn.innerHTML='🗑 Remove rotation';
+  btn.style.cssText='display:flex;align-items:center;gap:6px;font-size:12px;padding:7px 14px;border:none;background:transparent;color:#f85149;cursor:pointer;border-radius:6px;white-space:nowrap;width:100%;text-align:left;';
+  btn.onmouseenter=()=>btn.style.background='rgba(248,81,73,.12)';
+  btn.onmouseleave=()=>btn.style.background='transparent';
+  btn.onclick=()=>{ pop.remove(); removeAssignment(acIdx, uid); };
+  menu.appendChild(btn);
+  pop.appendChild(menu);
+  document.body.appendChild(pop);
 }
 
 function removeAssignment(acIdx, uid) {
