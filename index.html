@@ -5698,7 +5698,7 @@ function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
            airline: '', aircraft: '', blockTime: '', blockTimeReal: false,
            t1:'', t2:'', t3:'', t4:'', r1:'', r2:'',
-           _swapped: false, groundTime: '90' };
+           _swapped: false, groundTime: '90', dayNight: 'any' };
 }
 
 function initAiGen() {
@@ -5912,6 +5912,25 @@ function renderAiGenLegs() {
     const gLbl2=document.createElement('div'); gLbl2.style.cssText='font-size:9px;color:var(--txt3);text-align:center;'; gLbl2.textContent='min';
     groundCell.appendChild(gLbl); groundCell.appendChild(gInp); groundCell.appendChild(gLbl2);
 
+    // ── Day / Night toggle ──
+    const dnCell = document.createElement('div');
+    dnCell.style.cssText = bS+'width:70px;min-width:70px;gap:2px;align-items:center;';
+    const dnLbl = document.createElement('div'); dnLbl.style.cssText='font-size:9px;color:var(--txt3);text-align:center;'; dnLbl.textContent='Flight';
+    const dnBtn = document.createElement('button');
+    const dnStates = { any:'◐ Any', day:'☀ Day', night:'☾ Night' };
+    const dnColors = { any:'var(--txt3)', day:'#f0b400', night:'#5a8dee' };
+    if (!leg.dayNight) leg.dayNight = 'any';
+    dnBtn.textContent = dnStates[leg.dayNight];
+    dnBtn.style.cssText = 'font-size:10px;padding:3px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:transparent;color:'+dnColors[leg.dayNight]+';cursor:pointer;white-space:nowrap;width:64px;';
+    dnBtn.title = 'Outbound flight time preference';
+    dnBtn.onclick = () => {
+      const order = ['any','day','night'];
+      leg.dayNight = order[(order.indexOf(leg.dayNight)+1)%3];
+      dnBtn.textContent = dnStates[leg.dayNight];
+      dnBtn.style.color = dnColors[leg.dayNight];
+    };
+    dnCell.appendChild(dnLbl); dnCell.appendChild(dnBtn);
+
     // ── Delete ──
     const delCell = document.createElement('div');
     delCell.style.cssText='display:flex;align-items:center;padding:0 2px;flex-shrink:0;';
@@ -5924,7 +5943,7 @@ function renderAiGenLegs() {
     row.appendChild(depWinCell); row.appendChild(depCell);
     row.appendChild(btCell);
     row.appendChild(arrCell); row.appendChild(arrWinCell); row.appendChild(retWinCell);
-    row.appendChild(groundCell); row.appendChild(delCell);
+    row.appendChild(groundCell); row.appendChild(dnCell); row.appendChild(delCell);
     wrapper.appendChild(row);
 
     // Sub-buttons
@@ -6022,12 +6041,14 @@ async function generateTTools() {
   const legDesc = validLegs.map((l,idx) => {
     const dep = l.dep[0], arr = l.arr[0];
     const depName = l.dep[7]||l.dep[2], arrName = l.arr[7]||l.arr[2];
+    const dn = l.dayNight==='day' ? ' | OUTBOUND MUST BE A DAYTIME FLIGHT (depart and arrive in daylight)' :
+               l.dayNight==='night' ? ' | OUTBOUND MUST BE AN OVERNIGHT FLIGHT (depart evening, arrive next morning)' : '';
     return `Route ${idx+1}: ${l.airline} ${l.aircraft} | ${dep} (${depName}) ⇄ ${arr} (${arrName}) | `
       + `entered block time = ${l.blockTime||'unknown'} | `
       + `DEP from ${dep}: must depart between ${l.t3||'06:00'} and ${l.t4||'22:30'} local | `
       + `ARR at ${arr}: must arrive between ${l.t1||'05:30'} and ${l.t2||'23:00'} local | `
       + `Return DEP from ${arr}: between ${l.r1||l.t3||'06:00'} and ${l.r2||l.t4||'22:30'} local | `
-      + `min ground = ${l.groundTime||'90'} min`;
+      + `min ground = ${l.groundTime||'90'} min${dn}`;
   }).join('\n');
 
   const combos = [];
@@ -6062,8 +6083,14 @@ web_search the airline's real flight numbers to each destination; pick a nearby 
 ═══ REGISTRATIONS ═══
 web_search airfleets.net for the exact fleet of each airline+type. Continue the real series (e.g. BA A350-1000 ends G-XWBS → use G-XWBT, G-XWBU, …). One registration = one aircraft = one flightplan line.
 
-═══ SELF-CHECK before answering ═══
-Re-read every flightplan line and verify: (a) all 7 days present at same times, (b) no departure before its window opens or after it closes, (c) every gap ≥ ground time, (d) block times match what was entered, (e) aircraft count is minimal, (f) no duplicate AC# titles. Fix any violation before outputting.
+═══ SELF-CHECK before answering (MANDATORY — do this explicitly) ═══
+Build a verification table. For EACH distinct flight (by flight number) check:
+(A) 7-DAY COMPLETENESS: does it appear on ALL 7 days (1,2,3,4,5,6,0) at the EXACT same UTC time? If any day is missing, you MUST add it or restructure the rotation. A flight that runs only some days is a FAILURE — every route operates daily.
+(B) WINDOW COMPLIANCE: convert the flight's UTC time back to local and confirm departure is within [DEP from, DEP until] and arrival within [ARR from, ARR until]. Any flight outside its window is a FAILURE — shift it inside the window (you may increase ground time beyond the minimum to make it fit).
+(C) DAY/NIGHT: if a route specifies daytime or overnight, confirm the outbound respects it.
+(D) NO OVERLAP: each registration's next departure ≥ previous arrival + ground time.
+(E) MINIMAL FLEET: confirm you cannot remove any aircraft by re-puzzling.
+Longer ground times than the minimum are ENCOURAGED if they produce a cleaner schedule where every flight hits its window every day. Only output once ALL flights pass A–E. If something cannot be satisfied, prefer adding ground time or shifting within windows over dropping days.
 
 ═══ OUTPUT — ONLY this JSON, nothing else ═══
 {
