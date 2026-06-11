@@ -6072,13 +6072,14 @@ async function generateTTools() {
       try { return await callAPI(messages, useSearch, maxTok); }
       catch(e){
         if(e.rateLimit && attempt<4){
-          for(let w=30; w>0 && !_aborted; w--){ setStatus('⏳ Rate limit hit — waiting '+w+'s before retry…'); await new Promise(r=>setTimeout(r,1000)); }
+          for(let w=65; w>0 && !_aborted; w--){ setStatus('⏳ Rate limit — waiting '+w+'s (attempt '+(attempt+1)+'/4)…'); await new Promise(r=>setTimeout(r,1000)); }
           if(_aborted) throw new Error('aborted');
           continue;
         }
         throw e;
       }
     }
+    throw new Error('rate limit — gave up after retries');
   };
   const extractJSON = txt => { const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:null; if(!s){const m=txt.match(/\{[\s\S]*\}/);s=m?m[0]:null;} if(!s)return null; try{return JSON.parse(s);}catch(e){return null;} };
 
@@ -6200,23 +6201,29 @@ Segment = DEPday/DEPtime,ARRday/ARRtime,alt,F,fnum,arrICAO (UTC; days 1=Mon..6=S
       roundMsg = planPrompt
         + '\n\n═══ YOUR PREVIOUS ATTEMPT (fix it) ═══\n' + lastPlanJson
         + '\n\n═══ PROBLEMS FOUND (fix ALL of these) ═══\n'
-        + lastErrors.slice(0,40).join('\n')
+        + lastErrors.slice(0,15).join('\n')
         + '\n\nOutput the corrected full JSON only. Remember: add more aircraft if a long rotation needs them; no overlaps; all 7 days at same UTC time; all times inside their UTC windows.';
     }
 
     let txt;
-    try { txt = await callAPIRetry([{role:'user',content:roundMsg}], false, 16000); }
+    try { txt = await callAPIRetry([{role:'user',content:roundMsg}], false, 8000); }
     catch(e){ clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Round '+round+' API error: '+e.message);return; }
     if(_aborted)return;
 
     const cand = extractJSON(txt);
-    if(!cand||!cand.flightplans){ lastPlanJson=txt.slice(0,4000); lastErrors=['Previous reply was not valid JSON. Output ONLY the JSON object.']; continue; }
+    if(!cand||!cand.flightplans){ lastPlanJson=txt.slice(0,4000); lastErrors=['Previous reply was not valid JSON. Output ONLY the JSON object.'];
+      // brief pause to respect rate limit
+      for(let w=20; w>0 && !_aborted; w--){ setStatus('⏳ Pausing '+w+'s (rate budget)…'); await new Promise(r=>setTimeout(r,1000)); }
+      continue;
+    }
 
     const errs = validateTTools(cand, planLegs, utc);
     plan=cand;
     lastPlanJson=JSON.stringify(cand);
     if(!errs.length){ setStatus('✓ Validated clean in round '+round+'!'); break; }
     lastErrors=errs;
+    // pause between rounds so the per-minute token budget recovers
+    if(round<MAX_ROUNDS){ for(let w=20; w>0 && !_aborted; w--){ setStatus('⏳ Found '+errs.length+' issue(s), pausing '+w+'s before retry…'); await new Promise(r=>setTimeout(r,1000)); } }
   }
 
   clearInterval(_pulse);clearInterval(_sw);
