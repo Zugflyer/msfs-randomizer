@@ -739,13 +739,16 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
-          <!-- Min block time -->
+          <!-- Min ground time (minutes) -->
           <div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
-            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;white-space:nowrap;">Min block</div>
-            <input id="aigen-min-bt" type="text" value="0:30" maxlength="5"
-              style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
-              title="Minimum block time for any flight (shorter ones get bumped up)"
-              onblur="this.value=formatTimeStr(this.value)||this.value;">
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;white-space:nowrap;">Min ground</div>
+            <div style="display:flex;align-items:center;gap:3px;">
+              <input id="aigen-min-ground" type="number" value="90" min="30" max="480"
+                style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                title="Minimum ground time — updates all legs"
+                oninput="syncAiGenGround(this.value);">
+              <span style="font-size:10px;color:var(--txt3);">min</span>
+            </div>
           </div>
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
@@ -5717,7 +5720,6 @@ function aiGenEmptyLeg() {
 }
 
 function initAiGen() {
-  if (!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg());
   setAiGenMode(aiGenMode);
 }
 
@@ -5735,6 +5737,10 @@ function setAiGenMode(mode) {
 }
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
+function syncAiGenGround(value) {
+  aiGenLegs.forEach(l => { if (!l._custom_groundTime) l.groundTime = value; });
+  renderAiGenLegs();
+}
 function syncAiGenDefaults(masterField, value) {
   // Master "arrFrom/arrUntil" fills BOTH airports' ARR windows (da*/aa*)
   // Master "depFrom/depUntil" fills BOTH airports' DEP windows (dd*/ad*)
@@ -5785,8 +5791,15 @@ function aiGenSelectAp(e, code) {
 // ── Render legs ───────────────────────────────────────────────────────────────
 function renderAiGenLegs() {
   const container = document.getElementById('aigen-legs-container'); if (!container) return;
-  if (!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg());
   container.innerHTML = '';
+
+  // No airport selected yet → show hint, no legs
+  if (!aiGenTarget) {
+    container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">Select an airport above to start adding routes.</div>';
+    return;
+  }
+  // Airport selected but no legs → create the first one
+  if (!aiGenLegs.length) aiGenLegs.push(aiGenEmptyLeg());
 
   const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
 
@@ -5828,7 +5841,7 @@ function renderAiGenLegs() {
     if (!leg.aa2) leg.aa2 = mArrUntil;  // ARR airport ARR until
     if (!leg.ad1) leg.ad1 = mDepFrom;   // ARR airport DEP from
     if (!leg.ad2) leg.ad2 = mDepUntil;  // ARR airport DEP until
-    if (!leg.groundTime) leg.groundTime = '90';
+    if (!leg.groundTime) leg.groundTime = document.getElementById('aigen-min-ground')?.value || '90';
     if (!leg.dnOut) leg.dnOut = 'any';
     if (!leg.dnRet) leg.dnRet = 'any';
 
@@ -5911,7 +5924,7 @@ function renderAiGenLegs() {
     const gInp=document.createElement('input'); gInp.type='number'; gInp.value=leg.groundTime||'90'; gInp.min=30; gInp.max=480;
     gInp.style.cssText='width:48px;font-size:11px;font-family:monospace;padding:2px 3px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
     gInp.title='Min ground time at destination (minutes)';
-    gInp.oninput=()=>leg.groundTime=gInp.value;
+    gInp.oninput=()=>{ leg.groundTime=gInp.value; leg._custom_groundTime=true; };
     const gLbl2=document.createElement('div'); gLbl2.style.cssText='font-size:9px;color:var(--txt3);text-align:center;'; gLbl2.textContent='min';
     groundCell.appendChild(gLbl); groundCell.appendChild(gInp); groundCell.appendChild(gLbl2);
 
@@ -6070,7 +6083,7 @@ ${comboList}
 
 ═══ HARD RULES (violating any = failure) ═══
 1. SAME TIME EVERY DAY: every distinct flight departs at the identical UTC time on all 7 days (0=Sun,1=Mon..6=Sat) with the same flight number. List days in order 1,2,3,4,5,6,0.
-2. BLOCK TIMES: web_search the REAL nonstop block time for every route (northern summer schedule, April–September). If a real scheduled flight exists, USE that block time and do NOT alter it afterwards. If no real flight exists for that route, calculate the block time from great-circle distance and cruise speed, then add 30 minutes for taxi. No block time may be shorter than the global minimum of ${document.getElementById('aigen-min-bt')?.value||'0:30'}. Once set, keep each route's block time fixed across all 7 days.
+2. BLOCK TIMES: web_search the REAL nonstop block time for every route (northern summer schedule, April–September). If a real scheduled flight exists, USE that block time and do NOT alter it afterwards. If no real flight exists for that route, calculate the block time from great-circle distance and cruise speed, then add 30 minutes for taxi. Once set, keep each route's block time fixed across all 7 days.
 3. RESPECT TIME WINDOWS ABSOLUTELY: a departure/arrival outside its stated local window is forbidden. Convert windows to UTC using each airport's summer offset (look up offsets).
 4. NO OVERLAP: within one registration, each next departure must be ≥ previous arrival + min ground time. A leg may cross midnight (e.g. 6/20:00→0/05:00).
 5. MINIMUM AIRCRAFT: use as FEW registrations as possible. Compute the longest rotation first, then PUZZLE shorter routes onto the same aircraft's idle days.
