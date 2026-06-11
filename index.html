@@ -794,9 +794,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
       <!-- Top half: time bars -->
+      <div style="display:flex;flex-direction:column;overflow:hidden;flex:0 0 auto;max-height:42%;border-bottom:2px solid var(--bdr2);">
+        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Time bars — one per leg (outbound &amp; return) · drag a pair down onto an aircraft/day</div>
+        <div id="rot-bars-container" style="flex:1;overflow-y:auto;padding:6px 16px 12px;display:flex;flex-direction:column;gap:8px;"></div>
+      </div>
+      <!-- Bottom half: aircraft resources with weekly UTC calendar -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
-        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Time bars — one per leg (outbound &amp; return)</div>
-        <div id="rot-bars-container" style="flex:1;overflow-y:auto;padding:6px 16px 16px;display:flex;flex-direction:column;gap:8px;"></div>
+        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Aircraft — weekly schedule (times shown in UTC)</div>
+        <div id="rot-lanes-container" style="flex:1;overflow:auto;padding:6px 16px 16px;"></div>
       </div>
     </div>
 
@@ -6041,6 +6046,8 @@ function formatTimeStr(t) {
 // ── Generate TTools flightplans ───────────────────────────────────────────────
 let rotBars = [];        // built time bars
 let rotResearch = null;  // cached research so we don't re-call API
+let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...6:[]}}] day 0=Sun..6=Sat
+const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 async function createRotations() {
   if (!aiGenTarget) { alert('Please select a master airport first.'); return; }
@@ -6055,6 +6062,16 @@ async function createRotations() {
   const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
   const container = document.getElementById('rot-bars-container');
   if (container) container.innerHTML = '';
+
+  // ── Reuse cached research if route inputs are unchanged (avoids rate limits) ──
+  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime]));
+  if (rotResearch && rotResearch._sig === sig) {
+    setStatus('✓ Reusing cached research — rebuilding bars…');
+    buildRotationBars(validLegs, rotResearch);
+    renderRotationLanes();
+    setStatus('✓ '+rotBars.length+' bars ready (cached research) · drag onto aircraft below');
+    return;
+  }
 
   let _swSecs=0, _aborted=false;
   const _sw=setInterval(()=>{_swSecs++;},1000);
@@ -6102,11 +6119,13 @@ JSON shape:
   if(abortBtn)abortBtn.style.display='none';
   if(_aborted)return;
   if(!research||!research.routes){ setStatus('✗ Research returned no usable data. Try again.');return; }
+  research._sig = sig;
   rotResearch = research;
 
   // ── Build time bars (one per leg-direction: outbound bar + return bar) ──
   buildRotationBars(validLegs, research);
-  setStatus('✓ '+rotBars.length+' bars ready · drag onto aircraft (coming next) · '+_swSecs+'s');
+  renderRotationLanes();
+  setStatus('✓ '+rotBars.length+' bars ready · drag onto aircraft below · '+_swSecs+'s');
 }
 
 function buildRotationBars(validLegs, research) {
@@ -6137,6 +6156,7 @@ function buildRotationBars(validLegs, research) {
     const findTime=(depWinL,arrWinL,depOff,arrOff,dayNight,blockMin)=>{
       const lo=depWinL[0], hi=depWinL[1];
       const span=(lo<=hi)?(hi-lo):(1440-lo+hi);
+      let arrWinMiss=0, dnMiss=0;
       for(let step=0; step<=span; step+=5){
         const depLocal=((lo+step)%1440+1440)%1440;
         const depUTCm=depLocal-depOff*60;
@@ -6144,38 +6164,58 @@ function buildRotationBars(validLegs, research) {
         const arrLocal=((arrUTCm+arrOff*60)%1440+1440)%1440;
         const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
         const isNight=dayCross>=1;
-        if(!inWin(arrLocal,arrWinL[0],arrWinL[1])) continue;
-        if(dayNight==='night' && !isNight) continue;
-        if(dayNight==='day' && isNight) continue;
-        return {depLocal,arrLocal,dayCross};
+        if(!inWin(arrLocal,arrWinL[0],arrWinL[1])){ arrWinMiss++; continue; }
+        if(dayNight==='night' && !isNight){ dnMiss++; continue; }
+        if(dayNight==='day' && isNight){ dnMiss++; continue; }
+        return {depLocal,arrLocal,dayCross,ok:true};
       }
-      return null;
+      // No exact fit — return best-effort using earliest dep in window, plus reason
+      const depLocal=lo;
+      const depUTCm=depLocal-depOff*60;
+      const arrUTCm=depUTCm+blockMin;
+      const arrLocal=((arrUTCm+arrOff*60)%1440+1440)%1440;
+      const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
+      let reason='';
+      if(dnMiss>0 && arrWinMiss===0) reason='day/night requirement cannot be met within the departure window';
+      else if(arrWinMiss>0) reason='arrival falls outside the arrival window for every possible departure time';
+      else reason='no valid time found';
+      return {depLocal,arrLocal,dayCross,ok:false,reason};
     };
 
     // Outbound
     const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,block);
-    const oDepL = out? out.depLocal : depWin[0];
-    const oArrL = out? out.arrLocal : ((depWin[0]+block+(arrUtc-depUtc)*60)%1440+1440)%1440;
-    const oCross = out? out.dayCross : Math.floor((depWin[0]+block+(arrUtc-depUtc)*60)/1440);
     rotBars.push({
       legIdx:idx, dir:'out', airline:l.airline, eqp:l.aircraft,
       depIcao:l.dep[0], arrIcao:l.arr[0],
-      depLocal:oDepL, arrLocal:oArrL, dayCross:oCross,
+      depLocal:out.depLocal, arrLocal:out.arrLocal, dayCross:out.dayCross,
+      depOff:depUtc, arrOff:arrUtc,
       block, ground, fnum:fnumOut,
-      ok: !!out, assigned:0
+      ok: out.ok, reason: out.reason||'', assigned:0
     });
 
     // Return
     const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,block);
-    const rDepL = ret? ret.depLocal : retWin[0];
-    const rArrL = ret? ret.arrLocal : ((retWin[0]+block+(depUtc-arrUtc)*60)%1440+1440)%1440;
-    const rCross = ret? ret.dayCross : Math.floor((retWin[0]+block+(depUtc-arrUtc)*60)/1440);
     rotBars.push({
       legIdx:idx, dir:'ret', airline:l.airline, eqp:l.aircraft,
       depIcao:l.arr[0], arrIcao:l.dep[0],
-      depLocal:rDepL, arrLocal:rArrL, dayCross:rCross,
+      depLocal:ret.depLocal, arrLocal:ret.arrLocal, dayCross:ret.dayCross,
+      depOff:arrUtc, arrOff:depUtc,
       block, ground, fnum:fnumIn,
-      ok: !!ret, assigned:0
+      ok: ret.ok, reason: ret.reason||'', assigned:0
+    });
+  });
+
+  // ── Initialise one aircraft per type (with first researched registration) ──
+  const regsByType = research.registrations||{};
+  const combos=[];
+  validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+  rotAircraft = [];
+  combos.forEach(c=>{
+    const regs = regsByType[c.airline+' '+c.eqp] || regsByType[c.key] || ttoolsFallbackRegs(c.airline,c.eqp);
+    rotAircraft.push({
+      key:c.key, airline:c.airline, eqp:c.eqp, reg:regs[0],
+      regPool: regs.slice(), regIdx:0,
+      assignments:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]}
     });
   });
 
@@ -6313,6 +6353,158 @@ function renderRotationBars() {
   });
 }
 
+// ── Bottom half: aircraft resource lanes with weekly UTC calendar ──
+function renderRotationLanes() {
+  const container = document.getElementById('rot-lanes-container');
+  if (!container) return;
+  container.innerHTML = '';
+  const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+
+  // Header row: aircraft column + 7 day columns
+  const COLW = 150;     // each day column width
+  const ACW  = 150;     // aircraft id column width
+
+  const grid = document.createElement('div');
+  grid.style.cssText='display:inline-block;min-width:100%;';
+
+  // header
+  const head = document.createElement('div');
+  head.style.cssText='display:flex;position:sticky;top:0;z-index:5;background:var(--bg);';
+  const corner=document.createElement('div');
+  corner.style.cssText='width:'+ACW+'px;flex-shrink:0;';
+  head.appendChild(corner);
+  ROT_DAYS.forEach(d=>{
+    const dc=document.createElement('div');
+    dc.style.cssText='width:'+COLW+'px;flex-shrink:0;padding:4px 6px;font-size:11px;font-weight:700;color:var(--txt2);border-left:1px dashed var(--bdr2);text-align:center;';
+    dc.textContent=d;
+    head.appendChild(dc);
+  });
+  grid.appendChild(head);
+
+  // one row per aircraft
+  rotAircraft.forEach((ac,acIdx)=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;border-top:1px solid var(--bdr);min-height:64px;';
+
+    // aircraft id cell
+    const idc=document.createElement('div');
+    idc.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:6px;display:flex;flex-direction:column;gap:3px;justify-content:center;';
+    idc.innerHTML='<div style="display:flex;align-items:center;gap:5px;">'
+      +'<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
+      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div></div></div>';
+    row.appendChild(idc);
+
+    // 7 day cells
+    for(let di=0; di<7; di++){
+      const cell=document.createElement('div');
+      cell.style.cssText='width:'+COLW+'px;flex-shrink:0;border-left:1px dashed var(--bdr2);padding:3px;display:flex;flex-direction:column;gap:2px;min-height:64px;';
+      cell.dataset.ac=acIdx; cell.dataset.day=di;
+
+      // drop handlers
+      cell.addEventListener('dragover', e=>{ e.preventDefault(); cell.style.background='rgba(88,166,255,.12)'; });
+      cell.addEventListener('dragleave', e=>{ cell.style.background=''; });
+      cell.addEventListener('drop', e=>{
+        e.preventDefault(); cell.style.background='';
+        const data=e.dataTransfer.getData('text/plain');
+        const [legIdx] = data.split('|');
+        dropPairOnAircraft(parseInt(legIdx), acIdx, di);
+      });
+
+      // render existing assignments for this aircraft/day
+      (ac.assignments[di]||[]).forEach((asg,ai)=>{
+        asg.segs.forEach(seg=>{
+          const chip=document.createElement('div');
+          const night=seg.utcDayCross>=1;
+          chip.style.cssText='font-size:9px;font-family:monospace;border-radius:3px;padding:2px 4px;background:'+(night?'rgba(50,60,95,.8)':'rgba(60,72,92,.7)')+';border:1px solid rgba(88,166,255,.35);color:#fff;white-space:nowrap;cursor:pointer;display:flex;justify-content:space-between;gap:4px;';
+          chip.innerHTML='<span>'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+(seg.utcDayCross>=1?'<span style="color:#f0b400;">+'+seg.utcDayCross+'</span>':'')+' '+fmtU(seg.arrUTC)+'</span>';
+          chip.title='Click to remove this rotation';
+          chip.onclick=()=>{ removeAssignment(acIdx, di, asg.uid); };
+          cell.appendChild(chip);
+        });
+      });
+
+      row.appendChild(cell);
+    }
+    grid.appendChild(row);
+
+    // "+ Additional aircraft" row under each type's aircraft (after the last aircraft of that type)
+    const isLastOfType = (acIdx===rotAircraft.length-1) || (rotAircraft[acIdx+1] && rotAircraft[acIdx+1].key!==ac.key);
+    if(isLastOfType){
+      const addRow=document.createElement('div');
+      addRow.style.cssText='display:flex;border-top:1px solid var(--bdr);';
+      const addCell=document.createElement('div');
+      addCell.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:4px 6px;';
+      const addBtn=document.createElement('button');
+      addBtn.textContent='+ Additional aircraft';
+      addBtn.style.cssText='font-size:10px;padding:3px 8px;border-radius:12px;border:1px solid var(--bdr2);background:transparent;color:var(--txt3);cursor:pointer;white-space:nowrap;';
+      addBtn.onclick=()=>addAircraftOfType(ac.key);
+      addCell.appendChild(addBtn);
+      addRow.appendChild(addCell);
+      grid.appendChild(addRow);
+    }
+  });
+
+  container.appendChild(grid);
+}
+
+// Convert a bar's LOCAL dep time to a UTC departure minute + day offset, given a target UTC weekday
+function barToUTCSeg(bar) {
+  // depUTC minute-of-day (0..1439) and how many UTC days the flight spans
+  const depUTC = ((bar.depLocal - bar.depOff*60)%1440+1440)%1440;
+  const arrUTCraw = (bar.depLocal - bar.depOff*60) + bar.block;
+  const arrUTC = ((arrUTCraw%1440)+1440)%1440;
+  const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor((bar.depLocal - bar.depOff*60)/1440);
+  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground };
+}
+
+// Drop a leg pair (outbound+return) onto an aircraft starting on day `di` (UTC weekday)
+function dropPairOnAircraft(legIdx, acIdx, di) {
+  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
+  if(!pair.length) return;
+  const ac = rotAircraft[acIdx];
+  if(ac.key !== (pair[0].airline+'|'+pair[0].eqp)){
+    alert('This aircraft type ('+ac.eqp+') does not match the flight ('+pair[0].eqp+').');
+    return;
+  }
+  const uid = 'asg-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
+  const segs = pair.map(b=>barToUTCSeg(b));
+  ac.assignments[di].push({ uid, legIdx, segs });
+
+  // increment counter on the bars
+  pair.forEach(b=>{ b.assigned = Math.min(7, (b.assigned||0)+1); });
+
+  renderRotationBars();
+  renderRotationLanes();
+}
+
+function removeAssignment(acIdx, di, uid) {
+  const ac = rotAircraft[acIdx];
+  const idx = ac.assignments[di].findIndex(a=>a.uid===uid);
+  if(idx<0) return;
+  const legIdx = ac.assignments[di][idx].legIdx;
+  ac.assignments[di].splice(idx,1);
+  // decrement counter
+  rotBars.filter(b=>b.legIdx===legIdx).forEach(b=>{ b.assigned=Math.max(0,(b.assigned||0)-1); });
+  renderRotationBars();
+  renderRotationLanes();
+}
+
+function addAircraftOfType(key) {
+  const proto = rotAircraft.find(a=>a.key===key);
+  if(!proto) return;
+  const used = rotAircraft.filter(a=>a.key===key).length;
+  const reg = proto.regPool[used] || ttoolsFallbackRegs(proto.airline,proto.eqp)[0];
+  // insert right after the last aircraft of this type
+  let insertAt = rotAircraft.length;
+  for(let i=rotAircraft.length-1;i>=0;i--){ if(rotAircraft[i].key===key){ insertAt=i+1; break; } }
+  rotAircraft.splice(insertAt,0,{
+    key, airline:proto.airline, eqp:proto.eqp, reg,
+    regPool:proto.regPool, regIdx:used,
+    assignments:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]}
+  });
+  renderRotationLanes();
+}
+
 function showBarPopup(bar) {
   const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
   let pop=document.getElementById('rot-bar-popup');
@@ -6337,7 +6529,7 @@ function showBarPopup(bar) {
     +'<span style="color:var(--txt3);">Type</span><span style="color:'+(night?'#5a8dee':'#f0b400')+';">'+(night?'☾ Overnight (+'+bar.dayCross+' day)':'☀ Same day')+'</span>'
     +'<span style="color:var(--txt3);">Assigned</span><span style="color:#fff;">'+(bar.assigned||0)+' / 7</span>'
     +'</div>'
-    +(bar.ok?'':'<div style="margin-top:10px;font-size:11px;color:#f85149;">⚠ Could not satisfy all time windows / day-night for this leg. Adjust the route times and regenerate.</div>')
+    +(bar.ok?'':'<div style="margin-top:10px;font-size:11px;color:#f85149;">⚠ '+(bar.reason||'Could not satisfy all time windows / day-night for this leg.')+' Adjust the route windows, day/night, or block time and regenerate.</div>')
     +'<div style="margin-top:14px;text-align:right;"><button onclick="document.getElementById(\'rot-bar-popup\').remove()" style="font-size:12px;padding:5px 16px;border-radius:6px;border:1px solid var(--bdr);background:var(--acc);color:#fff;cursor:pointer;">Close</button></div>';
   pop.appendChild(card);
   document.body.appendChild(pop);
