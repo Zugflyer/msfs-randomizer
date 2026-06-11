@@ -6321,7 +6321,7 @@ function renderRotationBars() {
       const mid=document.createElement('div');
       mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
       if(!compact){
-        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.eqp+'</div>';
+        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.fnum+'</div>';
       }
 
       // right block: arr time (top, editable) + arr airport (bottom)
@@ -6360,74 +6360,89 @@ function renderRotationLanes() {
   container.innerHTML = '';
   const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
-  // Header row: aircraft column + 7 day columns
-  const COLW = 150;     // each day column width
-  const ACW  = 150;     // aircraft id column width
+  const ACW = 150;          // aircraft id column width
+  const DAYW = 260;         // width of one day on the timeline (px) — wide, scrollable
+  const TRACK_W = DAYW*7;   // full week width
+  const pxPerMin = DAYW/1440;
+  const ROW_H = 58;
 
   const grid = document.createElement('div');
-  grid.style.cssText='display:inline-block;min-width:100%;';
+  grid.style.cssText='display:inline-block;min-width:'+(ACW+TRACK_W)+'px;';
 
-  // header
-  const head = document.createElement('div');
-  head.style.cssText='display:flex;position:sticky;top:0;z-index:5;background:var(--bg);';
-  const corner=document.createElement('div');
-  corner.style.cssText='width:'+ACW+'px;flex-shrink:0;';
+  // ── header: day labels over the timeline ──
+  const head=document.createElement('div');
+  head.style.cssText='display:flex;position:sticky;top:0;z-index:6;background:var(--bg);';
+  const corner=document.createElement('div'); corner.style.cssText='width:'+ACW+'px;flex-shrink:0;';
   head.appendChild(corner);
-  ROT_DAYS.forEach(d=>{
-    const dc=document.createElement('div');
-    dc.style.cssText='width:'+COLW+'px;flex-shrink:0;padding:4px 6px;font-size:11px;font-weight:700;color:var(--txt2);border-left:1px dashed var(--bdr2);text-align:center;';
-    dc.textContent=d;
-    head.appendChild(dc);
+  const headTrack=document.createElement('div');
+  headTrack.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:22px;';
+  ROT_DAYS.forEach((d,i)=>{
+    const lbl=document.createElement('div');
+    lbl.style.cssText='position:absolute;left:'+(i*DAYW)+'px;width:'+DAYW+'px;text-align:center;font-size:11px;font-weight:700;color:var(--txt2);border-left:1px solid var(--bdr2);';
+    lbl.textContent=d;
+    headTrack.appendChild(lbl);
   });
+  head.appendChild(headTrack);
   grid.appendChild(head);
 
-  // one row per aircraft
+  // ── one row per aircraft ──
   rotAircraft.forEach((ac,acIdx)=>{
     const row=document.createElement('div');
-    row.style.cssText='display:flex;border-top:1px solid var(--bdr);min-height:64px;';
+    row.style.cssText='display:flex;border-top:1px solid var(--bdr);height:'+ROW_H+'px;';
 
     // aircraft id cell
     const idc=document.createElement('div');
-    idc.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:6px;display:flex;flex-direction:column;gap:3px;justify-content:center;';
-    idc.innerHTML='<div style="display:flex;align-items:center;gap:5px;">'
-      +'<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
-      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div></div></div>';
+    idc.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:6px;display:flex;align-items:center;gap:5px;';
+    idc.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
+      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div></div>';
     row.appendChild(idc);
 
-    // 7 day cells
-    for(let di=0; di<7; di++){
-      const cell=document.createElement('div');
-      cell.style.cssText='width:'+COLW+'px;flex-shrink:0;border-left:1px dashed var(--bdr2);padding:3px;display:flex;flex-direction:column;gap:2px;min-height:64px;';
-      cell.dataset.ac=acIdx; cell.dataset.day=di;
+    // timeline track
+    const track=document.createElement('div');
+    track.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:'+ROW_H+'px;background:repeating-linear-gradient(90deg,transparent,transparent '+(DAYW-1)+'px,var(--bdr2) '+(DAYW-1)+'px,var(--bdr2) '+DAYW+'px);';
+    track.dataset.ac=acIdx;
 
-      // drop handlers
-      cell.addEventListener('dragover', e=>{ e.preventDefault(); cell.style.background='rgba(88,166,255,.12)'; });
-      cell.addEventListener('dragleave', e=>{ cell.style.background=''; });
-      cell.addEventListener('drop', e=>{
-        e.preventDefault(); cell.style.background='';
-        const data=e.dataTransfer.getData('text/plain');
-        const [legIdx] = data.split('|');
-        dropPairOnAircraft(parseInt(legIdx), acIdx, di);
-      });
+    // drop handler — compute UTC day+time from drop x position
+    track.addEventListener('dragover', e=>{ e.preventDefault(); track.style.background='rgba(88,166,255,.06)'; });
+    track.addEventListener('dragleave', e=>{ track.style.background=''; });
+    track.addEventListener('drop', e=>{
+      e.preventDefault(); track.style.background='';
+      const data=e.dataTransfer.getData('text/plain');
+      const [legIdx]=data.split('|');
+      const rect=track.getBoundingClientRect();
+      const x=e.clientX-rect.left;
+      const dropMinAbs = Math.max(0, Math.min(10079, Math.round(x/pxPerMin))); // absolute week minute where dropped
+      dropPairOnAircraft(parseInt(legIdx), acIdx, dropMinAbs);
+    });
 
-      // render existing assignments for this aircraft/day
-      (ac.assignments[di]||[]).forEach((asg,ai)=>{
+    // render assignments as absolutely-positioned bars
+    Object.keys(ac.assignments).forEach(di=>{
+      (ac.assignments[di]||[]).forEach(asg=>{
         asg.segs.forEach(seg=>{
-          const chip=document.createElement('div');
+          // absolute start minute in the week = startDayAbs already stored
+          const startAbs = seg.absDep;   // 0..10079
+          const durMin = seg.block + seg.ground;
+          const leftPx = startAbs*pxPerMin;
+          const wPx = Math.max(8, durMin*pxPerMin);
           const night=seg.utcDayCross>=1;
-          chip.style.cssText='font-size:9px;font-family:monospace;border-radius:3px;padding:2px 4px;background:'+(night?'rgba(50,60,95,.8)':'rgba(60,72,92,.7)')+';border:1px solid rgba(88,166,255,.35);color:#fff;white-space:nowrap;cursor:pointer;display:flex;justify-content:space-between;gap:4px;';
-          chip.innerHTML='<span>'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+(seg.utcDayCross>=1?'<span style="color:#f0b400;">+'+seg.utcDayCross+'</span>':'')+' '+fmtU(seg.arrUTC)+'</span>';
-          chip.title='Click to remove this rotation';
-          chip.onclick=()=>{ removeAssignment(acIdx, di, asg.uid); };
-          cell.appendChild(chip);
+          const seg1=document.createElement('div');
+          seg1.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:4px;background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);overflow:hidden;cursor:pointer;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
+          seg1.title='Click to remove this rotation pair';
+          // flight block portion vs ground portion: show ground as a lighter tail
+          const blockW = seg.block*pxPerMin;
+          seg1.innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtU(seg.arrUTC)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
+            +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>'
+            +'<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
+          seg1.onclick=()=>removeAssignment(acIdx, asg.uid);
+          track.appendChild(seg1);
         });
       });
+    });
 
-      row.appendChild(cell);
-    }
+    row.appendChild(track);
     grid.appendChild(row);
 
-    // "+ Additional aircraft" row under each type's aircraft (after the last aircraft of that type)
+    // "+ Additional aircraft" row after the last aircraft of this type
     const isLastOfType = (acIdx===rotAircraft.length-1) || (rotAircraft[acIdx+1] && rotAircraft[acIdx+1].key!==ac.key);
     if(isLastOfType){
       const addRow=document.createElement('div');
@@ -6439,7 +6454,8 @@ function renderRotationLanes() {
       addBtn.style.cssText='font-size:10px;padding:3px 8px;border-radius:12px;border:1px solid var(--bdr2);background:transparent;color:var(--txt3);cursor:pointer;white-space:nowrap;';
       addBtn.onclick=()=>addAircraftOfType(ac.key);
       addCell.appendChild(addBtn);
-      addRow.appendChild(addCell);
+      const spacer=document.createElement('div'); spacer.style.cssText='width:'+TRACK_W+'px;flex-shrink:0;';
+      addRow.appendChild(addCell); addRow.appendChild(spacer);
       grid.appendChild(addRow);
     }
   });
@@ -6447,18 +6463,18 @@ function renderRotationLanes() {
   container.appendChild(grid);
 }
 
-// Convert a bar's LOCAL dep time to a UTC departure minute + day offset, given a target UTC weekday
+// Convert a bar's LOCAL dep time to UTC minute-of-day + day span
 function barToUTCSeg(bar) {
-  // depUTC minute-of-day (0..1439) and how many UTC days the flight spans
-  const depUTC = ((bar.depLocal - bar.depOff*60)%1440+1440)%1440;
-  const arrUTCraw = (bar.depLocal - bar.depOff*60) + bar.block;
+  const depUTCraw = bar.depLocal - bar.depOff*60;
+  const depUTC = ((depUTCraw%1440)+1440)%1440;
+  const arrUTCraw = depUTCraw + bar.block;
   const arrUTC = ((arrUTCraw%1440)+1440)%1440;
-  const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor((bar.depLocal - bar.depOff*60)/1440);
+  const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor(depUTCraw/1440);
   return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground };
 }
 
 // Drop a leg pair (outbound+return) onto an aircraft starting on day `di` (UTC weekday)
-function dropPairOnAircraft(legIdx, acIdx, di) {
+function dropPairOnAircraft(legIdx, acIdx, dropMinAbs) {
   const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
   if(!pair.length) return;
   const ac = rotAircraft[acIdx];
@@ -6466,25 +6482,43 @@ function dropPairOnAircraft(legIdx, acIdx, di) {
     alert('This aircraft type ('+ac.eqp+') does not match the flight ('+pair[0].eqp+').');
     return;
   }
+  // dropMinAbs = where on the week (0..10079 UTC minutes) the user dropped.
+  // Snap the OUTBOUND so it departs on the dropped day at its fixed UTC departure time.
+  const outSeg = barToUTCSeg(pair[0]);
+  const retSeg = barToUTCSeg(pair[1]);
+  const dropDay = Math.floor(dropMinAbs/1440);             // 0..6 (UTC weekday, 0=Sun shown first)
+  const outAbsDep = dropDay*1440 + outSeg.depUTC;          // outbound departs this UTC day at its UTC time
+  const outAbsArr = outAbsDep + outSeg.block;
+  // Return departs after outbound arrival + ground, at the return's fixed UTC departure time on the next suitable day
+  // Find the first UTC slot at/after (outAbsArr + ground) whose minute-of-day equals retSeg.depUTC
+  let retAbsDep = Math.ceil((outAbsArr + outSeg.ground)/1440)*1440 + retSeg.depUTC;
+  // if that lands too early (same day before ready), push a day
+  while(retAbsDep < outAbsArr + outSeg.ground) retAbsDep += 1440;
+  // but prefer the EARLIEST valid: also check same UTC day as outbound arrival
+  const sameDayRet = Math.floor(outAbsArr/1440)*1440 + retSeg.depUTC;
+  if(sameDayRet >= outAbsArr + outSeg.ground) retAbsDep = sameDayRet;
+  const retAbsArr = retAbsDep + retSeg.block;
+
   const uid = 'asg-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
-  const segs = pair.map(b=>barToUTCSeg(b));
-  ac.assignments[di].push({ uid, legIdx, segs });
+  const segs = [
+    {...outSeg, absDep: outAbsDep%10080, absArr: outAbsArr%10080},
+    {...retSeg, absDep: retAbsDep%10080, absArr: retAbsArr%10080}
+  ];
+  ac.assignments[dropDay].push({ uid, legIdx, segs });
 
-  // increment counter on the bars
   pair.forEach(b=>{ b.assigned = Math.min(7, (b.assigned||0)+1); });
-
   renderRotationBars();
   renderRotationLanes();
 }
 
-function removeAssignment(acIdx, di, uid) {
+function removeAssignment(acIdx, uid) {
   const ac = rotAircraft[acIdx];
-  const idx = ac.assignments[di].findIndex(a=>a.uid===uid);
-  if(idx<0) return;
-  const legIdx = ac.assignments[di][idx].legIdx;
-  ac.assignments[di].splice(idx,1);
-  // decrement counter
-  rotBars.filter(b=>b.legIdx===legIdx).forEach(b=>{ b.assigned=Math.max(0,(b.assigned||0)-1); });
+  let legIdx=null;
+  Object.keys(ac.assignments).forEach(di=>{
+    const idx=ac.assignments[di].findIndex(a=>a.uid===uid);
+    if(idx>=0){ legIdx=ac.assignments[di][idx].legIdx; ac.assignments[di].splice(idx,1); }
+  });
+  if(legIdx!=null) rotBars.filter(b=>b.legIdx===legIdx).forEach(b=>{ b.assigned=Math.max(0,(b.assigned||0)-1); });
   renderRotationBars();
   renderRotationLanes();
 }
