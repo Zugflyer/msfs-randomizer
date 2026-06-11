@@ -791,6 +791,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button onclick="switchView('aigen')" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">← Back to routes</button>
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
         <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
+        <button onclick="openMergeDialog()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;white-space:nowrap;">+ Merge into Flightplan</button>
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
@@ -6887,64 +6888,140 @@ function showBarPopup(bar) {
 }
 
 
-function generateTToolsFromRotations() {
-  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
-  const icao = (aiGenTarget && aiGenTarget[0]) ? aiGenTarget[0] : 'XXXX';
+// Build TTools data from current rotations. acNumStart = first AC# to assign (default 1).
+// Returns {types, aircraftLines:[...], fpLines:[...]} or null if nothing assigned.
+function buildTToolsData(acNumStart) {
+  acNumStart = acNumStart || 1;
   const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
-  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);  // 0=Sun..6=Sat
+  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);
 
-  // ── 1) Aircraft file: one AC# per unique aircraft TYPE (airline+eqp) ──
-  // collect types in first-seen order
   const types=[];
   rotAircraft.forEach(ac=>{ if(!types.find(t=>t.key===ac.key)) types.push({key:ac.key, airline:ac.airline, eqp:ac.eqp}); });
-  // map type key -> AC number (1-based)
-  const acNumOf={}; types.forEach((t,i)=>{ acNumOf[t.key]=i+1; });
+  const acNumOf={}; types.forEach((t,i)=>{ acNumOf[t.key]=acNumStart+i; });
 
-  // default pax per type (rough): widebody vs narrowbody by eqp letter heuristics
   const paxFor = eqp => {
     const e=(eqp||'').toUpperCase();
     if(/A35|A33|A34|A38|B74|B77|B78|B76/.test(e)) return 300;
     if(/A30|A31/.test(e)) return 250;
-    return 180; // narrowbody default
+    return 180;
   };
 
-  const aircraftLines = types.map(t=>{
-    const n=acNumOf[t.key];
-    return `AC#${n},${paxFor(t.eqp)},"AIGAIM_${t.airline} ${t.eqp} NCv2"`;
-  });
-  const aircraftTxt = aircraftLines.join('\n')+'\n';
+  const aircraftLines = types.map(t=>`AC#${acNumOf[t.key]},${paxFor(t.eqp)},"AIGAIM_${t.airline} ${t.eqp} NCv2"`);
 
-  // ── 2) Flightplans file: one line per registration that has assignments ──
   const fpLines=[];
   rotAircraft.forEach(ac=>{
-    // gather all segments assigned to this specific registration
     const segs=[];
-    Object.keys(ac.assignments).forEach(di=>{
-      ac.assignments[di].forEach(asg=>{
-        asg.segs.forEach(s=> segs.push(s));
-      });
-    });
-    if(!segs.length) return; // skip aircraft with no flights
-    // sort chronologically by absolute departure
+    Object.keys(ac.assignments).forEach(di=>{ ac.assignments[di].forEach(asg=>{ asg.segs.forEach(s=> segs.push(s)); }); });
+    if(!segs.length) return;
     segs.sort((a,b)=> a.absDep - b.absDep);
     const acNum = acNumOf[ac.key];
     const segStr = segs.map(s=>{
       const dDay=dayOf(s.absDep), aDay=dayOf(s.absArr);
-      const alt = 320 + Math.floor(Math.random()*9)*10; // FL320..FL400 random cruise
+      const alt = 320 + Math.floor(Math.random()*9)*10;
       return `${dDay}/${fmtU(s.absDep)},${aDay}/${fmtU(s.absArr)},${alt},F,${s.fnum},${s.arrIcao}`;
     }).join(',');
     fpLines.push(`AC#${acNum},${ac.reg},1%,Week,IFR,${segStr}`);
   });
 
-  if(!fpLines.length){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+  if(!fpLines.length) return null;
+  return { types, aircraftLines, fpLines };
+}
 
-  const flightplansTxt = '//FSXDAYS=False\n//SUMMER TIME\n' + fpLines.join('\n')+'\n';
+function generateTToolsFromRotations() {
+  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
+  const icao = (aiGenTarget && aiGenTarget[0]) ? aiGenTarget[0] : 'XXXX';
+  const data = buildTToolsData(1);
+  if(!data){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+
+  const aircraftTxt = data.aircraftLines.join('\n')+'\n';
+  const flightplansTxt = '//FSXDAYS=False\n//SUMMER TIME\n' + data.fpLines.join('\n')+'\n';
 
   ttoolsDownload(aircraftTxt, 'Aircraft_CRE_'+icao+'.txt');
   setTimeout(()=> ttoolsDownload(flightplansTxt, 'Flightplans_CRE_'+icao+'.txt'), 400);
 
   const st=document.getElementById('rot-status');
-  if(st) st.textContent='✓ Generated Aircraft_CRE_'+icao+'.txt ('+types.length+' type'+(types.length>1?'s':'')+') and Flightplans_CRE_'+icao+'.txt ('+fpLines.length+' aircraft).';
+  if(st) st.textContent='✓ Generated Aircraft_CRE_'+icao+'.txt ('+data.types.length+' type'+(data.types.length>1?'s':'')+') and Flightplans_CRE_'+icao+'.txt ('+data.fpLines.length+' aircraft).';
+}
+
+// ── Merge into an existing flightplan ──
+function openMergeDialog() {
+  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
+  const check = buildTToolsData(1);
+  if(!check){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+
+  let pop=document.getElementById('rot-merge-popup');
+  if(pop) pop.remove();
+  pop=document.createElement('div');
+  pop.id='rot-merge-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);';
+  pop.onclick=()=>pop.remove();
+  const card=document.createElement('div');
+  card.style.cssText='background:var(--surf);border:1px solid var(--bdr2);border-radius:12px;padding:20px 24px;min-width:420px;max-width:90vw;box-shadow:0 8px 32px rgba(0,0,0,.6);';
+  card.onclick=e=>e.stopPropagation();
+  card.innerHTML =
+    '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px;">Merge into existing flightplan</div>'
+    +'<div style="font-size:12px;color:var(--txt2);margin-bottom:16px;line-height:1.5;">Select your existing <b>Aircraft_CRE</b> and <b>Flightplans_CRE</b> files. The new rotations are appended with the next sequential AC# numbers, and you get the combined files back.</div>'
+    +'<div style="display:flex;flex-direction:column;gap:12px;">'
+    +'<label style="font-size:12px;color:var(--txt2);">Existing Aircraft_CRE_*.txt<br><input type="file" id="merge-ac-file" accept=".txt" style="margin-top:5px;font-size:12px;color:var(--txt2);"></label>'
+    +'<label style="font-size:12px;color:var(--txt2);">Existing Flightplans_CRE_*.txt<br><input type="file" id="merge-fp-file" accept=".txt" style="margin-top:5px;font-size:12px;color:var(--txt2);"></label>'
+    +'</div>'
+    +'<div id="merge-msg" style="font-size:11px;color:#f85149;margin-top:10px;min-height:14px;"></div>'
+    +'<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">'
+    +'<button id="merge-cancel" style="font-size:12px;padding:6px 16px;border-radius:6px;border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">Cancel</button>'
+    +'<button id="merge-go" style="font-size:12px;font-weight:600;padding:6px 16px;border-radius:6px;border:none;background:var(--acc);color:#fff;cursor:pointer;">Merge &amp; download</button>'
+    +'</div>';
+  pop.appendChild(card);
+  document.body.appendChild(pop);
+
+  document.getElementById('merge-cancel').onclick=()=>pop.remove();
+  document.getElementById('merge-go').onclick=()=>doMerge();
+}
+
+function readFileText(input) {
+  return new Promise((resolve,reject)=>{
+    const f=input&&input.files&&input.files[0];
+    if(!f){ resolve(null); return; }
+    const r=new FileReader();
+    r.onload=()=>resolve(r.result);
+    r.onerror=()=>reject(new Error('read error'));
+    r.readAsText(f);
+  });
+}
+
+async function doMerge() {
+  const msg=document.getElementById('merge-msg');
+  const setMsg=t=>{ if(msg) msg.textContent=t; };
+  setMsg('');
+  let acText, fpText;
+  try {
+    acText = await readFileText(document.getElementById('merge-ac-file'));
+    fpText = await readFileText(document.getElementById('merge-fp-file'));
+  } catch(e){ setMsg('Could not read the files.'); return; }
+  if(!acText || !fpText){ setMsg('Please select both files.'); return; }
+
+  // Find the highest existing AC# across both files
+  const acNums=[];
+  (acText+'\n'+fpText).replace(/AC#(\d+)/g,(m,n)=>{ acNums.push(parseInt(n)); return m; });
+  const maxAc = acNums.length ? Math.max(...acNums) : 0;
+
+  const data = buildTToolsData(maxAc+1);
+  if(!data){ setMsg('No assigned rotations to merge.'); return; }
+
+  // Append aircraft lines (ensure trailing newline on existing)
+  const acOut = acText.replace(/\s*$/,'') + '\n' + data.aircraftLines.join('\n') + '\n';
+  // Append flightplan lines (keep existing header; just append our lines)
+  const fpOut = fpText.replace(/\s*$/,'') + '\n' + data.fpLines.join('\n') + '\n';
+
+  // Derive output names from the uploaded ones
+  const acName = (document.getElementById('merge-ac-file').files[0].name)||'Aircraft_CRE_merged.txt';
+  const fpName = (document.getElementById('merge-fp-file').files[0].name)||'Flightplans_CRE_merged.txt';
+
+  ttoolsDownload(acOut, acName.replace(/\.txt$/i,'')+'_merged.txt');
+  setTimeout(()=> ttoolsDownload(fpOut, fpName.replace(/\.txt$/i,'')+'_merged.txt'), 400);
+
+  const pop=document.getElementById('rot-merge-popup'); if(pop) pop.remove();
+  const st=document.getElementById('rot-status');
+  if(st) st.textContent='✓ Merged '+data.types.length+' type(s) / '+data.fpLines.length+' aircraft, starting at AC#'+(maxAc+1)+'. Combined files downloaded.';
 }
 
 function ttoolsFallbackRegs(airline, eqp) {
