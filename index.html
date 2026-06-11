@@ -6199,8 +6199,8 @@ function renderRotationBars() {
     pairDur[li] = byLeg[li].reduce((s,b)=>s+(b.block+b.ground),0);
   });
   const maxPairDur = Math.max(1, ...Object.values(pairDur));
-  // available width: container minus counter(~50) minus gaps/padding
-  const avail = Math.max(400, (container.clientWidth||container.offsetWidth||900) - 90);
+  // available width: container minus id-cell(120) minus counter(44) minus gaps/padding
+  const avail = Math.max(360, (container.clientWidth||container.offsetWidth||900) - 210);
   const pxPerMin = avail / maxPairDur;
   const MIN_BAR = 70; // never thinner than this so text/handle stays usable
 
@@ -6209,8 +6209,21 @@ function renderRotationBars() {
     const rowWrap = document.createElement('div');
     rowWrap.style.cssText='display:flex;align-items:stretch;gap:6px;';
 
-    // ── single counter (left of the outbound bar) ──
     const outBar = pair.find(b=>b.dir==='out') || pair[0];
+
+    // ── airline logo + EQP (far left) ──
+    const idCell = document.createElement('div');
+    idCell.style.cssText='display:flex;align-items:center;gap:6px;min-width:120px;flex-shrink:0;';
+    const logoBox = document.createElement('div');
+    logoBox.style.cssText='width:46px;height:34px;border-radius:4px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
+    logoBox.innerHTML = airlineLogoHtml((outBar.airline||'').toUpperCase()) || '<span style="font-size:8px;color:#999;">'+outBar.airline+'</span>';
+    const eqpLbl = document.createElement('div');
+    eqpLbl.style.cssText='font-size:11px;font-weight:700;color:#fff;white-space:nowrap;';
+    eqpLbl.textContent = outBar.eqp;
+    idCell.appendChild(logoBox); idCell.appendChild(eqpLbl);
+    rowWrap.appendChild(idCell);
+
+    // ── single counter ──
     const counter = document.createElement('div');
     counter.id='rot-counter-'+legIdx;
     counter.style.cssText='display:flex;align-items:center;justify-content:center;min-width:44px;border:1.5px solid var(--bdr2);border-radius:6px;font-size:12px;font-weight:700;font-family:monospace;color:'+(outBar.assigned>=7?'#3fb950':'var(--txt3)')+';background:'+(outBar.assigned>=7?'rgba(63,185,80,.1)':'transparent')+';flex-shrink:0;';
@@ -6220,38 +6233,76 @@ function renderRotationBars() {
     pair.forEach(bar=>{
       const durMin = bar.block + bar.ground;
       const widthPx = Math.max(MIN_BAR, Math.round(durMin * pxPerMin));
-      const compact = widthPx < 150; // too narrow → only show arr airport, details via popup
+      const compact = widthPx < 170; // too narrow → hide eqp text, details via popup
 
       const nightTint = bar.dayCross>=1;
       const barEl = document.createElement('div');
       barEl.draggable = true;
       barEl.style.cssText='position:relative;display:flex;align-items:stretch;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.65),rgba(30,35,55,.65))':'linear-gradient(90deg,rgba(60,70,90,.45),rgba(45,52,68,.45))')+';min-height:50px;width:'+widthPx+'px;flex-shrink:0;user-select:none;';
 
-      // left block: dep time (top) + dep airport (bottom)
+      // helper: editable time input that preserves duration
+      const mkTimeInput = (which) => {  // which = 'dep' | 'arr'
+        const inp=document.createElement('input');
+        inp.type='text'; inp.maxLength=5;
+        inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
+        inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;';
+        inp.title='Edit — the other time shifts to keep duration';
+        inp.onclick=e=>e.stopPropagation();
+        inp.ondragstart=e=>e.preventDefault();
+        inp.onblur=()=>{
+          const m=inp.value.match(/^(\d{1,2}):?(\d{2})$/);
+          if(!m){ inp.value=fmt(which==='dep'?bar.depLocal:bar.arrLocal); return; }
+          const newMin=((+m[1])*60+(+m[2]));
+          if(which==='dep'){
+            const shift=newMin-bar.depLocal;
+            bar.depLocal=((newMin%1440)+1440)%1440;
+            bar.arrLocal=((bar.arrLocal+shift)%1440+1440)%1440;
+          } else {
+            const shift=newMin-bar.arrLocal;
+            bar.arrLocal=((newMin%1440)+1440)%1440;
+            bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440;
+          }
+          renderRotationBars();
+        };
+        inp.onkeydown=e=>{ if(e.key==='Enter'){ inp.blur(); } };
+        return inp;
+      };
+
+      // left block: dep time (top, editable) + dep airport (bottom)
       const left=document.createElement('div');
       left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
-      left.innerHTML='<div style="font-size:13px;font-weight:700;font-family:monospace;color:#fff;line-height:1.1;">'+fmt(bar.depLocal)+'</div>'
-        +'<div style="font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;">'+bar.depIcao+'</div>';
+      left.appendChild(mkTimeInput('dep'));
+      const depAp=document.createElement('div');
+      depAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
+      depAp.textContent=bar.depIcao;
+      left.appendChild(depAp);
 
-      // middle: aircraft type only (hidden if compact)
+      // middle: aircraft type (hidden if compact)
       const mid=document.createElement('div');
       mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
       if(!compact){
-        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+bar.airline+' '+bar.eqp+'</div>';
+        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.eqp+'</div>';
       }
 
-      // right block: arr airport (top) + arr time (bottom)
+      // right block: arr time (top, editable) + arr airport (bottom)
       const right=document.createElement('div');
       right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
-      right.innerHTML='<div style="font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;">'+bar.arrIcao+'</div>'
-        +'<div style="font-size:13px;font-weight:700;font-family:monospace;color:#fff;line-height:1.1;">'+fmt(bar.arrLocal)+(bar.dayCross>=1?'<span style="font-size:9px;color:#f0b400;">+'+bar.dayCross+'</span>':'')+'</div>';
+      const arrTimeWrap=document.createElement('div');
+      arrTimeWrap.style.cssText='display:flex;align-items:center;justify-content:center;';
+      arrTimeWrap.appendChild(mkTimeInput('arr'));
+      if(bar.dayCross>=1){ const p=document.createElement('span'); p.style.cssText='font-size:9px;color:#f0b400;margin-left:1px;'; p.textContent='+'+bar.dayCross; arrTimeWrap.appendChild(p); }
+      right.appendChild(arrTimeWrap);
+      const arrAp=document.createElement('div');
+      arrAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
+      arrAp.textContent=bar.arrIcao;
+      right.appendChild(arrAp);
 
       barEl.appendChild(left);
       barEl.appendChild(mid);
       barEl.appendChild(right);
 
-      // click → popup with full details
-      barEl.addEventListener('click', e=>{ e.stopPropagation(); showBarPopup(bar); });
+      // click on the bar background (not inputs) → popup
+      barEl.addEventListener('click', e=>{ if(e.target.tagName!=='INPUT'){ e.stopPropagation(); showBarPopup(bar); } });
       barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', legIdx+'|pair'); barEl.style.opacity='0.5'; });
       barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
 
