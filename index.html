@@ -6132,11 +6132,23 @@ Output exactly this shape (one line is fine):
 
   let research=null, rawTxt='';
   try {
-    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
-    if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,160)); }
-    const d=await r.json();
+    // Retry on transient overload (429 rate limit / 529 overloaded)
+    let d=null;
+    for(let attempt=1; attempt<=4; attempt++){
+      if(_aborted)return;
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+      if(r.ok){ d=await r.json(); break; }
+      if((r.status===529||r.status===429) && attempt<4){
+        const wait = r.status===429 ? 60 : 8*attempt; // overloaded: short backoff; rate limit: a minute
+        for(let w=wait; w>0 && !_aborted; w--){ setStatus('⏳ Server '+(r.status===429?'rate limited':'overloaded')+' — retrying in '+w+'s (attempt '+attempt+'/3)…'); await new Promise(res=>setTimeout(res,1000)); }
+        if(_aborted)return;
+        continue;
+      }
+      throw new Error('API '+r.status+': '+(await r.text()).slice(0,160));
+    }
+    if(!d) throw new Error('Server stayed overloaded after several retries. Please try again in a minute.');
     rawTxt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     research = extractRotJSON(rawTxt);
   } catch(e){ clearInterval(_t);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Research failed: '+e.message);return; }
