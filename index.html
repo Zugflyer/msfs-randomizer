@@ -6053,271 +6053,256 @@ async function generateTTools() {
   const _sw=setInterval(()=>{_swSecs++;},1000);
   const abortBtn=document.getElementById('aigen-abort');
   if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_pulse);clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
+  const stop=()=>{clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';};
 
-  const callAPI = async (messages, useSearch, maxTok) => {
-    const body = { model:'claude-sonnet-4-20250514', max_tokens:maxTok||16000, messages };
-    if (useSearch) body.tools=[{type:'web_search_20250305',name:'web_search'}];
-    const r = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
-      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
-        'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-      body:JSON.stringify(body)});
-    if(r.status===429){ const e=new Error('rate_limit'); e.rateLimit=true; throw e; }
-    if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,200)); }
-    const d=await r.json();
-    return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-  };
-  // Retry wrapper: on 429 wait and retry (rate limit is per-minute)
-  const callAPIRetry = async (messages, useSearch, maxTok) => {
-    for(let attempt=0; attempt<5; attempt++){
-      try { return await callAPI(messages, useSearch, maxTok); }
-      catch(e){
-        if(e.rateLimit && attempt<4){
-          for(let w=65; w>0 && !_aborted; w--){ setStatus('⏳ Rate limit — waiting '+w+'s (attempt '+(attempt+1)+'/4)…'); await new Promise(r=>setTimeout(r,1000)); }
-          if(_aborted) throw new Error('aborted');
-          continue;
-        }
-        throw e;
-      }
-    }
-    throw new Error('rate limit — gave up after retries');
-  };
-  const extractJSON = txt => { const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:null; if(!s){const m=txt.match(/\{[\s\S]*\}/);s=m?m[0]:null;} if(!s)return null; try{return JSON.parse(s);}catch(e){return null;} };
+  // ════════════════════════════════════════════════════════════════════
+  // PHASE 1 — single research call (UTC offsets, block times, regs, flight numbers)
+  // ════════════════════════════════════════════════════════════════════
+  setStatus('⏳ Researching real-world data (UTC, block times, registrations)… (0s)');
+  const _t1=setInterval(()=>{if(!_aborted)setStatus('⏳ Researching real-world data… ('+_swSecs+'s)');},1000);
 
   const combos=[];
   validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
 
-  // ════ PHASE 1: research (block times, UTC offsets, registrations, flight numbers) ════
-  setStatus('⏳ Phase 1/3: researching block times, registrations, flight numbers… (0s)');
-  const _t1=setInterval(()=>{if(!_aborted)setStatus('⏳ Phase 1/3: researching real-world data… ('+_swSecs+'s)');},1000);
+  const airportSet={}; validLegs.forEach(l=>{airportSet[l.dep[0]]=l.dep[7]||l.dep[2];airportSet[l.arr[0]]=l.arr[7]||l.arr[2];});
+  const apList=Object.entries(airportSet).map(([ic,nm])=>ic+' ('+nm+')').join(', ');
+  const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}->${l.arr[0]}, entered block ${l.blockTime}`).join('\n');
 
-  const airportSet = {};
-  validLegs.forEach(l=>{ airportSet[l.dep[0]]=l.dep[7]||l.dep[2]; airportSet[l.arr[0]]=l.arr[7]||l.arr[2]; });
-  const apList = Object.entries(airportSet).map(([ic,nm])=>ic+' ('+nm+')').join(', ');
-  const routeList = validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}↔${l.arr[0]}, entered block ${l.blockTime}`).join('\n');
+  const researchPrompt = `Research real aviation data. Use web_search. Reply ONLY JSON.
 
-  const researchPrompt = `Research real-world aviation data for a flight schedule. Use web_search.
-
-AIRPORTS (need summer/DST UTC offset for each): ${apList}
-
+AIRPORTS (need summer/DST UTC offset as a number): ${apList}
 ROUTES:
 ${routeList}
+AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
 
-AIRCRAFT TYPES (need registrations): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
+For each route: real nonstop block time (northern summer; if route is not real, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (search the airline's real numbers to that destination, pick nearby unused; if unserved adapt a nearby country's number).
+For each type: search airfleets.net, find the registration series, give 8 NEW sequential regs continuing it.
+For each airport: summer UTC offset number.
 
-For EACH route find:
-- block_time: real nonstop block time (northern summer Apr–Sep). If the route exists in reality use it; otherwise estimate from great-circle distance + 30min taxi. Format "H:MM". Prefer the user's entered block time only if you cannot find/estimate a better real value.
-- fnum_out / fnum_in: realistic 4-digit flight numbers. Search the airline's real flight numbers to that destination and pick a nearby unused number (different for out vs in). If the airline doesn't serve it, adapt from a nearby country's route.
-
-For EACH aircraft type: search airfleets.net for the real fleet, find the registration series pattern, and give 6 NEW sequential registrations continuing the series (do not repeat existing).
-
-For EACH airport: its summer UTC offset as a number.
-
-Reply ONLY this JSON:
-{
- "utc": {"EGLL": 1, "FACT": 2},
- "routes": [ {"r":1, "block_time":"11:30", "fnum_out":"0049", "fnum_in":"0050"} ],
- "registrations": {"BAW A35K": ["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY"]}
-}`;
+JSON shape:
+{"utc":{"EGLL":1,"FACT":2},
+ "routes":[{"r":1,"block_time":"11:40","fnum_out":"0049","fnum_in":"0050"}],
+ "registrations":{"BAW A35K":["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY","G-XWBZ","G-XWCA"]}}`;
 
   let research=null;
   try {
-    const txt = await callAPIRetry([{role:'user',content:researchPrompt}], true, 4000);
-    research = extractJSON(txt);
-  } catch(e){ clearInterval(_t1);clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Phase 1 failed: '+e.message);return; }
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:3000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+    if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,160)); }
+    const d=await r.json();
+    const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:(txt.match(/\{[\s\S]*\}/)||[])[0];
+    if(s) research=JSON.parse(s);
+  } catch(e){ clearInterval(_t1);stop();setStatus('✗ Research failed: '+e.message);return; }
   clearInterval(_t1);
   if(_aborted)return;
-  if(!research||!research.routes){ clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Phase 1 returned no usable data. Try again.');return; }
+  if(!research||!research.routes){ stop();setStatus('✗ Research returned no usable data. Try again.');return; }
 
-  // Merge research back into leg data, building a clean planning brief
+  // ════════════════════════════════════════════════════════════════════
+  // PHASE 2 — deterministic scheduling (pure JS, no API)
+  // ════════════════════════════════════════════════════════════════════
+  setStatus('⏳ Building rotations (local scheduler)…');
+  await new Promise(r=>setTimeout(r,50));
+
   const utc = research.utc||{};
-  const regs = research.registrations||{};
-  const rinfo = {}; (research.routes||[]).forEach(r=>{ rinfo[r.r]=r; });
+  const regsByType = research.registrations||{};
+  const rinfo={}; (research.routes||[]).forEach(r=>{rinfo[r.r]=r;});
 
-  const planLegs = validLegs.map((l,idx)=>{
-    const ri = rinfo[idx+1]||{};
-    return {
-      n: idx+1,
-      airline: l.airline, eqp: l.aircraft,
-      dep: l.dep[0], arr: l.arr[0],
-      depUtc: utc[l.dep[0]]??0, arrUtc: utc[l.arr[0]]??0,
-      block: ri.block_time || l.blockTime,
-      fnumOut: ri.fnum_out || String(1000+idx*7).padStart(4,'0'),
-      fnumIn:  ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0'),
-      ground: parseInt(l.groundTime||'90')||90,
-      depWin:[l.dd1||'06:00', l.dd2||'22:30'],   // depart DEP airport (local)
-      arrWin:[l.aa1||'05:30', l.aa2||'23:00'],   // arrive ARR airport (local)
-      retWin:[l.ad1||'06:00', l.ad2||'22:30'],   // depart ARR airport (local)
-      homeWin:[l.da1||'05:30', l.da2||'23:00'],  // arrive DEP airport (local)
-      dnOut:l.dnOut||'any', dnRet:l.dnRet||'any'
-    };
-  });
+  const hm = s=>{const m=String(s||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;};
+  const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+  const inWin=(min,from,to)=>{ if(from==null||to==null)return true; return from<=to ? (min>=from&&min<=to) : (min>=from||min<=to); };
 
-  const comboTitle = {}; combos.forEach((c,i)=>{ comboTitle[c.key]='AC#'+(i+1); });
-  const acTypeLines = combos.map((c,i)=>`AC#${i+1} = ${c.airline} ${c.eqp} | registrations available: ${(regs[c.airline+' '+c.eqp]||regs[c.key]||['(use realistic)']).join(', ')}`).join('\n');
+  // Build a "rotation bar" for each leg: find dep/arr times (UTC) satisfying all windows + day/night
+  // Times are minutes from Monday 00:00 UTC over a virtual single day (0..1439); day assignment comes later.
+  const DAYS=[1,2,3,4,5,6,0];
+  const bars=[]; // one template bar per leg (before 7x copy)
+  const warnings=[];
 
-  const briefLegs = planLegs.map(p=>
-    `Route ${p.n}: ${p.airline} ${p.eqp} | OUTBOUND ${p.dep}→${p.arr} fnum ${p.fnumOut}, RETURN ${p.arr}→${p.dep} fnum ${p.fnumIn} | block time ${p.block} both ways | `
-    +`UTC offsets: ${p.dep}=${p.depUtc>=0?'+':''}${p.depUtc}, ${p.arr}=${p.arrUtc>=0?'+':''}${p.arrUtc} | `
-    +`OUTBOUND must depart ${p.dep} ${p.depWin[0]}–${p.depWin[1]} local AND arrive ${p.arr} ${p.arrWin[0]}–${p.arrWin[1]} local${p.dnOut!=='any'?' ('+p.dnOut.toUpperCase()+' flight)':''} | `
-    +`RETURN must depart ${p.arr} ${p.retWin[0]}–${p.retWin[1]} local AND arrive ${p.dep} ${p.homeWin[0]}–${p.homeWin[1]} local${p.dnRet!=='any'?' ('+p.dnRet.toUpperCase()+' flight)':''} | `
-    +`min ground each end ${p.ground} min (longer OK)`
-  ).join('\n');
+  for(let idx=0; idx<validLegs.length; idx++){
+    const l=validLegs[idx];
+    const ri=rinfo[idx+1]||{};
+    const block = hm(ri.block_time)||hm(l.blockTime)||120;
+    const ground = parseInt(l.groundTime||'90')||90;
+    const depUtc = utc[l.dep[0]]??0;
+    const arrUtc = utc[l.arr[0]]??0;
+    const fnumOut = ri.fnum_out || String(1000+idx*7).padStart(4,'0');
+    const fnumIn  = ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0');
 
-  // ════ PHASE 2 + 3: plan then validate-and-fix loop ════
-  const planPrompt = `You are an expert airline rotation planner. Build a weekly MSFS TTools flightplan. Master airport ${icao}.
+    // Windows in LOCAL minutes
+    const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];   // depart DEP airport
+    const arrWin=[hm(l.aa1)??330, hm(l.aa2)??1380];   // arrive ARR airport
+    const retWin=[hm(l.ad1)??360, hm(l.ad2)??1350];   // depart ARR airport (return)
+    const homeWin=[hm(l.da1)??330, hm(l.da2)??1380];  // arrive DEP airport (return)
 
-All research is DONE — use these exact values, do NOT change block times or flight numbers:
-${briefLegs}
-
-AIRCRAFT TYPES (one AC# per type; multiple registrations share the AC#):
-${acTypeLines}
-
-RULES:
-1. EVERY route operates a full round trip (outbound + return) EVERY day of the week, at the SAME UTC time each day, same flight numbers.
-2. Convert all local windows to UTC using the given offsets. Every departure/arrival must fall inside its UTC window. (e.g. depart FACT 12:00–23:45 local at UTC+2 = 10:00–21:45 UTC.)
-3. Within one registration, the next departure must be ≥ previous arrival + that route's min ground time. No overlaps. Flights may cross midnight (e.g. 6/20:00→0/05:00 means Sat 20:00 to Sun 05:00).
-4. ROTATION MATH: a round trip that spans into the next day ties up one aircraft for >24h, so you need MULTIPLE aircraft to fly it daily. Example: a Cape Town round trip from London (≈11.5h each way) departs Mon evening, returns Wed morning — that ties up a plane ~36h, so you need 3 aircraft staggered one day apart to give daily service. Compute this for the longest route FIRST, allocate that many aircraft, then SLOT the shorter day-routes onto those same aircraft's free hours. Add aircraft only if truly needed.
-5. Use the provided registrations in order. One registration = one flightplan line, a continuous weekly chain.
-
-Think step by step: for each route compute UTC times, compute round-trip span, compute aircraft needed, then assemble each aircraft's weekly chain. Then OUTPUT ONLY this JSON:
-{
- "aircraft":[{"acNum":1,"pax":490,"title":"AIGAIM_BAW A35K NCv2"}],
- "flightplans":[{"acNum":1,"reg":"G-XWBT","segments":"1/20:30,2/08:00,370,F,0049,FACT,2/11:30,2/23:10,370,F,0050,EGLL,..."}]
-}
-Segment = DEPday/DEPtime,ARRday/ARRtime,alt,F,fnum,arrICAO (UTC; days 1=Mon..6=Sat,0=Sun; list in order 1,2,3,4,5,6,0). segments is the whole week's chain for that registration, comma-joined.`;
-
-  let plan=null, lastErrors=[], lastPlanJson='';
-  const MAX_ROUNDS=8;
-
-  for(let round=1; round<=MAX_ROUNDS; round++){
-    if(_aborted)return;
-    setStatus(`⏳ Phase ${round===1?'2':'3'}/3: ${round===1?'building':'fixing'} rotations (round ${round}/${MAX_ROUNDS})… (${_swSecs}s)`);
-
-    // Build a fresh, compact message each round (no growing history → stays under token limit)
-    let roundMsg;
-    if(round===1){
-      roundMsg = planPrompt;
-    } else {
-      roundMsg = planPrompt
-        + '\n\n═══ YOUR PREVIOUS ATTEMPT (fix it) ═══\n' + lastPlanJson
-        + '\n\n═══ PROBLEMS FOUND (fix ALL of these) ═══\n'
-        + lastErrors.slice(0,15).join('\n')
-        + '\n\nOutput the corrected full JSON only. Remember: add more aircraft if a long rotation needs them; no overlaps; all 7 days at same UTC time; all times inside their UTC windows.';
+    // Search for an outbound departure (local at DEP) that lands inside arrWin (local at ARR), respecting day/night
+    // Convert: depLocalDEP -> depUTC = depLocal - depUtc*60 ; arrUTC = depUTC + block ; arrLocalARR = arrUTC + arrUtc*60
+    // night out = arrival local calendar day is +1 vs departure local day
+    function findDep(depWinL, arrWinL, depOff, arrOff, dayNight, blockMin){
+      // iterate candidate local dep times in 5-min steps within window
+      const lo=depWinL[0], hi=depWinL[1];
+      const span = (lo<=hi)? (hi-lo) : (1440-lo+hi);
+      for(let step=0; step<=span; step+=5){
+        const depLocal = ((lo+step)%1440+1440)%1440;
+        const depUTCm  = depLocal - depOff*60;
+        const arrUTCm  = depUTCm + blockMin;
+        const arrLocal = ((arrUTCm + arrOff*60)%1440+1440)%1440;
+        // day offset: how many local-midnights crossed at arrival airport
+        const arrLocalAbs = (depLocal) + blockMin + (arrOff-depOff)*60; // local-arr clock vs dep-local clock
+        const crossesMidnight = arrLocalAbs >= 1440 || arrLocal < depLocal && (depLocal+blockMin)>=1440;
+        const dayCross = Math.floor((depLocal + blockMin + (arrOff-depOff)*60)/1440); // 0 same day, 1 next day...
+        const isNight = dayCross>=1;
+        if(!inWin(arrLocal, arrWinL[0], arrWinL[1])) continue;
+        if(dayNight==='night' && !isNight) continue;
+        if(dayNight==='day' && isNight) continue;
+        return { depLocal, depUTC:depUTCm, arrUTC:arrUTCm, arrLocal, dayCross };
+      }
+      return null;
     }
 
-    let txt;
-    try { txt = await callAPIRetry([{role:'user',content:roundMsg}], false, 8000); }
-    catch(e){ clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Round '+round+' API error: '+e.message);return; }
-    if(_aborted)return;
+    const out = findDep(depWin, arrWin, depUtc, arrUtc, l.dnOut, block);
+    if(!out){ warnings.push(`Route ${idx+1} (${l.dep[0]}→${l.arr[0]}): no outbound time fits the windows/day-night — used best effort.`); }
+    const outResolved = out || (()=>{ const depLocal=depWin[0]; const depUTCm=depLocal-depUtc*60; return {depLocal,depUTC:depUTCm,arrUTC:depUTCm+block,arrLocal:((depUTCm+block+arrUtc*60)%1440+1440)%1440,dayCross:Math.floor((depLocal+block+(arrUtc-depUtc)*60)/1440)}; })();
 
-    const cand = extractJSON(txt);
-    if(!cand||!cand.flightplans){ lastPlanJson=txt.slice(0,4000); lastErrors=['Previous reply was not valid JSON. Output ONLY the JSON object.'];
-      // brief pause to respect rate limit
-      for(let w=20; w>0 && !_aborted; w--){ setStatus('⏳ Pausing '+w+'s (rate budget)…'); await new Promise(r=>setTimeout(r,1000)); }
-      continue;
+    // Return: depart ARR airport after outbound arrival + ground, inside retWin, land DEP inside homeWin
+    // earliest return local-at-ARR = outbound arrLocal + ground
+    function findRet(retWinL, homeWinL, arrOff, depOff, dayNight, blockMin, earliestLocalArr){
+      const lo=retWinL[0], hi=retWinL[1];
+      const span=(lo<=hi)?(hi-lo):(1440-lo+hi);
+      for(let step=0; step<=span; step+=5){
+        const depLocal=((lo+step)%1440+1440)%1440;
+        // must be after earliest (with ground) — compare on a linear scale within the day-of-arrival
+        // (we allow the return to be next local day, so we don't hard-block here; ground is enforced in packing)
+        const depUTCm=depLocal-arrOff*60;
+        const arrUTCm=depUTCm+blockMin;
+        const arrLocal=((arrUTCm+depOff*60)%1440+1440)%1440;
+        const dayCross=Math.floor((depLocal+blockMin+(depOff-arrOff)*60)/1440);
+        const isNight=dayCross>=1;
+        if(!inWin(arrLocal, homeWinL[0], homeWinL[1])) continue;
+        if(dayNight==='night' && !isNight) continue;
+        if(dayNight==='day' && isNight) continue;
+        return { depLocal, depUTC:depUTCm, arrUTC:arrUTCm, arrLocal, dayCross };
+      }
+      return null;
     }
 
-    const errs = validateTTools(cand, planLegs, utc);
-    plan=cand;
-    lastPlanJson=JSON.stringify(cand);
-    if(!errs.length){ setStatus('✓ Validated clean in round '+round+'!'); break; }
-    lastErrors=errs;
-    // pause between rounds so the per-minute token budget recovers
-    if(round<MAX_ROUNDS){ for(let w=20; w>0 && !_aborted; w--){ setStatus('⏳ Found '+errs.length+' issue(s), pausing '+w+'s before retry…'); await new Promise(r=>setTimeout(r,1000)); } }
+    const ret = findRet(retWin, homeWin, arrUtc, depUtc, l.dnRet, block, outResolved.arrLocal+ground);
+    if(!ret){ warnings.push(`Route ${idx+1} (${l.arr[0]}→${l.dep[0]}): no return time fits — used best effort.`); }
+    const retResolved = ret || (()=>{ const depLocal=retWin[0]; const depUTCm=depLocal-arrUtc*60; return {depLocal,depUTC:depUTCm,arrUTC:depUTCm+block,arrLocal:((depUTCm+block+depUtc*60)%1440+1440)%1440,dayCross:Math.floor((depLocal+block+(depUtc-arrUtc)*60)/1440)}; })();
+
+    // Build the bar in UTC absolute minutes relative to "outbound departs at minute X on day D"
+    // outbound: depUTC (normalize to 0..1439) ; outArrOffset = block ; ground ; return offset...
+    const outDepUTC = ((outResolved.depUTC%1440)+1440)%1440;
+    const outArrUTC = outDepUTC + block;
+    // return departs: relative to outbound. We want first valid retDepUTC >= outArrUTC + ground
+    let retDepUTC = ((retResolved.depUTC%1440)+1440)%1440;
+    // lift retDepUTC into the timeline after outArr+ground
+    while(retDepUTC < outArrUTC + ground) retDepUTC += 1440;
+    const retArrUTC = retDepUTC + block;
+    const barEnd = retArrUTC + ground; // bar includes trailing ground
+
+    bars.push({
+      legIdx:idx, acKey:l.airline+'|'+l.aircraft,
+      airline:l.airline, eqp:l.aircraft,
+      depIcao:l.dep[0], arrIcao:l.arr[0],
+      block, ground, fnumOut, fnumIn,
+      outDepUTC, outArrUTC, retDepUTC, retArrUTC, barEnd,
+      durationFromMon0: barEnd  // total span of one rotation (mins)
+    });
   }
 
-  clearInterval(_pulse);clearInterval(_sw);
-  if(abortBtn)abortBtn.style.display='none';
+  // Group bars by aircraft type; schedule each type's bars onto aircraft (resources)
+  const byType={};
+  bars.forEach(b=>{ if(!byType[b.acKey])byType[b.acKey]=[]; byType[b.acKey].push(b); });
+
+  const acTypeNum={}; combos.forEach((c,i)=>{ acTypeNum[c.key]=i+1; });
+  const flightplans=[];
+
+  Object.entries(byType).forEach(([key, typeBars])=>{
+    const acNum=acTypeNum[key];
+    const regList=(regsByType[key]||regsByType[key.replace('|',' ')]||[]).slice();
+    const fallback=ttoolsFallbackRegs(typeBars[0].airline, typeBars[0].eqp);
+    const getReg=i=> regList[i] || fallback[i%fallback.length] || (typeBars[0].airline.slice(0,2)+'-'+String(i).padStart(3,'0'));
+
+    // Each resource (aircraft) holds a list of placed segments with absolute week-minute intervals.
+    // Week minute: day index (0..6 for Mon..Sun) *1440 + UTC minute.
+    const resources=[]; // each = { segments:[{depAbs,arrAbs,...}], busy:[{s,e}] }
+
+    const tryPlace=(res, depAbs, arrAbs)=>{
+      // check overlap against busy intervals (with no extra buffer; ground already in bar)
+      for(const b of res.busy){ if(depAbs < b.e && arrAbs > b.s) return false; }
+      return true;
+    };
+
+    // Sort bars by duration descending (longest rotations first)
+    typeBars.sort((a,b)=>b.durationFromMon0-a.durationFromMon0);
+
+    // For each leg's bar, place 7 daily copies
+    typeBars.forEach(bar=>{
+      for(let di=0; di<7; di++){
+        const dayBase=di*1440;
+        // absolute UTC week-minutes for this day's rotation
+        const oDep=dayBase+bar.outDepUTC;
+        const oArr=dayBase+bar.outArrUTC;
+        const rDep=dayBase+bar.retDepUTC;
+        const rArr=dayBase+bar.retArrUTC;
+        const barS=oDep, barE=dayBase+bar.barEnd;
+
+        // find a resource that's free for the whole bar span
+        let placed=false;
+        for(const res of resources){
+          if(tryPlace(res, barS, barE)){
+            res.busy.push({s:barS,e:barE});
+            res.segments.push({oDep,oArr,rDep,rArr,bar});
+            placed=true; break;
+          }
+        }
+        if(!placed){
+          const res={busy:[{s:barS,e:barE}], segments:[{oDep,oArr,rDep,rArr,bar}]};
+          resources.push(res);
+        }
+      }
+    });
+
+    // Emit each resource as a flightplan line
+    resources.forEach((res,ri)=>{
+      // sort segments by absolute departure
+      res.segments.sort((a,b)=>a.oDep-b.oDep);
+      const segStrs=[];
+      res.segments.forEach(s=>{
+        const b=s.bar;
+        const dayName=abs=>DAYS[Math.floor((((abs%10080)+10080)%10080)/1440)];
+        const mn=abs=>((abs%1440)+1440)%1440;
+        const alt1=310+Math.floor(Math.random()*9)*10;
+        const alt2=310+Math.floor(Math.random()*9)*10;
+        segStrs.push(`${dayName(s.oDep)}/${fmt(mn(s.oDep))},${dayName(s.oArr)}/${fmt(mn(s.oArr))},${alt1},F,${b.fnumOut},${b.arrIcao}`);
+        segStrs.push(`${dayName(s.rDep)}/${fmt(mn(s.rDep))},${dayName(s.rArr)}/${fmt(mn(s.rArr))},${alt2},F,${b.fnumIn},${b.depIcao}`);
+      });
+      flightplans.push({ acNum, reg:getReg(ri), segments:segStrs.join(',') });
+    });
+  });
+
+  stop();
   if(_aborted)return;
   document.querySelectorAll('#aigen-status,#aigen-status-top').forEach(el=>el.style.opacity='1');
 
-  if(!plan||!plan.aircraft||!plan.flightplans){ setStatus('✗ Could not produce a valid plan. Try again.'); return; }
-
-  const acContent = plan.aircraft.map(a=>`AC#${a.acNum},${a.pax||490},"${a.title}"`).join('\n')+'\n';
-  const fpContent = '//FSXDAYS=False\n' + plan.flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
+  const aircraft = combos.map((c,i)=>({acNum:i+1, pax:490, title:'AIGAIM_'+c.airline+' '+c.eqp+' NCv2'}));
+  const acContent = aircraft.map(a=>`AC#${a.acNum},${a.pax},"${a.title}"`).join('\n')+'\n';
+  const fpContent = '//FSXDAYS=False\n' + flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
   const acName='Aircraft_CRE_'+icao+'.txt';
   const fpName='Flightplans_CRE_'+icao+'.txt';
-  const note = lastErrors.length ? (' ⚠ '+lastErrors.length+' issue(s) remain') : ' ✓ clean';
+  const note = warnings.length ? (' ⚠ '+warnings.length+' window warning(s)') : '';
+  if(warnings.length) console.warn('Scheduling warnings:', warnings);
 
   const setDl=(acId,fpId,areaId,statId)=>{
     const a=document.getElementById(acId),f=document.getElementById(fpId),ar=document.getElementById(areaId),s=document.getElementById(statId);
     if(a){a.textContent='⬇ '+acName;a.onclick=()=>ttoolsDownload(acContent,acName);}
     if(f){f.textContent='⬇ '+fpName;f.onclick=()=>ttoolsDownload(fpContent,fpName);}
     if(ar)ar.style.display='flex';
-    if(s)s.textContent='Done · '+plan.flightplans.length+' aircraft · '+plan.aircraft.length+' type(s) · '+_swSecs+'s'+note;
+    if(s)s.textContent='✓ '+flightplans.length+' aircraft · '+aircraft.length+' type(s) · '+_swSecs+'s'+note;
   };
   setDl('aigen-dl-ac','aigen-dl-fp','aigen-dl-area','aigen-status');
   setDl('aigen-dl-ac-top','aigen-dl-fp-top','aigen-dl-area-top','aigen-status-top');
-  if(lastErrors.length) console.warn('Remaining issues:', lastErrors);
-}
-
-// Deterministic validator: returns array of human-readable error strings
-function validateTTools(plan, planLegs, utc) {
-  const errs=[];
-  const DAYS=[1,2,3,4,5,6,0];
-  const parseSeg = segStr => {
-    const t=segStr.split(',').map(s=>s.trim());
-    const out=[];
-    for(let i=0;i+5<t.length;i+=6){
-      const dep=t[i], arr=t[i+1], fnum=t[i+4], icao=t[i+5];
-      const dm=dep.match(/^(\d)\/(\d{2}):(\d{2})$/), am=arr.match(/^(\d)\/(\d{2}):(\d{2})$/);
-      if(!dm||!am){ out.push({bad:true,raw:dep+'→'+arr}); continue; }
-      const dAbs=DAYS.indexOf(+dm[1])*1440 + (+dm[2])*60 + (+dm[3]);
-      let aAbs=DAYS.indexOf(+am[1])*1440 + (+am[2])*60 + (+am[3]);
-      if(aAbs<dAbs) aAbs+=10080; // wrap week
-      out.push({depDay:+dm[1], depMin:(+dm[2])*60+(+dm[3]), arrDay:+am[1], arrMin:(+am[2])*60+(+am[3]), dAbs, aAbs, fnum, icao});
-    }
-    return out;
-  };
-
-  // 1. overlaps within each registration
-  (plan.flightplans||[]).forEach(fp=>{
-    const segs=parseSeg(fp.segments||'');
-    const sorted=[...segs].filter(s=>!s.bad).sort((a,b)=>a.dAbs-b.dAbs);
-    for(let i=1;i<sorted.length;i++){
-      if(sorted[i].dAbs < sorted[i-1].aAbs){
-        errs.push(`Registration ${fp.reg}: overlap — flight ${sorted[i].fnum} departs before previous flight ${sorted[i-1].fnum} arrives.`);
-      }
-    }
-    segs.forEach(s=>{ if(s.bad) errs.push(`Registration ${fp.reg}: malformed segment "${s.raw}".`); });
-  });
-
-  // 2. every flight number must appear on all 7 days at same time
-  const byFnum={};
-  (plan.flightplans||[]).forEach(fp=>{
-    parseSeg(fp.segments||'').forEach(s=>{ if(s.bad)return;
-      if(!byFnum[s.fnum]) byFnum[s.fnum]={times:{},icao:s.icao};
-      byFnum[s.fnum].times[s.depDay]=s.depMin;
-    });
-  });
-  Object.entries(byFnum).forEach(([fnum,info])=>{
-    const days=Object.keys(info.times).map(Number);
-    const missing=DAYS.filter(d=>!days.includes(d));
-    if(missing.length) errs.push(`Flight ${fnum} (to ${info.icao}) is missing on day(s) ${missing.join(',')} — must operate all 7 days.`);
-    const uniqTimes=[...new Set(Object.values(info.times))];
-    if(uniqTimes.length>1) errs.push(`Flight ${fnum} departs at different times on different days (${uniqTimes.map(m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')).join(', ')}) — must be identical every day.`);
-  });
-
-  // 3. window compliance (convert UTC seg back to local, check against each route's windows)
-  const toLocal=(utcMin,off)=>(((utcMin+off*60)%1440)+1440)%1440;
-  const inWin=(min,from,to)=>{ const f=hmM(from),t=hmM(to); return f<=t ? (min>=f&&min<=t) : (min>=f||min<=t); };
-  function hmM(s){const m=String(s).match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):0;}
-  const legByPair={}; planLegs.forEach(p=>{ legByPair[p.fnumOut]={p,dir:'out'}; legByPair[p.fnumIn]={p,dir:'in'}; });
-  Object.entries(byFnum).forEach(([fnum,info])=>{
-    const ref=legByPair[fnum]; if(!ref)return;
-    const {p,dir}=ref;
-    const depMinUtc=info.times[Object.keys(info.times)[0]];
-    if(dir==='out'){
-      const depLoc=toLocal(depMinUtc,p.depUtc);
-      if(!inWin(depLoc,p.depWin[0],p.depWin[1])) errs.push(`Flight ${fnum} departs ${p.dep} at ${fmtM(depLoc)} local, outside window ${p.depWin[0]}–${p.depWin[1]}.`);
-    } else {
-      const depLoc=toLocal(depMinUtc,p.arrUtc);
-      if(!inWin(depLoc,p.retWin[0],p.retWin[1])) errs.push(`Return flight ${fnum} departs ${p.arr} at ${fmtM(depLoc)} local, outside window ${p.retWin[0]}–${p.retWin[1]}.`);
-    }
-  });
-
-  function fmtM(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
-  return errs;
 }
 
 
