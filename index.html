@@ -6422,28 +6422,48 @@ function renderRotationLanes() {
       }
     });
 
-    // render assignments as absolutely-positioned bars (draggable to move)
+    // render assignments as absolutely-positioned bars (draggable to move), with week wrap-around
     Object.keys(ac.assignments).forEach(di=>{
       (ac.assignments[di]||[]).forEach(asg=>{
         asg.segs.forEach((seg,segIdx)=>{
           const startAbs = seg.absDep;
           const durMin = seg.block + seg.ground;
-          const leftPx = startAbs*pxPerMin;
-          const wPx = Math.max(8, durMin*pxPerMin);
           const night=seg.utcDayCross>=1;
-          const seg1=document.createElement('div');
-          seg1.draggable=true;
-          seg1.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:4px;background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
-          seg1.title='Drag to move · right-click to remove';
-          seg1.innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtU(seg.arrUTC)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
-            +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>'
-            +'<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
-          // dragging either segment moves the whole pair
-          seg1.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); seg1.style.opacity='0.5'; });
-          seg1.addEventListener('dragend', e=>{ seg1.style.opacity='1'; });
-          // right-click → trash popup
-          seg1.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
-          track.appendChild(seg1);
+
+          // Build the inner HTML once
+          const innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtU(seg.arrUTC)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
+            +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>';
+          const groundTail='<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
+
+          // Helper to create one drawable piece [pieceStart, pieceWidth] in week minutes
+          const makePiece=(pieceStartMin, pieceWidthMin, isHead, isTail)=>{
+            const el=document.createElement('div');
+            el.draggable=true;
+            const leftPx=pieceStartMin*pxPerMin;
+            const wPx=Math.max(6, pieceWidthMin*pxPerMin);
+            // rounded only on the real ends
+            const radius=(isHead?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isHead?'4px':'0');
+            el.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:'+radius+';background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);'+(isHead?'':'border-left:none;')+(isTail?'':'border-right:none;')+'overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
+            el.title='Drag to move · right-click to remove'+(!isHead?' (continues from week start)':'');
+            // only the head piece shows the text; tail-only pieces show a subtle marker
+            el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
+            el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
+            el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
+            el.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
+            track.appendChild(el);
+          };
+
+          const endAbs = startAbs + durMin;
+          if(endAbs <= 10080){
+            // fits within the week — single piece
+            makePiece(startAbs, durMin, true, true);
+          } else {
+            // overflow: head from startAbs..10080, tail wraps to 0..(endAbs-10080)
+            const headW = 10080 - startAbs;
+            const tailW = endAbs - 10080;
+            makePiece(startAbs, headW, true, false);   // main part at week end
+            makePiece(0, tailW, false, true);          // wrapped remainder at week start
+          }
         });
       });
     });
