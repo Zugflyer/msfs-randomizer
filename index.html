@@ -6043,147 +6043,256 @@ async function generateTTools() {
   if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
 
   const dlArea = document.getElementById('aigen-dl-area');
+  const dlAreaTop = document.getElementById('aigen-dl-area-top');
   if (dlArea) dlArea.style.display = 'none';
+  if (dlAreaTop) dlAreaTop.style.display = 'none';
   const setStatus = txt => { ['aigen-status','aigen-status-top'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent=txt;}); };
 
-  // Pulse + stopwatch
   let _pulseI=0, _swSecs=0, _aborted=false;
   const _pulse=setInterval(()=>{const el=document.getElementById('aigen-status');if(el&&el.textContent.startsWith('⏳'))el.style.opacity=(_pulseI++%2===0)?'0.5':'1';},600);
   const _sw=setInterval(()=>{_swSecs++;},1000);
   const abortBtn=document.getElementById('aigen-abort');
   if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_pulse);clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
 
-  // ── Build the leg description for the model ──
-  const legDesc = validLegs.map((l,idx) => {
-    const dep = l.dep[0], arr = l.arr[0];
-    const depName = l.dep[7]||l.dep[2], arrName = l.arr[7]||l.arr[2];
-    const dnTxt = (v,dir) => v==='day' ? ` ${dir} MUST be a DAYTIME flight (depart and arrive in daylight)` :
-                             v==='night' ? ` ${dir} MUST be an OVERNIGHT flight (depart evening, arrive next morning)` : '';
-    const dnO = dnTxt(l.dnOut,'OUTBOUND'), dnR = dnTxt(l.dnRet,'RETURN');
-    return `Route ${idx+1}: ${l.airline} ${l.aircraft} | OUTBOUND ${dep} (${depName}) → ${arr} (${arrName}), RETURN ${arr} → ${dep} | `
-      + `entered block time = ${l.blockTime||'unknown'} (same both directions) | `
-      + `OUTBOUND: depart ${dep} between ${l.dd1||'06:00'}–${l.dd2||'22:30'} local AND arrive ${arr} between ${l.aa1||'05:30'}–${l.aa2||'23:00'} local.`
-      + (dnO?` ${dnO}.`:'') + ` | `
-      + `RETURN: depart ${arr} between ${l.ad1||'06:00'}–${l.ad2||'22:30'} local AND arrive ${dep} between ${l.da1||'05:30'}–${l.da2||'23:00'} local.`
-      + (dnR?` ${dnR}.`:'') + ` | `
-      + `min ground each end = ${l.groundTime||'90'} min (may be longer if it helps fit windows)`;
-  }).join('\n');
-
-  const combos = [];
-  validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
-  const comboList = combos.map((c,i)=>`AC#${i+1} = ${c.airline} ${c.eqp}`).join('\n');
-
-  const prompt = `You are an expert airline network planner. Build AI traffic for Microsoft Flight Simulator in TTools format. Master airport: ${icao} (${aiGenTarget[7]||aiGenTarget[2]}).
-
-ROUTES (times are LOCAL summer/DST; each route is a daily round trip ${icao} area):
-${legDesc}
-
-AIRCRAFT TYPES (these are the ONLY AC# entries — group identical airline+type together, NEVER create duplicate AC# with same title):
-${comboList}
-
-═══ HARD RULES (violating any = failure) ═══
-1. SAME TIME EVERY DAY: every distinct flight departs at the identical UTC time on all 7 days (0=Sun,1=Mon..6=Sat) with the same flight number. List days in order 1,2,3,4,5,6,0.
-2. BLOCK TIMES: web_search the REAL nonstop block time for every route (northern summer schedule, April–September). If a real scheduled flight exists, USE that block time and do NOT alter it afterwards. If no real flight exists for that route, calculate the block time from great-circle distance and cruise speed, then add 30 minutes for taxi. Once set, keep each route's block time fixed across all 7 days.
-3. RESPECT TIME WINDOWS ABSOLUTELY: a departure/arrival outside its stated local window is forbidden. Convert windows to UTC using each airport's summer offset (look up offsets).
-4. NO OVERLAP: within one registration, each next departure must be ≥ previous arrival + min ground time. A leg may cross midnight (e.g. 6/20:00→0/05:00).
-5. MINIMUM AIRCRAFT: use as FEW registrations as possible. Compute the longest rotation first, then PUZZLE shorter routes onto the same aircraft's idle days.
-
-═══ HOW TO COMPUTE AIRCRAFT COUNT (do this carefully) ═══
-For each route: round-trip time = outbound block + ground + return block + ground (+ any forced wait to hit the return window). 
-- If round-trip ≤ ~24h → 1 aircraft can do it daily.
-- If round-trip needs N calendar days → you need N aircraft for THAT route alone, each staggered by one day (plane A: Mon-dep, plane B: Tue-dep, … plane covers every Nth day). 
-Then fit the SHORT routes into the gaps of those same N aircraft instead of adding new ones. Only add an aircraft if no existing one has a free, non-overlapping slot.
-Worked example (Cape Town from London, ~11.5h each way): a round trip is dep Mon evening → arrive Tue morning → ground → dep Tue evening → arrive Wed morning. That ties up a plane ~36h, so 3 aircraft cover the daily service (each flies it every 2nd day). The day-trips to Spain and the South America run get slotted onto those 3 planes' free hours — total stays at 3, NOT 5.
-
-═══ FLIGHT NUMBERS ═══
-web_search the airline's real flight numbers to each destination; pick a nearby unused number (e.g. BA45/47 to Cape Town → use 49 out / 50 back). For unserved destinations, adapt the airline's number to a nearby country. Different number outbound vs return.
-
-═══ REGISTRATIONS ═══
-web_search airfleets.net for the exact fleet of each airline+type. Continue the real series (e.g. BA A350-1000 ends G-XWBS → use G-XWBT, G-XWBU, …). One registration = one aircraft = one flightplan line.
-
-═══ SELF-CHECK before answering (MANDATORY — do this explicitly) ═══
-Build a verification table. For EACH distinct flight (by flight number) check:
-(A) 7-DAY COMPLETENESS: does it appear on ALL 7 days (1,2,3,4,5,6,0) at the EXACT same UTC time? If any day is missing, you MUST add it or restructure the rotation. A flight that runs only some days is a FAILURE — every route operates daily.
-(B) WINDOW COMPLIANCE: convert the flight's UTC time back to local and confirm departure is within [DEP from, DEP until] and arrival within [ARR from, ARR until]. Any flight outside its window is a FAILURE — shift it inside the window (you may increase ground time beyond the minimum to make it fit).
-(C) DAY/NIGHT: if a route specifies daytime or overnight, confirm the outbound respects it.
-(D) NO OVERLAP: each registration's next departure ≥ previous arrival + ground time.
-(E) MINIMAL FLEET: confirm you cannot remove any aircraft by re-puzzling.
-Longer ground times than the minimum are ENCOURAGED if they produce a cleaner schedule where every flight hits its window every day. Only output once ALL flights pass A–E. If something cannot be satisfied, prefer adding ground time or shifting within windows over dropping days.
-
-═══ OUTPUT — ONLY this JSON, nothing else ═══
-{
-  "aircraft": [ {"acNum":1, "pax":490, "title":"AIGAIM_BAW A35K NCv2"} ],
-  "flightplans": [ {"acNum":1, "reg":"G-XWBT", "segments":"1/20:30,2/08:00,370,F,0049,FACT,..."} ]
-}
-Segment format: DEPday/DEPtime,ARRday/ARRtime,altitude,F,flightnum,arrICAO — times UTC, comma-separated, one continuous weekly chain per registration. acNum refers to the AIRCRAFT TYPE list above (multiple registrations share the same acNum if same type).`;
-
-  setStatus('⏳ Planning rotations with AI… this can take 1–3 min (0s)');
-  const _statusTick=setInterval(()=>{ if(!_aborted) setStatus('⏳ Planning rotations with AI… this can take 1–3 min ('+_swSecs+'s)'); },1000);
-
-  let result=null, errMsg='';
-  try {
-    const resp = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+  const callAPI = async (messages, useSearch, maxTok) => {
+    const body = { model:'claude-sonnet-4-20250514', max_tokens:maxTok||16000, messages };
+    if (useSearch) body.tools=[{type:'web_search_20250305',name:'web_search'}];
+    const r = await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01',
         'anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514',
-        max_tokens:20000,
-        tools:[{type:'web_search_20250305',name:'web_search'}],
-        messages:[{role:'user',content:prompt}]
-      })});
-    if(resp.ok){
-      const d=await resp.json();
-      const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-      window._aigenLastResponse = txt; // for debugging
-      const stopReason = d.stop_reason || '';
-      // Extract JSON: try fenced code block first, then largest {...}
-      let jsonStr = '';
-      const fence = txt.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (fence) jsonStr = fence[1];
-      else { const m=txt.match(/\{[\s\S]*\}/); if(m) jsonStr=m[0]; }
-      if (jsonStr) {
-        try { result=JSON.parse(jsonStr); }
-        catch(e){
-          errMsg = 'JSON parse error: '+e.message;
-          if (stopReason === 'max_tokens') errMsg += ' (response was cut off — too many flights)';
-          console.error('JSON parse failed', e, jsonStr.slice(0,500));
-        }
-      } else {
-        errMsg = 'No JSON found in response. First 200 chars: '+txt.slice(0,200);
-      }
-    } else {
-      const errTxt = await resp.text();
-      errMsg = 'API error '+resp.status+': '+errTxt.slice(0,200);
-      console.error('API error', errTxt);
-    }
-  } catch(e){ errMsg='Network error: '+e.message; console.error(e); }
+      body:JSON.stringify(body)});
+    if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,200)); }
+    const d=await r.json();
+    return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+  };
+  const extractJSON = txt => { const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:null; if(!s){const m=txt.match(/\{[\s\S]*\}/);s=m?m[0]:null;} if(!s)return null; try{return JSON.parse(s);}catch(e){return null;} };
 
-  clearInterval(_statusTick); clearInterval(_pulse); clearInterval(_sw);
+  const combos=[];
+  validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+
+  // ════ PHASE 1: research (block times, UTC offsets, registrations, flight numbers) ════
+  setStatus('⏳ Phase 1/3: researching block times, registrations, flight numbers… (0s)');
+  const _t1=setInterval(()=>{if(!_aborted)setStatus('⏳ Phase 1/3: researching real-world data… ('+_swSecs+'s)');},1000);
+
+  const airportSet = {};
+  validLegs.forEach(l=>{ airportSet[l.dep[0]]=l.dep[7]||l.dep[2]; airportSet[l.arr[0]]=l.arr[7]||l.arr[2]; });
+  const apList = Object.entries(airportSet).map(([ic,nm])=>ic+' ('+nm+')').join(', ');
+  const routeList = validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}↔${l.arr[0]}, entered block ${l.blockTime}`).join('\n');
+
+  const researchPrompt = `Research real-world aviation data for a flight schedule. Use web_search.
+
+AIRPORTS (need summer/DST UTC offset for each): ${apList}
+
+ROUTES:
+${routeList}
+
+AIRCRAFT TYPES (need registrations): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
+
+For EACH route find:
+- block_time: real nonstop block time (northern summer Apr–Sep). If the route exists in reality use it; otherwise estimate from great-circle distance + 30min taxi. Format "H:MM". Prefer the user's entered block time only if you cannot find/estimate a better real value.
+- fnum_out / fnum_in: realistic 4-digit flight numbers. Search the airline's real flight numbers to that destination and pick a nearby unused number (different for out vs in). If the airline doesn't serve it, adapt from a nearby country's route.
+
+For EACH aircraft type: search airfleets.net for the real fleet, find the registration series pattern, and give 6 NEW sequential registrations continuing the series (do not repeat existing).
+
+For EACH airport: its summer UTC offset as a number.
+
+Reply ONLY this JSON:
+{
+ "utc": {"EGLL": 1, "FACT": 2},
+ "routes": [ {"r":1, "block_time":"11:30", "fnum_out":"0049", "fnum_in":"0050"} ],
+ "registrations": {"BAW A35K": ["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY"]}
+}`;
+
+  let research=null;
+  try {
+    const txt = await callAPI([{role:'user',content:researchPrompt}], true, 4000);
+    research = extractJSON(txt);
+  } catch(e){ clearInterval(_t1);clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Phase 1 failed: '+e.message);return; }
+  clearInterval(_t1);
+  if(_aborted)return;
+  if(!research||!research.routes){ clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Phase 1 returned no usable data. Try again.');return; }
+
+  // Merge research back into leg data, building a clean planning brief
+  const utc = research.utc||{};
+  const regs = research.registrations||{};
+  const rinfo = {}; (research.routes||[]).forEach(r=>{ rinfo[r.r]=r; });
+
+  const planLegs = validLegs.map((l,idx)=>{
+    const ri = rinfo[idx+1]||{};
+    return {
+      n: idx+1,
+      airline: l.airline, eqp: l.aircraft,
+      dep: l.dep[0], arr: l.arr[0],
+      depUtc: utc[l.dep[0]]??0, arrUtc: utc[l.arr[0]]??0,
+      block: ri.block_time || l.blockTime,
+      fnumOut: ri.fnum_out || String(1000+idx*7).padStart(4,'0'),
+      fnumIn:  ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0'),
+      ground: parseInt(l.groundTime||'90')||90,
+      depWin:[l.dd1||'06:00', l.dd2||'22:30'],   // depart DEP airport (local)
+      arrWin:[l.aa1||'05:30', l.aa2||'23:00'],   // arrive ARR airport (local)
+      retWin:[l.ad1||'06:00', l.ad2||'22:30'],   // depart ARR airport (local)
+      homeWin:[l.da1||'05:30', l.da2||'23:00'],  // arrive DEP airport (local)
+      dnOut:l.dnOut||'any', dnRet:l.dnRet||'any'
+    };
+  });
+
+  const comboTitle = {}; combos.forEach((c,i)=>{ comboTitle[c.key]='AC#'+(i+1); });
+  const acTypeLines = combos.map((c,i)=>`AC#${i+1} = ${c.airline} ${c.eqp} | registrations available: ${(regs[c.airline+' '+c.eqp]||regs[c.key]||['(use realistic)']).join(', ')}`).join('\n');
+
+  const briefLegs = planLegs.map(p=>
+    `Route ${p.n}: ${p.airline} ${p.eqp} | OUTBOUND ${p.dep}→${p.arr} fnum ${p.fnumOut}, RETURN ${p.arr}→${p.dep} fnum ${p.fnumIn} | block time ${p.block} both ways | `
+    +`UTC offsets: ${p.dep}=${p.depUtc>=0?'+':''}${p.depUtc}, ${p.arr}=${p.arrUtc>=0?'+':''}${p.arrUtc} | `
+    +`OUTBOUND must depart ${p.dep} ${p.depWin[0]}–${p.depWin[1]} local AND arrive ${p.arr} ${p.arrWin[0]}–${p.arrWin[1]} local${p.dnOut!=='any'?' ('+p.dnOut.toUpperCase()+' flight)':''} | `
+    +`RETURN must depart ${p.arr} ${p.retWin[0]}–${p.retWin[1]} local AND arrive ${p.dep} ${p.homeWin[0]}–${p.homeWin[1]} local${p.dnRet!=='any'?' ('+p.dnRet.toUpperCase()+' flight)':''} | `
+    +`min ground each end ${p.ground} min (longer OK)`
+  ).join('\n');
+
+  // ════ PHASE 2 + 3: plan then validate-and-fix loop ════
+  const planPrompt = `You are an expert airline rotation planner. Build a weekly MSFS TTools flightplan. Master airport ${icao}.
+
+All research is DONE — use these exact values, do NOT change block times or flight numbers:
+${briefLegs}
+
+AIRCRAFT TYPES (one AC# per type; multiple registrations share the AC#):
+${acTypeLines}
+
+RULES:
+1. EVERY route operates a full round trip (outbound + return) EVERY day of the week, at the SAME UTC time each day, same flight numbers.
+2. Convert all local windows to UTC using the given offsets. Every departure/arrival must fall inside its UTC window. (e.g. depart FACT 12:00–23:45 local at UTC+2 = 10:00–21:45 UTC.)
+3. Within one registration, the next departure must be ≥ previous arrival + that route's min ground time. No overlaps. Flights may cross midnight (e.g. 6/20:00→0/05:00 means Sat 20:00 to Sun 05:00).
+4. ROTATION MATH: a round trip that spans into the next day ties up one aircraft for >24h, so you need MULTIPLE aircraft to fly it daily. Example: a Cape Town round trip from London (≈11.5h each way) departs Mon evening, returns Wed morning — that ties up a plane ~36h, so you need 3 aircraft staggered one day apart to give daily service. Compute this for the longest route FIRST, allocate that many aircraft, then SLOT the shorter day-routes onto those same aircraft's free hours. Add aircraft only if truly needed.
+5. Use the provided registrations in order. One registration = one flightplan line, a continuous weekly chain.
+
+Think step by step: for each route compute UTC times, compute round-trip span, compute aircraft needed, then assemble each aircraft's weekly chain. Then OUTPUT ONLY this JSON:
+{
+ "aircraft":[{"acNum":1,"pax":490,"title":"AIGAIM_BAW A35K NCv2"}],
+ "flightplans":[{"acNum":1,"reg":"G-XWBT","segments":"1/20:30,2/08:00,370,F,0049,FACT,2/11:30,2/23:10,370,F,0050,EGLL,..."}]
+}
+Segment = DEPday/DEPtime,ARRday/ARRtime,alt,F,fnum,arrICAO (UTC; days 1=Mon..6=Sat,0=Sun; list in order 1,2,3,4,5,6,0). segments is the whole week's chain for that registration, comma-joined.`;
+
+  let messages=[{role:'user',content:planPrompt}];
+  let plan=null, lastErrors=[];
+  const MAX_ROUNDS=8;
+
+  for(let round=1; round<=MAX_ROUNDS; round++){
+    if(_aborted)return;
+    setStatus(`⏳ Phase ${round===1?'2':'3'}/3: ${round===1?'building':'fixing'} rotations (round ${round}/${MAX_ROUNDS})… (${_swSecs}s)`);
+    let txt;
+    try { txt = await callAPI(messages, false, 16000); }
+    catch(e){ clearInterval(_pulse);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Round '+round+' API error: '+e.message);return; }
+    if(_aborted)return;
+    const cand = extractJSON(txt);
+    if(!cand||!cand.flightplans){ messages.push({role:'assistant',content:txt}); messages.push({role:'user',content:'That was not valid JSON. Reply ONLY the JSON object, nothing else.'}); continue; }
+
+    // ── deterministic validation ──
+    const errs = validateTTools(cand, planLegs, utc);
+    if(!errs.length){ plan=cand; setStatus('✓ Validated clean in round '+round+'!'); break; }
+    lastErrors=errs;
+    plan=cand; // keep last even if imperfect
+
+    if(round<MAX_ROUNDS){
+      messages.push({role:'assistant',content:txt});
+      messages.push({role:'user',content:
+        'Your plan has these specific problems. Fix ALL of them and output the corrected full JSON only:\n'
+        + errs.slice(0,40).join('\n')
+        + '\n\nReminder: every route flies all 7 days at the same UTC time; no overlaps within a registration (next dep ≥ prev arr + ground); all times inside their UTC windows; add more aircraft if a long rotation needs them.'});
+    }
+  }
+
+  clearInterval(_pulse);clearInterval(_sw);
   if(abortBtn)abortBtn.style.display='none';
   if(_aborted)return;
   document.querySelectorAll('#aigen-status,#aigen-status-top').forEach(el=>el.style.opacity='1');
 
-  if(!result || !result.aircraft || !result.flightplans){
-    setStatus('✗ Failed: '+(errMsg||'invalid data')+' — see console (F12) for details. Try again.');
-    return;
-  }
+  if(!plan||!plan.aircraft||!plan.flightplans){ setStatus('✗ Could not produce a valid plan. Try again.'); return; }
 
-  // Build files
-  const acContent = result.aircraft.map(a=>`AC#${a.acNum},${a.pax||490},"${a.title}"`).join('\n')+'\n';
-  const fpContent = '//FSXDAYS=False\n' + result.flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
+  const acContent = plan.aircraft.map(a=>`AC#${a.acNum},${a.pax||490},"${a.title}"`).join('\n')+'\n';
+  const fpContent = '//FSXDAYS=False\n' + plan.flightplans.map(f=>`AC#${f.acNum},${f.reg},1%,Week,IFR,${f.segments}`).join('\n')+'\n';
   const acName='Aircraft_CRE_'+icao+'.txt';
   const fpName='Flightplans_CRE_'+icao+'.txt';
+  const note = lastErrors.length ? (' ⚠ '+lastErrors.length+' issue(s) remain') : ' ✓ clean';
 
   const setDl=(acId,fpId,areaId,statId)=>{
     const a=document.getElementById(acId),f=document.getElementById(fpId),ar=document.getElementById(areaId),s=document.getElementById(statId);
     if(a){a.textContent='⬇ '+acName;a.onclick=()=>ttoolsDownload(acContent,acName);}
     if(f){f.textContent='⬇ '+fpName;f.onclick=()=>ttoolsDownload(fpContent,fpName);}
     if(ar)ar.style.display='flex';
-    if(s)s.textContent='✓ Done · '+result.flightplans.length+' aircraft · '+result.aircraft.length+' type(s) · '+_swSecs+'s';
+    if(s)s.textContent='Done · '+plan.flightplans.length+' aircraft · '+plan.aircraft.length+' type(s) · '+_swSecs+'s'+note;
   };
   setDl('aigen-dl-ac','aigen-dl-fp','aigen-dl-area','aigen-status');
   setDl('aigen-dl-ac-top','aigen-dl-fp-top','aigen-dl-area-top','aigen-status-top');
+  if(lastErrors.length) console.warn('Remaining issues:', lastErrors);
 }
+
+// Deterministic validator: returns array of human-readable error strings
+function validateTTools(plan, planLegs, utc) {
+  const errs=[];
+  const DAYS=[1,2,3,4,5,6,0];
+  const parseSeg = segStr => {
+    const t=segStr.split(',').map(s=>s.trim());
+    const out=[];
+    for(let i=0;i+5<t.length;i+=6){
+      const dep=t[i], arr=t[i+1], fnum=t[i+4], icao=t[i+5];
+      const dm=dep.match(/^(\d)\/(\d{2}):(\d{2})$/), am=arr.match(/^(\d)\/(\d{2}):(\d{2})$/);
+      if(!dm||!am){ out.push({bad:true,raw:dep+'→'+arr}); continue; }
+      const dAbs=DAYS.indexOf(+dm[1])*1440 + (+dm[2])*60 + (+dm[3]);
+      let aAbs=DAYS.indexOf(+am[1])*1440 + (+am[2])*60 + (+am[3]);
+      if(aAbs<dAbs) aAbs+=10080; // wrap week
+      out.push({depDay:+dm[1], depMin:(+dm[2])*60+(+dm[3]), arrDay:+am[1], arrMin:(+am[2])*60+(+am[3]), dAbs, aAbs, fnum, icao});
+    }
+    return out;
+  };
+
+  // 1. overlaps within each registration
+  (plan.flightplans||[]).forEach(fp=>{
+    const segs=parseSeg(fp.segments||'');
+    const sorted=[...segs].filter(s=>!s.bad).sort((a,b)=>a.dAbs-b.dAbs);
+    for(let i=1;i<sorted.length;i++){
+      if(sorted[i].dAbs < sorted[i-1].aAbs){
+        errs.push(`Registration ${fp.reg}: overlap — flight ${sorted[i].fnum} departs before previous flight ${sorted[i-1].fnum} arrives.`);
+      }
+    }
+    segs.forEach(s=>{ if(s.bad) errs.push(`Registration ${fp.reg}: malformed segment "${s.raw}".`); });
+  });
+
+  // 2. every flight number must appear on all 7 days at same time
+  const byFnum={};
+  (plan.flightplans||[]).forEach(fp=>{
+    parseSeg(fp.segments||'').forEach(s=>{ if(s.bad)return;
+      if(!byFnum[s.fnum]) byFnum[s.fnum]={times:{},icao:s.icao};
+      byFnum[s.fnum].times[s.depDay]=s.depMin;
+    });
+  });
+  Object.entries(byFnum).forEach(([fnum,info])=>{
+    const days=Object.keys(info.times).map(Number);
+    const missing=DAYS.filter(d=>!days.includes(d));
+    if(missing.length) errs.push(`Flight ${fnum} (to ${info.icao}) is missing on day(s) ${missing.join(',')} — must operate all 7 days.`);
+    const uniqTimes=[...new Set(Object.values(info.times))];
+    if(uniqTimes.length>1) errs.push(`Flight ${fnum} departs at different times on different days (${uniqTimes.map(m=>String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')).join(', ')}) — must be identical every day.`);
+  });
+
+  // 3. window compliance (convert UTC seg back to local, check against each route's windows)
+  const toLocal=(utcMin,off)=>(((utcMin+off*60)%1440)+1440)%1440;
+  const inWin=(min,from,to)=>{ const f=hmM(from),t=hmM(to); return f<=t ? (min>=f&&min<=t) : (min>=f||min<=t); };
+  function hmM(s){const m=String(s).match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):0;}
+  const legByPair={}; planLegs.forEach(p=>{ legByPair[p.fnumOut]={p,dir:'out'}; legByPair[p.fnumIn]={p,dir:'in'}; });
+  Object.entries(byFnum).forEach(([fnum,info])=>{
+    const ref=legByPair[fnum]; if(!ref)return;
+    const {p,dir}=ref;
+    const depMinUtc=info.times[Object.keys(info.times)[0]];
+    if(dir==='out'){
+      const depLoc=toLocal(depMinUtc,p.depUtc);
+      if(!inWin(depLoc,p.depWin[0],p.depWin[1])) errs.push(`Flight ${fnum} departs ${p.dep} at ${fmtM(depLoc)} local, outside window ${p.depWin[0]}–${p.depWin[1]}.`);
+    } else {
+      const depLoc=toLocal(depMinUtc,p.arrUtc);
+      if(!inWin(depLoc,p.retWin[0],p.retWin[1])) errs.push(`Return flight ${fnum} departs ${p.arr} at ${fmtM(depLoc)} local, outside window ${p.retWin[0]}–${p.retWin[1]}.`);
+    }
+  });
+
+  function fmtM(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');}
+  return errs;
+}
+
 
 function ttoolsFallbackRegs(airline, eqp) {
   const pfx = {'AFR':'F-H','BAW':'G-Z','DLH':'D-A','SWR':'HB-J','KLM':'PH-B',
