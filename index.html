@@ -5971,7 +5971,7 @@ function renderAiGenLegs() {
     row.appendChild(depArrWin); row.appendChild(depDepWin); row.appendChild(depCell);
     row.appendChild(btCell);
     row.appendChild(arrCell); row.appendChild(arrArrWin); row.appendChild(arrDepWin);
-    row.appendChild(groundCell); row.appendChild(dnOutCell); row.appendChild(dnRetCell);
+    row.appendChild(dnOutCell); row.appendChild(dnRetCell); row.appendChild(groundCell);
     row.appendChild(delCell);
     wrapper.appendChild(row);
 
@@ -6123,7 +6123,7 @@ ROUTES:
 ${routeList}
 AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
 
-For each route: give SEPARATE real nonstop block times for the outbound and the return as "H:MM" each (they differ on long routes due to winds/jetstream). If you cannot find real data, estimate: great-circle flight time + 30 min taxi for BOTH directions, then add an extra 40 min ONLY to whichever direction flies broadly east-to-west (against the rotation / typically the longer one). Also give realistic 4-digit out/in flight numbers (the airline's real numbers to that destination if known, else plausible).
+For each route: give SEPARATE real nonstop block times for the outbound and the return as "H:MM" each (they differ on long routes due to winds/jetstream). If you cannot find real data, estimate: great-circle flight time + 30 min taxi for BOTH directions, then add an extra 40 min ONLY to whichever direction flies broadly east-to-west (against the rotation / typically the longer one). Also give realistic flight numbers as DIGITS ONLY (no airline letters/IATA prefix — e.g. "431" not "OS431"), the airline's real numbers to that destination if known, else plausible.
 For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "BAW A35K", "AUA A20N").
 For each airport: summer UTC offset number.
 
@@ -6184,8 +6184,10 @@ function buildRotationBars(validLegs, research) {
     const ground = parseInt(l.groundTime||'90')||90;
     const depUtc = utc[l.dep[0]]??0;
     const arrUtc = utc[l.arr[0]]??0;
-    const fnumOut = ri.fnum_out || String(1000+idx*7).padStart(4,'0');
-    const fnumIn  = ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0');
+    // Flight numbers must be digits only (strip any airline prefix like "OS" or "BA").
+    const cleanFnum = (v,fallback)=>{ const d=String(v||'').replace(/\D/g,''); return d || fallback; };
+    const fnumOut = cleanFnum(ri.fnum_out, String(1000+idx*7).padStart(4,'0'));
+    const fnumIn  = cleanFnum(ri.fnum_in,  String(1000+idx*7+3).padStart(4,'0'));
 
     // Separate block times for outbound and return.
     // Priority: researched block_out/block_in → researched block_time (both) → entered blockTime → 120.
@@ -6930,7 +6932,7 @@ function buildTToolsData(acNumStart) {
     const segStr = segs.map(s=>{
       const dDay=dayOf(s.absDep), aDay=dayOf(s.absArr);
       const alt = 320 + Math.floor(Math.random()*9)*10;
-      return `${dDay}/${fmtU(s.absDep)},${aDay}/${fmtU(s.absArr)},${alt},F,${s.fnum},${s.arrIcao}`;
+      return `${dDay}/${fmtU(s.absDep)},${aDay}/${fmtU(s.absArr)},${alt},F,${String(s.fnum||'').replace(/\D/g,'')||'1000'},${s.arrIcao}`;
     }).join(',');
     fpLines.push(`AC#${acNum},${ac.reg},1%,Week,IFR,${segStr}`);
   });
@@ -6972,10 +6974,12 @@ function openMergeDialog() {
   card.onclick=e=>e.stopPropagation();
   card.innerHTML =
     '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:6px;">Merge into existing flightplan</div>'
-    +'<div style="font-size:12px;color:var(--txt2);margin-bottom:16px;line-height:1.5;">Select your existing <b>Aircraft_CRE</b> and <b>Flightplans_CRE</b> files. The new rotations are appended with the next sequential AC# numbers, and you get the combined files back.</div>'
+    +'<div style="font-size:12px;color:var(--txt2);margin-bottom:12px;line-height:1.5;">Select your existing <b>Flightplans_CRE_*.txt</b> — and, in the same dialog, also pick the matching <b>Aircraft_CRE_*.txt</b> (they sit in the same folder; just Ctrl/Cmd-click both). The new rotations are appended with the next sequential AC# numbers and the same files are written back.</div>'
+    + ((localStorage.getItem('rot_merge_fp_name')||localStorage.getItem('rot_merge_ac_name'))
+        ? '<div style="font-size:11px;color:#9fc7ff;margin-bottom:12px;">Last time: '+[localStorage.getItem('rot_merge_fp_name'),localStorage.getItem('rot_merge_ac_name')].filter(Boolean).join(' + ')+'</div>'
+        : '')
     +'<div style="display:flex;flex-direction:column;gap:12px;">'
-    +'<label style="font-size:12px;color:var(--txt2);">Existing Aircraft_CRE_*.txt<br><input type="file" id="merge-ac-file" accept=".txt" style="margin-top:5px;font-size:12px;color:var(--txt2);"></label>'
-    +'<label style="font-size:12px;color:var(--txt2);">Existing Flightplans_CRE_*.txt<br><input type="file" id="merge-fp-file" accept=".txt" style="margin-top:5px;font-size:12px;color:var(--txt2);"></label>'
+    +'<label style="font-size:12px;color:var(--txt2);">Select Flightplans_CRE + Aircraft_CRE (both)<br><input type="file" id="merge-files" accept=".txt" multiple style="margin-top:5px;font-size:12px;color:var(--txt2);"></label>'
     +'</div>'
     +'<div id="merge-msg" style="font-size:11px;color:#f85149;margin-top:10px;min-height:14px;"></div>'
     +'<div style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;">'
@@ -6989,14 +6993,13 @@ function openMergeDialog() {
   document.getElementById('merge-go').onclick=()=>doMerge();
 }
 
-function readFileText(input) {
+function readFileObj(file) {
   return new Promise((resolve,reject)=>{
-    const f=input&&input.files&&input.files[0];
-    if(!f){ resolve(null); return; }
+    if(!file){ resolve(null); return; }
     const r=new FileReader();
     r.onload=()=>resolve(r.result);
     r.onerror=()=>reject(new Error('read error'));
-    r.readAsText(f);
+    r.readAsText(file);
   });
 }
 
@@ -7004,14 +7007,27 @@ async function doMerge() {
   const msg=document.getElementById('merge-msg');
   const setMsg=t=>{ if(msg) msg.textContent=t; };
   setMsg('');
+  const input=document.getElementById('merge-files');
+  const files=Array.from((input&&input.files)||[]);
+  if(!files.length){ setMsg('Please select your files.'); return; }
+
+  // Identify which is which by filename
+  let acFile=null, fpFile=null;
+  files.forEach(f=>{
+    const n=f.name.toLowerCase();
+    if(n.includes('flightplan')) fpFile=f;
+    else if(n.includes('aircraft')) acFile=f;
+  });
+  if(!fpFile){ setMsg('No Flightplans_CRE file found in your selection.'); return; }
+  if(!acFile){ setMsg('Also select the matching Aircraft_CRE file (same folder).'); return; }
+
   let acText, fpText;
   try {
-    acText = await readFileText(document.getElementById('merge-ac-file'));
-    fpText = await readFileText(document.getElementById('merge-fp-file'));
+    acText = await readFileObj(acFile);
+    fpText = await readFileObj(fpFile);
   } catch(e){ setMsg('Could not read the files.'); return; }
-  if(!acText || !fpText){ setMsg('Please select both files.'); return; }
 
-  // Find the highest existing AC# across both files
+  // Highest existing AC# across both files
   const acNums=[];
   (acText+'\n'+fpText).replace(/AC#(\d+)/g,(m,n)=>{ acNums.push(parseInt(n)); return m; });
   const maxAc = acNums.length ? Math.max(...acNums) : 0;
@@ -7019,21 +7035,18 @@ async function doMerge() {
   const data = buildTToolsData(maxAc+1);
   if(!data){ setMsg('No assigned rotations to merge.'); return; }
 
-  // Append aircraft lines (ensure trailing newline on existing)
   const acOut = acText.replace(/\s*$/,'') + '\n' + data.aircraftLines.join('\n') + '\n';
-  // Append flightplan lines (keep existing header; just append our lines)
   const fpOut = fpText.replace(/\s*$/,'') + '\n' + data.fpLines.join('\n') + '\n';
 
-  // Derive output names from the uploaded ones
-  const acName = (document.getElementById('merge-ac-file').files[0].name)||'Aircraft_CRE_merged.txt';
-  const fpName = (document.getElementById('merge-fp-file').files[0].name)||'Flightplans_CRE_merged.txt';
-
-  ttoolsDownload(acOut, acName.replace(/\.txt$/i,'')+'_merged.txt');
-  setTimeout(()=> ttoolsDownload(fpOut, fpName.replace(/\.txt$/i,'')+'_merged.txt'), 400);
+  // Write back with the SAME filenames (overwrite — no suffix)
+  localStorage.setItem('rot_merge_ac_name', acFile.name);
+  localStorage.setItem('rot_merge_fp_name', fpFile.name);
+  ttoolsDownload(acOut, acFile.name);
+  setTimeout(()=> ttoolsDownload(fpOut, fpFile.name), 400);
 
   const pop=document.getElementById('rot-merge-popup'); if(pop) pop.remove();
   const st=document.getElementById('rot-status');
-  if(st) st.textContent='✓ Merged '+data.types.length+' type(s) / '+data.fpLines.length+' aircraft, starting at AC#'+(maxAc+1)+'. Combined files downloaded.';
+  if(st) st.textContent='✓ Merged '+data.types.length+' type(s) / '+data.fpLines.length+' aircraft, starting at AC#'+(maxAc+1)+'. Files saved with original names.';
 }
 
 function ttoolsFallbackRegs(airline, eqp) {
