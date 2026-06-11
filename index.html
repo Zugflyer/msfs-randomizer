@@ -793,12 +793,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
-      <!-- Top half: time bars -->
-      <div style="display:flex;flex-direction:column;overflow:hidden;flex:0 0 auto;max-height:42%;border-bottom:2px solid var(--bdr2);">
+      <!-- Top half: time bars (50%) -->
+      <div style="display:flex;flex-direction:column;overflow:hidden;flex:0 0 50%;border-bottom:2px solid var(--bdr2);">
         <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Time bars — one per leg (outbound &amp; return) · drag a pair down onto an aircraft/day</div>
         <div id="rot-bars-container" style="flex:1;overflow-y:auto;padding:6px 16px 12px;display:flex;flex-direction:column;gap:8px;"></div>
       </div>
-      <!-- Bottom half: aircraft resources with weekly UTC calendar -->
+      <!-- Bottom half: aircraft resources with weekly UTC calendar (50%) -->
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;">Aircraft — weekly schedule (times shown in UTC)</div>
         <div id="rot-lanes-container" style="flex:1;overflow:auto;padding:6px 16px 16px;"></div>
@@ -6049,6 +6049,31 @@ let rotResearch = null;  // cached research so we don't re-call API
 let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...6:[]}}] day 0=Sun..6=Sat
 const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
+// Robustly pull a JSON object out of an LLM response (handles fences, prose, mild truncation)
+function extractRotJSON(txt) {
+  if(!txt) return null;
+  const tryParse = s => { try { return JSON.parse(s); } catch(e){ return null; } };
+  // 1) fenced ```json ... ```
+  let m = txt.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if(m){ const r=tryParse(m[1].trim()); if(r) return r; }
+  // 2) first balanced { ... } from the first '{'
+  const start = txt.indexOf('{');
+  if(start>=0){
+    let depth=0, inStr=false, esc=false, end=-1;
+    for(let i=start;i<txt.length;i++){
+      const c=txt[i];
+      if(inStr){ if(esc){esc=false;} else if(c==='\\'){esc=true;} else if(c==='"'){inStr=false;} }
+      else { if(c==='"')inStr=true; else if(c==='{')depth++; else if(c==='}'){depth--; if(depth===0){end=i;break;}} }
+    }
+    if(end>0){ const r=tryParse(txt.slice(start,end+1)); if(r) return r; }
+    // 3) truncated: take from start to last '}' and try to close brackets
+    let frag = txt.slice(start);
+    const lastBrace = frag.lastIndexOf('}');
+    if(lastBrace>0){ const r=tryParse(frag.slice(0,lastBrace+1)); if(r) return r; }
+  }
+  return null;
+}
+
 async function createRotations() {
   if (!aiGenTarget) { alert('Please select a master airport first.'); return; }
   const validLegs = aiGenLegs.filter(l => l.dep && l.arr && l.airline && l.aircraft && l.blockTime);
@@ -6088,37 +6113,38 @@ async function createRotations() {
   const apList=Object.entries(airportSet).map(([ic,nm])=>ic+' ('+nm+')').join(', ');
   const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}->${l.arr[0]}, entered block ${l.blockTime}`).join('\n');
 
-  const researchPrompt = `Research real aviation data. Use web_search. Reply ONLY JSON.
+  const researchPrompt = `Research real aviation data. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
 
 AIRPORTS (need summer/DST UTC offset as a number): ${apList}
 ROUTES:
 ${routeList}
 AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
 
-For each route: real nonstop block time (northern summer; if not a real route, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (search the airline's real numbers to that destination, pick nearby unused; if unserved adapt a nearby country's number).
-For each type: search airfleets.net, find the registration series, give 8 NEW sequential regs continuing it.
+For each route: real nonstop block time (northern summer; if not a real route, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (the airline's real numbers to that destination if known, else plausible).
+For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "BAW A35K", "AUA A20N").
 For each airport: summer UTC offset number.
 
-JSON shape:
-{"utc":{"EGLL":1,"FACT":2},
- "routes":[{"r":1,"block_time":"11:40","fnum_out":"0049","fnum_in":"0050"}],
- "registrations":{"BAW A35K":["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY","G-XWBZ","G-XWCA"]}}`;
+Output exactly this shape (one line is fine):
+{"utc":{"EGLL":1,"FACT":2},"routes":[{"r":1,"block_time":"11:40","fnum_out":"0049","fnum_in":"0050"}],"registrations":{"BAW A35K":["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY","G-XWBZ","G-XWCA"]}}`;
 
-  let research=null;
+  let research=null, rawTxt='';
   try {
     const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
       headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:3000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:6000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
     if(!r.ok){ throw new Error('API '+r.status+': '+(await r.text()).slice(0,160)); }
     const d=await r.json();
-    const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-    const f=txt.match(/```(?:json)?\s*([\s\S]*?)```/); let s=f?f[1]:(txt.match(/\{[\s\S]*\}/)||[])[0];
-    if(s) research=JSON.parse(s);
+    rawTxt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    research = extractRotJSON(rawTxt);
   } catch(e){ clearInterval(_t);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Research failed: '+e.message);return; }
   clearInterval(_t); clearInterval(_sw);
   if(abortBtn)abortBtn.style.display='none';
   if(_aborted)return;
-  if(!research||!research.routes){ setStatus('✗ Research returned no usable data. Try again.');return; }
+  if(!research||!research.routes){
+    console.warn('Rotation research raw response:', rawTxt);
+    setStatus('✗ Research returned no usable data. Try again. (See console for the raw response.)');
+    return;
+  }
   research._sig = sig;
   rotResearch = research;
 
