@@ -790,7 +790,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
         <button onclick="switchView('aigen')" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">← Back to routes</button>
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
-        <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files generieren</button>
+        <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
@@ -6048,6 +6048,7 @@ function formatTimeStr(t) {
 let rotBars = [];        // built time bars
 let rotResearch = null;  // cached research so we don't re-call API
 let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...6:[]}}] day 0=Sun..6=Sat
+let rotSplitLegs = new Set(); // legIdx values whose outbound/return are split into independent bars
 const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
 // Robustly pull a JSON object out of an LLM response (handles fences, prose, mild truncation)
@@ -6121,12 +6122,12 @@ ROUTES:
 ${routeList}
 AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
 
-For each route: real nonstop block time (northern summer; if not a real route, estimate great-circle + 30min taxi) as "H:MM"; realistic 4-digit out/in flight numbers (the airline's real numbers to that destination if known, else plausible).
+For each route: give SEPARATE real nonstop block times for the outbound and the return as "H:MM" each (they differ on long routes due to winds/jetstream). If you cannot find real data, estimate: great-circle flight time + 30 min taxi for BOTH directions, then add an extra 40 min ONLY to whichever direction flies broadly east-to-west (against the rotation / typically the longer one). Also give realistic 4-digit out/in flight numbers (the airline's real numbers to that destination if known, else plausible).
 For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "BAW A35K", "AUA A20N").
 For each airport: summer UTC offset number.
 
 Output exactly this shape (one line is fine):
-{"utc":{"EGLL":1,"FACT":2},"routes":[{"r":1,"block_time":"11:40","fnum_out":"0049","fnum_in":"0050"}],"registrations":{"BAW A35K":["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY","G-XWBZ","G-XWCA"]}}`;
+{"utc":{"EGLL":1,"FACT":2},"routes":[{"r":1,"block_out":"11:40","block_in":"11:10","fnum_out":"0049","fnum_in":"0050"}],"registrations":{"BAW A35K":["G-XWBT","G-XWBU","G-XWBV","G-XWBW","G-XWBX","G-XWBY","G-XWBZ","G-XWCA"]}}`;
 
   let research=null, rawTxt='';
   try {
@@ -6163,15 +6164,30 @@ function buildRotationBars(validLegs, research) {
   const inWin=(min,from,to)=>{ if(from==null||to==null)return true; return from<=to ? (min>=from&&min<=to) : (min>=from||min<=to); };
 
   rotBars = [];
+  rotSplitLegs = new Set();
 
   validLegs.forEach((l,idx)=>{
     const ri=rinfo[idx+1]||{};
-    const block = hm(ri.block_time)||hm(l.blockTime)||120;
     const ground = parseInt(l.groundTime||'90')||90;
     const depUtc = utc[l.dep[0]]??0;
     const arrUtc = utc[l.arr[0]]??0;
     const fnumOut = ri.fnum_out || String(1000+idx*7).padStart(4,'0');
     const fnumIn  = ri.fnum_in  || String(1000+idx*7+3).padStart(4,'0');
+
+    // Separate block times for outbound and return.
+    // Priority: researched block_out/block_in → researched block_time (both) → entered blockTime → 120.
+    // Fallback east-west rule: base = entered/researched; the eastbound→westbound (against rotation) direction gets +40 min.
+    const baseBlock = hm(ri.block_out) || hm(ri.block_time) || hm(l.blockTime) || 120;
+    // Determine which direction flies broadly east→west using longitudes (lon index 4 in airport array)
+    const depLon = parseFloat(l.dep[4]); const arrLon = parseFloat(l.arr[4]);
+    // outbound goes dep→arr; if arr is WEST of dep (smaller longitude), outbound is the E→W leg
+    const outIsEastWest = (!isNaN(depLon) && !isNaN(arrLon)) ? (arrLon < depLon) : false;
+    let blockOut = hm(ri.block_out) || hm(ri.block_time) || hm(l.blockTime) || 120;
+    let blockIn  = hm(ri.block_in)  || hm(ri.block_time) || hm(l.blockTime) || 120;
+    // If we had to estimate (no separate researched values), apply the +40 min east-west penalty
+    if(!hm(ri.block_out) && !hm(ri.block_in)){
+      if(outIsEastWest) blockOut = baseBlock + 40; else blockIn = baseBlock + 40;
+    }
 
     // Windows (local minutes)
     const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];
@@ -6213,24 +6229,24 @@ function buildRotationBars(validLegs, research) {
     };
 
     // Outbound
-    const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,block);
+    const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,blockOut);
     rotBars.push({
       legIdx:idx, dir:'out', airline:l.airline, eqp:l.aircraft,
       depIcao:l.dep[0], arrIcao:l.arr[0],
       depLocal:out.depLocal, arrLocal:out.arrLocal, dayCross:out.dayCross,
       depOff:depUtc, arrOff:arrUtc,
-      block, ground, fnum:fnumOut,
+      block:blockOut, ground, fnum:fnumOut,
       ok: out.ok, reason: out.reason||'', assigned:0
     });
 
     // Return
-    const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,block);
+    const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,blockIn);
     rotBars.push({
       legIdx:idx, dir:'ret', airline:l.airline, eqp:l.aircraft,
       depIcao:l.arr[0], arrIcao:l.dep[0],
       depLocal:ret.depLocal, arrLocal:ret.arrLocal, dayCross:ret.dayCross,
       depOff:arrUtc, arrOff:depUtc,
-      block, ground, fnum:fnumIn,
+      block:blockIn, ground, fnum:fnumIn,
       ok: ret.ok, reason: ret.reason||'', assigned:0
     });
   });
@@ -6253,15 +6269,29 @@ function buildRotationBars(validLegs, research) {
 }
 
 // Count this leg's OUTBOUND departures per UTC weekday (0=Sun..6=Sat) → Map(day → count)
-function legDepartureDays(legIdx) {
+// Count departures per UTC weekday for a leg.
+// which: 'out' = count outbound-segment departures, 'ret' = return-segment departures.
+function legDepartureDays(legIdx, which) {
+  which = which || 'out';
   const counts=new Map();
+  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);
   rotAircraft.forEach(ac=>{
     Object.keys(ac.assignments).forEach(di=>{
       ac.assignments[di].forEach(asg=>{
-        if(asg.legIdx===legIdx){
-          const d = ((((asg.dropDay!=null)?asg.dropDay:parseInt(di))%7)+7)%7;
-          counts.set(d,(counts.get(d)||0)+1);
+        if(asg.legIdx!==legIdx) return;
+        // determine which segment counts as the tracked departure
+        let seg=null;
+        if(asg.kind==='out' || asg.kind==='ret'){
+          // single-direction assignment: only counts for its own direction
+          if(asg.kind!==which) return;
+          seg = asg.segs[0];
+        } else {
+          // pair: out segment is segs[0], ret segment is segs[1]
+          seg = which==='ret' ? asg.segs[1] : asg.segs[0];
         }
+        if(!seg) return;
+        const d = dayOf(seg.absDep);
+        counts.set(d,(counts.get(d)||0)+1);
       });
     });
   });
@@ -6274,53 +6304,91 @@ function renderRotationBars() {
   container.innerHTML = '';
   const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
-  // Group bars by leg so outbound + return sit side by side
   const byLeg={};
   rotBars.forEach((b)=>{ if(!byLeg[b.legIdx])byLeg[b.legIdx]=[]; byLeg[b.legIdx].push(b); });
 
-  // ── Scale: longest leg-PAIR (out duration + return duration) fits available width ──
-  // duration of a bar = block + ground (minutes)
-  const pairDur = {};
+  // Scale: longest UNIT (pair, or single bar if split) fits available width
+  const unitDur=[];
   Object.keys(byLeg).forEach(li=>{
-    pairDur[li] = byLeg[li].reduce((s,b)=>s+(b.block+b.ground),0);
+    const bars=byLeg[li];
+    if(rotSplitLegs.has(parseInt(li))){
+      bars.forEach(b=>unitDur.push(b.block+b.ground));
+    } else {
+      unitDur.push(bars.reduce((s,b)=>s+(b.block+b.ground),0));
+    }
   });
-  const maxPairDur = Math.max(1, ...Object.values(pairDur));
-  // available width: container minus id-cell(120) minus counter(44) minus gaps/padding
+  const maxUnitDur = Math.max(1, ...unitDur);
   const avail = Math.max(360, (container.clientWidth||container.offsetWidth||900) - 210);
-  const pxPerMin = avail / maxPairDur;
-  const MIN_BAR = 70; // never thinner than this so text/handle stays usable
+  const pxPerMin = avail / maxUnitDur;
+  const MIN_BAR = 70;
+  const DOW=['S','M','T','W','T','F','S'];
+  const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
-  Object.keys(byLeg).sort((a,b)=>a-b).forEach(legIdx=>{
-    const pair = byLeg[legIdx].slice().sort((a,b)=> a.dir==='out'?-1:1); // outbound first
-    const rowWrap = document.createElement('div');
-    rowWrap.style.cssText='display:flex;align-items:stretch;gap:6px;';
+  // builds the editable bar element for one bar object
+  const buildBar = (bar, legIdx, dragKind) => {  // dragKind: 'pair' | 'out' | 'ret'
+    const durMin = bar.block + bar.ground;
+    const widthPx = Math.max(MIN_BAR, Math.round(durMin * pxPerMin));
+    const compact = widthPx < 170;
+    const nightTint = bar.dayCross>=1;
+    const barEl = document.createElement('div');
+    barEl.draggable = true;
+    barEl.style.cssText='position:relative;display:flex;align-items:stretch;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.65),rgba(30,35,55,.65))':'linear-gradient(90deg,rgba(60,70,90,.45),rgba(45,52,68,.45))')+';min-height:50px;width:'+widthPx+'px;flex-shrink:0;user-select:none;';
+    const mkTimeInput = (which) => {
+      const inp=document.createElement('input');
+      inp.type='text'; inp.maxLength=5;
+      inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
+      inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;';
+      inp.title='Edit — the other time shifts to keep duration';
+      inp.onclick=e=>e.stopPropagation();
+      inp.ondragstart=e=>e.preventDefault();
+      inp.onblur=()=>{
+        const m=inp.value.match(/^(\d{1,2}):?(\d{2})$/);
+        if(!m){ inp.value=fmt(which==='dep'?bar.depLocal:bar.arrLocal); return; }
+        const newMin=((+m[1])*60+(+m[2]));
+        if(which==='dep'){ const shift=newMin-bar.depLocal; bar.depLocal=((newMin%1440)+1440)%1440; bar.arrLocal=((bar.arrLocal+shift)%1440+1440)%1440; }
+        else { const shift=newMin-bar.arrLocal; bar.arrLocal=((newMin%1440)+1440)%1440; bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440; }
+        syncBarTimesToLanes(bar.legIdx);
+        renderRotationBars(); renderRotationLanes();
+      };
+      inp.onkeydown=e=>{ if(e.key==='Enter'){ inp.blur(); } };
+      return inp;
+    };
+    const left=document.createElement('div');
+    left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
+    left.appendChild(mkTimeInput('dep'));
+    const depAp=document.createElement('div');
+    depAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
+    depAp.textContent=bar.depIcao; left.appendChild(depAp);
+    const mid=document.createElement('div');
+    mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
+    if(!compact){ mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.fnum+'</div>'; }
+    const right=document.createElement('div');
+    right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
+    const arrTimeWrap=document.createElement('div');
+    arrTimeWrap.style.cssText='display:flex;align-items:center;justify-content:center;';
+    arrTimeWrap.appendChild(mkTimeInput('arr'));
+    if(bar.dayCross>=1){ const p=document.createElement('span'); p.style.cssText='font-size:9px;color:#f0b400;margin-left:1px;'; p.textContent='+'+bar.dayCross; arrTimeWrap.appendChild(p); }
+    right.appendChild(arrTimeWrap);
+    const arrAp=document.createElement('div');
+    arrAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
+    arrAp.textContent=bar.arrIcao; right.appendChild(arrAp);
+    barEl.appendChild(left); barEl.appendChild(mid); barEl.appendChild(right);
+    barEl.addEventListener('click', e=>{ if(e.target.tagName!=='INPUT'){ e.stopPropagation(); showBarPopup(bar); } });
+    barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', legIdx+'|'+dragKind); barEl.style.opacity='0.5'; });
+    barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
+    return barEl;
+  };
 
-    const outBar = pair.find(b=>b.dir==='out') || pair[0];
-
-    // ── airline logo + EQP (far left) ──
-    const idCell = document.createElement('div');
-    idCell.style.cssText='display:flex;align-items:center;gap:6px;min-width:120px;flex-shrink:0;';
-    const logoBox = document.createElement('div');
-    logoBox.style.cssText='width:46px;height:34px;border-radius:4px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
-    logoBox.innerHTML = airlineLogoHtml((outBar.airline||'').toUpperCase()) || '<span style="font-size:8px;color:#999;">'+outBar.airline+'</span>';
-    const eqpLbl = document.createElement('div');
-    eqpLbl.style.cssText='font-size:11px;font-weight:700;color:#fff;white-space:nowrap;';
-    eqpLbl.textContent = outBar.eqp;
-    idCell.appendChild(logoBox); idCell.appendChild(eqpLbl);
-    rowWrap.appendChild(idCell);
-
-    // ── weekday departure tracker: S M T W T F S · ✓ = one departure · ⚡ = double-booked ──
-    const DOW=['S','M','T','W','T','F','S'];
-    const depCounts = legDepartureDays(parseInt(legIdx));  // Map(day → count)
+  // builds the SMTWTFS tracker for a leg + direction-filter ('out' counts outbound dep days; 'ret' counts return dep days)
+  const buildTracker = (legIdx, which) => {
+    const depCounts = legDepartureDays(parseInt(legIdx), which);
     const counter = document.createElement('div');
-    counter.id='rot-counter-'+legIdx;
     let coveredDays=0, hasDouble=false;
     for(let d=0; d<7; d++){ const c=depCounts.get(d)||0; if(c>=1)coveredDays++; if(c>=2)hasDouble=true; }
     const allCovered = coveredDays>=7;
     const borderCol = hasDouble ? '#f85149' : (allCovered ? '#3fb950' : 'var(--bdr2)');
     const bgCol = hasDouble ? 'rgba(248,81,73,.08)' : (allCovered ? 'rgba(63,185,80,.1)' : 'transparent');
     counter.style.cssText='display:flex;align-items:center;gap:1px;padding:3px 5px;border:1.5px solid '+borderCol+';border-radius:6px;background:'+bgCol+';flex-shrink:0;';
-    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     for(let d=0; d<7; d++){
       const c=depCounts.get(d)||0;
       const cellEl=document.createElement('div');
@@ -6333,92 +6401,75 @@ function renderRotationBars() {
       cellEl.title = dayName[d] + (c===0?' — no departure yet' : c===1?' — departure assigned' : ' — ⚡ '+c+' departures (double-booked!)');
       counter.appendChild(cellEl);
     }
-    rowWrap.appendChild(counter);
+    return counter;
+  };
 
-    pair.forEach(bar=>{
-      const durMin = bar.block + bar.ground;
-      const widthPx = Math.max(MIN_BAR, Math.round(durMin * pxPerMin));
-      const compact = widthPx < 170; // too narrow → hide eqp text, details via popup
+  // renders one row: id cell + tracker + (split/merge controls) + bar(s)
+  const buildRow = (legIdx, bars, which, isSplit) => {
+    const refBar = bars[0];
+    const rowWrap = document.createElement('div');
+    rowWrap.style.cssText='display:flex;align-items:stretch;gap:6px;';
 
-      const nightTint = bar.dayCross>=1;
-      const barEl = document.createElement('div');
-      barEl.draggable = true;
-      barEl.style.cssText='position:relative;display:flex;align-items:stretch;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.65),rgba(30,35,55,.65))':'linear-gradient(90deg,rgba(60,70,90,.45),rgba(45,52,68,.45))')+';min-height:50px;width:'+widthPx+'px;flex-shrink:0;user-select:none;';
+    // id cell (logo + eqp) — show a small tag for split direction
+    const idCell = document.createElement('div');
+    idCell.style.cssText='display:flex;align-items:center;gap:6px;min-width:120px;flex-shrink:0;';
+    const logoBox = document.createElement('div');
+    logoBox.style.cssText='width:46px;height:34px;border-radius:4px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;';
+    logoBox.innerHTML = airlineLogoHtml((refBar.airline||'').toUpperCase()) || '<span style="font-size:8px;color:#999;">'+refBar.airline+'</span>';
+    const eqpLbl = document.createElement('div');
+    eqpLbl.style.cssText='font-size:11px;font-weight:700;color:#fff;white-space:nowrap;line-height:1.2;';
+    eqpLbl.innerHTML = refBar.eqp + (isSplit ? '<div style="font-size:9px;color:'+(which==='out'?'#9fc7ff':'#f0b400')+';font-weight:600;">'+(which==='out'?'→ outbound':'↩ return')+'</div>' : '');
+    idCell.appendChild(logoBox); idCell.appendChild(eqpLbl);
+    rowWrap.appendChild(idCell);
 
-      // helper: editable time input that preserves duration
-      const mkTimeInput = (which) => {  // which = 'dep' | 'arr'
-        const inp=document.createElement('input');
-        inp.type='text'; inp.maxLength=5;
-        inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
-        inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;';
-        inp.title='Edit — the other time shifts to keep duration';
-        inp.onclick=e=>e.stopPropagation();
-        inp.ondragstart=e=>e.preventDefault();
-        inp.onblur=()=>{
-          const m=inp.value.match(/^(\d{1,2}):?(\d{2})$/);
-          if(!m){ inp.value=fmt(which==='dep'?bar.depLocal:bar.arrLocal); return; }
-          const newMin=((+m[1])*60+(+m[2]));
-          if(which==='dep'){
-            const shift=newMin-bar.depLocal;
-            bar.depLocal=((newMin%1440)+1440)%1440;
-            bar.arrLocal=((bar.arrLocal+shift)%1440+1440)%1440;
-          } else {
-            const shift=newMin-bar.arrLocal;
-            bar.arrLocal=((newMin%1440)+1440)%1440;
-            bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440;
-          }
-          syncBarTimesToLanes(bar.legIdx);
-          renderRotationBars();
-          renderRotationLanes();
-        };
-        inp.onkeydown=e=>{ if(e.key==='Enter'){ inp.blur(); } };
-        return inp;
-      };
+    // tracker + control column
+    const trackCol = document.createElement('div');
+    trackCol.style.cssText='display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;';
+    trackCol.appendChild(buildTracker(legIdx, isSplit ? which : 'out'));
+    // split / merge button
+    const ctrlBtn=document.createElement('button');
+    if(!isSplit){
+      ctrlBtn.textContent='✂ Split rotation';
+      ctrlBtn.title='Separate outbound and return into independent bars';
+      ctrlBtn.onclick=()=>splitRotation(parseInt(legIdx));
+    } else if(which==='out'){
+      ctrlBtn.textContent='⤿ Merge back';
+      ctrlBtn.title='Recombine outbound and return into one pair';
+      ctrlBtn.onclick=()=>mergeRotation(parseInt(legIdx));
+    } else {
+      ctrlBtn.textContent=' ';
+      ctrlBtn.style.visibility='hidden';
+    }
+    ctrlBtn.style.cssText+=';font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--bdr2);background:transparent;color:var(--txt3);cursor:pointer;white-space:nowrap;';
+    trackCol.appendChild(ctrlBtn);
+    rowWrap.appendChild(trackCol);
 
-      // left block: dep time (top, editable) + dep airport (bottom)
-      const left=document.createElement('div');
-      left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
-      left.appendChild(mkTimeInput('dep'));
-      const depAp=document.createElement('div');
-      depAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
-      depAp.textContent=bar.depIcao;
-      left.appendChild(depAp);
-
-      // middle: aircraft type (hidden if compact)
-      const mid=document.createElement('div');
-      mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
-      if(!compact){
-        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.fnum+'</div>';
-      }
-
-      // right block: arr time (top, editable) + arr airport (bottom)
-      const right=document.createElement('div');
-      right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
-      const arrTimeWrap=document.createElement('div');
-      arrTimeWrap.style.cssText='display:flex;align-items:center;justify-content:center;';
-      arrTimeWrap.appendChild(mkTimeInput('arr'));
-      if(bar.dayCross>=1){ const p=document.createElement('span'); p.style.cssText='font-size:9px;color:#f0b400;margin-left:1px;'; p.textContent='+'+bar.dayCross; arrTimeWrap.appendChild(p); }
-      right.appendChild(arrTimeWrap);
-      const arrAp=document.createElement('div');
-      arrAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
-      arrAp.textContent=bar.arrIcao;
-      right.appendChild(arrAp);
-
-      barEl.appendChild(left);
-      barEl.appendChild(mid);
-      barEl.appendChild(right);
-
-      // click on the bar background (not inputs) → popup
-      barEl.addEventListener('click', e=>{ if(e.target.tagName!=='INPUT'){ e.stopPropagation(); showBarPopup(bar); } });
-      barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', legIdx+'|pair'); barEl.style.opacity='0.5'; });
-      barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
-
-      rowWrap.appendChild(barEl);
+    // bars
+    bars.forEach(bar=>{
+      const dragKind = isSplit ? which : 'pair';
+      rowWrap.appendChild(buildBar(bar, legIdx, dragKind));
     });
 
     container.appendChild(rowWrap);
+  };
+
+  Object.keys(byLeg).sort((a,b)=>a-b).forEach(legIdx=>{
+    const bars = byLeg[legIdx].slice().sort((a,b)=> a.dir==='out'?-1:1);
+    const isSplit = rotSplitLegs.has(parseInt(legIdx));
+    if(!isSplit){
+      buildRow(legIdx, bars, 'pair', false);
+    } else {
+      const out = bars.filter(b=>b.dir==='out');
+      const ret = bars.filter(b=>b.dir==='ret');
+      if(out.length) buildRow(legIdx, out, 'out', true);
+      if(ret.length) buildRow(legIdx, ret, 'ret', true);
+    }
   });
 }
+
+function splitRotation(legIdx){ rotSplitLegs.add(legIdx); renderRotationBars(); }
+function mergeRotation(legIdx){ rotSplitLegs.delete(legIdx); renderRotationBars(); }
+
 
 // ── Bottom half: aircraft resource lanes with weekly UTC calendar ──
 function renderRotationLanes() {
@@ -6457,11 +6508,22 @@ function renderRotationLanes() {
     const row=document.createElement('div');
     row.style.cssText='display:flex;border-top:1px solid var(--bdr);height:'+ROW_H+'px;';
 
-    // aircraft id cell
+    // aircraft id cell — trash button + logo + eqp/reg
     const idc=document.createElement('div');
     idc.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:6px;display:flex;align-items:center;gap:5px;';
-    idc.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
+    const trashBtn=document.createElement('button');
+    trashBtn.innerHTML='🗑';
+    trashBtn.title='Delete flights or aircraft';
+    trashBtn.style.cssText='font-size:13px;line-height:1;padding:3px 4px;border:none;background:transparent;color:var(--txt3);cursor:pointer;border-radius:4px;flex-shrink:0;';
+    trashBtn.onmouseenter=()=>{trashBtn.style.background='rgba(248,81,73,.15)';trashBtn.style.color='#f85149';};
+    trashBtn.onmouseleave=()=>{trashBtn.style.background='transparent';trashBtn.style.color='var(--txt3)';};
+    trashBtn.onclick=e=>{ e.stopPropagation(); showAircraftTrashPopup(e.clientX, e.clientY, acIdx); };
+    idc.appendChild(trashBtn);
+    const idInfo=document.createElement('div');
+    idInfo.style.cssText='display:flex;align-items:center;gap:5px;overflow:hidden;';
+    idInfo.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
       +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div></div>';
+    idc.appendChild(idInfo);
     row.appendChild(idc);
 
     // timeline track
@@ -6482,8 +6544,8 @@ function renderRotationLanes() {
         const [,fromAcIdx,uid]=data.split('|');
         moveAssignment(parseInt(fromAcIdx), uid, acIdx, dropMinAbs);
       } else {
-        const [legIdx]=data.split('|');
-        dropPairOnAircraft(parseInt(legIdx), acIdx, dropMinAbs);
+        const [legIdx, kind]=data.split('|');
+        dropPairOnAircraft(parseInt(legIdx), acIdx, dropMinAbs, kind||'pair');
       }
     });
 
@@ -6554,6 +6616,25 @@ function renderRotationLanes() {
     }
   });
 
+  // For any aircraft TYPE present in the routes but with zero aircraft left, offer a re-add row
+  const typesInLegs=[];
+  rotBars.forEach(b=>{ const k=b.airline+'|'+b.eqp; if(!typesInLegs.find(t=>t.key===k)) typesInLegs.push({key:k,airline:b.airline,eqp:b.eqp}); });
+  typesInLegs.forEach(t=>{
+    if(rotAircraft.some(a=>a.key===t.key)) return; // already has at least one aircraft
+    const addRow=document.createElement('div');
+    addRow.style.cssText='display:flex;border-top:1px solid var(--bdr);';
+    const addCell=document.createElement('div');
+    addCell.style.cssText='width:'+ACW+'px;flex-shrink:0;padding:4px 6px;';
+    const addBtn=document.createElement('button');
+    addBtn.textContent='+ '+t.eqp+' aircraft';
+    addBtn.style.cssText='font-size:10px;padding:3px 8px;border-radius:12px;border:1px solid var(--bdr2);background:transparent;color:var(--txt3);cursor:pointer;white-space:nowrap;';
+    addBtn.onclick=()=>addAircraftOfType(t.key);
+    addCell.appendChild(addBtn);
+    const spacer=document.createElement('div'); spacer.style.cssText='width:'+TRACK_W+'px;flex-shrink:0;';
+    addRow.appendChild(addCell); addRow.appendChild(spacer);
+    grid.appendChild(addRow);
+  });
+
   container.appendChild(grid);
 }
 
@@ -6589,21 +6670,38 @@ function computePairSegs(legIdx, dropDay) {
   };
 }
 
-// Drop a leg pair onto an aircraft at an absolute week-minute position
-function dropPairOnAircraft(legIdx, acIdx, dropMinAbs) {
+// Compute a single direction's segment (split mode) starting on dropDay
+function computeSingleSeg(legIdx, dropDay, kind) {
+  const dir = kind==='ret' ? 'ret' : 'out';
+  const bar = rotBars.find(b=>b.legIdx===legIdx && b.dir===dir);
+  if(!bar) return null;
+  const seg = barToUTCSeg(bar);
+  const absDep = dropDay*1440 + seg.depUTC;
+  const absArr = absDep + seg.block;
+  return { bar, seg: {...seg, absDep:absDep%10080, absArr:absArr%10080} };
+}
+
+// Drop a pair OR a single direction onto an aircraft at an absolute week-minute position
+function dropPairOnAircraft(legIdx, acIdx, dropMinAbs, kind) {
+  kind = kind || 'pair';
   const ac = rotAircraft[acIdx];
-  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
-  if(!pair.length) return;
-  if(ac.key !== (pair[0].airline+'|'+pair[0].eqp)){
-    alert('This aircraft type ('+ac.eqp+') does not match the flight ('+pair[0].eqp+').');
+  const refBar = rotBars.find(b=>b.legIdx===legIdx && (kind==='ret'?b.dir==='ret':b.dir==='out')) || rotBars.find(b=>b.legIdx===legIdx);
+  if(!refBar) return;
+  if(ac.key !== (refBar.airline+'|'+refBar.eqp)){
+    alert('This aircraft type ('+ac.eqp+') does not match the flight ('+refBar.eqp+').');
     return;
   }
   const dropDay = Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
-  const res = computePairSegs(legIdx, dropDay);
-  if(!res) return;
   const uid = 'asg-'+Date.now()+'-'+Math.random().toString(36).slice(2,6);
-  ac.assignments[dropDay].push({ uid, legIdx, dropDay, segs: res.segs });
-  pair.forEach(b=>{ b.assigned = Math.min(7, (b.assigned||0)+1); });
+  if(kind==='pair'){
+    const res = computePairSegs(legIdx, dropDay);
+    if(!res) return;
+    ac.assignments[dropDay].push({ uid, legIdx, dropDay, kind:'pair', segs: res.segs });
+  } else {
+    const res = computeSingleSeg(legIdx, dropDay, kind);
+    if(!res) return;
+    ac.assignments[dropDay].push({ uid, legIdx, dropDay, kind, segs:[res.seg] });
+  }
   renderRotationBars();
   renderRotationLanes();
 }
@@ -6618,19 +6716,21 @@ function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
   });
   if(!asg) return;
   const toAc = rotAircraft[toAcIdx];
-  const pair = rotBars.filter(b=>b.legIdx===asg.legIdx).sort((a,b)=> a.dir==='out'?-1:1);
-  if(toAc.key !== (pair[0].airline+'|'+pair[0].eqp)){
-    alert('This aircraft type ('+toAc.eqp+') does not match the flight ('+pair[0].eqp+').');
+  const refBar = rotBars.find(b=>b.legIdx===asg.legIdx);
+  if(toAc.key !== (refBar.airline+'|'+refBar.eqp)){
+    alert('This aircraft type ('+toAc.eqp+') does not match the flight ('+refBar.eqp+').');
     return;
   }
-  // remove from old
   const oldArr=fromAc.assignments[fromDay];
   oldArr.splice(oldArr.findIndex(a=>a.uid===uid),1);
-  // recompute at new day
   const dropDay=Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
-  const res=computePairSegs(asg.legIdx, dropDay);
-  toAc.assignments[dropDay].push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, segs:res.segs });
-  // counter unchanged (still one copy total)
+  let segs;
+  if(asg.kind==='out' || asg.kind==='ret'){
+    const res=computeSingleSeg(asg.legIdx, dropDay, asg.kind); segs=[res.seg];
+  } else {
+    const res=computePairSegs(asg.legIdx, dropDay); segs=res.segs;
+  }
+  toAc.assignments[dropDay].push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, kind:asg.kind||'pair', segs });
   renderRotationBars();
   renderRotationLanes();
 }
@@ -6641,8 +6741,12 @@ function syncBarTimesToLanes(legIdx) {
     Object.keys(ac.assignments).forEach(di=>{
       ac.assignments[di].forEach(asg=>{
         if(asg.legIdx===legIdx){
-          const res=computePairSegs(legIdx, asg.dropDay!=null?asg.dropDay:parseInt(di));
-          if(res) asg.segs=res.segs;
+          const dd = asg.dropDay!=null?asg.dropDay:parseInt(di);
+          if(asg.kind==='out' || asg.kind==='ret'){
+            const res=computeSingleSeg(legIdx, dd, asg.kind); if(res) asg.segs=[res.seg];
+          } else {
+            const res=computePairSegs(legIdx, dd); if(res) asg.segs=res.segs;
+          }
         }
       });
     });
@@ -6670,6 +6774,55 @@ function showTrashPopup(x, y, acIdx, uid) {
   document.body.appendChild(pop);
 }
 
+function showAircraftTrashPopup(x, y, acIdx) {
+  let pop=document.getElementById('rot-actrash-popup');
+  if(pop) pop.remove();
+  pop=document.createElement('div');
+  pop.id='rot-actrash-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;';
+  pop.onclick=()=>pop.remove();
+  const menu=document.createElement('div');
+  menu.style.cssText='position:absolute;left:'+Math.min(x,window.innerWidth-280)+'px;top:'+y+'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:4px;min-width:260px;';
+  menu.onclick=e=>e.stopPropagation();
+  const mk=(label,handler)=>{
+    const b=document.createElement('button');
+    b.textContent=label;
+    b.style.cssText='display:block;width:100%;text-align:left;font-size:12px;padding:8px 12px;border:none;background:transparent;color:#f85149;cursor:pointer;border-radius:6px;white-space:nowrap;';
+    b.onmouseenter=()=>b.style.background='rgba(248,81,73,.12)';
+    b.onmouseleave=()=>b.style.background='transparent';
+    b.onclick=()=>{ pop.remove(); handler(); };
+    return b;
+  };
+  menu.appendChild(mk('🗑 Delete all flights, keep the aircraft', ()=>clearAircraftFlights(acIdx)));
+  menu.appendChild(mk('🗑 Delete all flights and the aircraft', ()=>deleteAircraft(acIdx)));
+  pop.appendChild(menu);
+  document.body.appendChild(pop);
+}
+
+function clearAircraftFlights(acIdx) {
+  const ac=rotAircraft[acIdx];
+  if(!ac) return;
+  // decrement bar counters for every assignment being removed
+  Object.keys(ac.assignments).forEach(di=>{
+    ac.assignments[di].forEach(asg=>{
+      rotBars.filter(b=>b.legIdx===asg.legIdx).forEach(b=>{ b.assigned=Math.max(0,(b.assigned||0)-1); });
+    });
+    ac.assignments[di]=[];
+  });
+  renderRotationBars();
+  renderRotationLanes();
+}
+
+function deleteAircraft(acIdx) {
+  const ac=rotAircraft[acIdx];
+  if(!ac) return;
+  // ensure at least one aircraft of this type remains? No — allow full removal.
+  clearAircraftFlights(acIdx);     // frees the bar counters first
+  rotAircraft.splice(acIdx,1);
+  renderRotationBars();
+  renderRotationLanes();
+}
+
 function removeAssignment(acIdx, uid) {
   const ac = rotAircraft[acIdx];
   let legIdx=null;
@@ -6683,11 +6836,16 @@ function removeAssignment(acIdx, uid) {
 }
 
 function addAircraftOfType(key) {
-  const proto = rotAircraft.find(a=>a.key===key);
-  if(!proto) return;
+  let proto = rotAircraft.find(a=>a.key===key);
+  // If none of this type exist anymore, reconstruct from research/legs
+  if(!proto){
+    const [airline,eqp]=key.split('|');
+    const regsByType=(rotResearch&&rotResearch.registrations)||{};
+    const regs = regsByType[airline+' '+eqp] || regsByType[key] || ttoolsFallbackRegs(airline,eqp);
+    proto = { key, airline, eqp, regPool:regs.slice() };
+  }
   const used = rotAircraft.filter(a=>a.key===key).length;
   const reg = proto.regPool[used] || ttoolsFallbackRegs(proto.airline,proto.eqp)[0];
-  // insert right after the last aircraft of this type
   let insertAt = rotAircraft.length;
   for(let i=rotAircraft.length-1;i>=0;i--){ if(rotAircraft[i].key===key){ insertAt=i+1; break; } }
   rotAircraft.splice(insertAt,0,{
