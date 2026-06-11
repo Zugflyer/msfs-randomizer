@@ -2615,7 +2615,7 @@ function switchView(view) {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
-    if (tab) tab.className = 'topnav-tab' + (v === view ? ' active' : '');
+    if (tab) { const act = (v === view) || (v==='aigen' && view==='rotations'); tab.className = 'topnav-tab' + (act ? ' active' : ''); }
     const btn = document.getElementById('bn-'+v);
     if (btn) btn.classList.toggle('active', v === view);
   });
@@ -4677,6 +4677,7 @@ window.addEventListener('resize', () => {
   if (calcMap) calcMap.invalidateSize();
   if (lbMap) lbMap.invalidateSize();
   if (lbMapEu) lbMapEu.invalidateSize();
+  if (currentView==='rotations' && rotBars.length) renderRotationBars();
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -6191,52 +6192,104 @@ function renderRotationBars() {
   const byLeg={};
   rotBars.forEach((b)=>{ if(!byLeg[b.legIdx])byLeg[b.legIdx]=[]; byLeg[b.legIdx].push(b); });
 
+  // ── Scale: longest leg-PAIR (out duration + return duration) fits available width ──
+  // duration of a bar = block + ground (minutes)
+  const pairDur = {};
+  Object.keys(byLeg).forEach(li=>{
+    pairDur[li] = byLeg[li].reduce((s,b)=>s+(b.block+b.ground),0);
+  });
+  const maxPairDur = Math.max(1, ...Object.values(pairDur));
+  // available width: container minus counter(~50) minus gaps/padding
+  const avail = Math.max(400, (container.clientWidth||container.offsetWidth||900) - 90);
+  const pxPerMin = avail / maxPairDur;
+  const MIN_BAR = 70; // never thinner than this so text/handle stays usable
+
   Object.keys(byLeg).sort((a,b)=>a-b).forEach(legIdx=>{
-    const pair = byLeg[legIdx];
+    const pair = byLeg[legIdx].slice().sort((a,b)=> a.dir==='out'?-1:1); // outbound first
     const rowWrap = document.createElement('div');
-    rowWrap.style.cssText='display:flex;align-items:center;gap:10px;flex-wrap:wrap;';
+    rowWrap.style.cssText='display:flex;align-items:stretch;gap:6px;';
+
+    // ── single counter (left of the outbound bar) ──
+    const outBar = pair.find(b=>b.dir==='out') || pair[0];
+    const counter = document.createElement('div');
+    counter.id='rot-counter-'+legIdx;
+    counter.style.cssText='display:flex;align-items:center;justify-content:center;min-width:44px;border:1.5px solid var(--bdr2);border-radius:6px;font-size:12px;font-weight:700;font-family:monospace;color:'+(outBar.assigned>=7?'#3fb950':'var(--txt3)')+';background:'+(outBar.assigned>=7?'rgba(63,185,80,.1)':'transparent')+';flex-shrink:0;';
+    counter.textContent = (outBar.assigned||0)+'/7';
+    rowWrap.appendChild(counter);
 
     pair.forEach(bar=>{
-      // counter chip
-      const counter = document.createElement('div');
-      counter.style.cssText='display:flex;align-items:center;justify-content:center;min-width:40px;height:34px;border:1.5px solid var(--bdr2);border-radius:6px;font-size:12px;font-weight:700;font-family:monospace;color:'+(bar.assigned>=7?'#3fb950':'var(--txt3)')+';background:'+(bar.assigned>=7?'rgba(63,185,80,.1)':'transparent')+';flex-shrink:0;';
-      counter.textContent = bar.assigned+'/7';
-      counter.id = 'rot-counter-'+bar.legIdx+'-'+bar.dir;
+      const durMin = bar.block + bar.ground;
+      const widthPx = Math.max(MIN_BAR, Math.round(durMin * pxPerMin));
+      const compact = widthPx < 150; // too narrow → only show arr airport, details via popup
 
-      // the bar itself
-      const barEl = document.createElement('div');
       const nightTint = bar.dayCross>=1;
+      const barEl = document.createElement('div');
       barEl.draggable = true;
-      barEl.style.cssText='display:flex;align-items:center;gap:0;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.6),rgba(30,35,55,.6))':'linear-gradient(90deg,rgba(60,70,90,.4),rgba(45,52,68,.4))')+';min-height:42px;user-select:none;';
-      barEl.title = bar.ok ? (nightTint?'Overnight flight':'Daytime flight') : '⚠ Could not fit all windows — adjust route times';
+      barEl.style.cssText='position:relative;display:flex;align-items:stretch;border:1.5px solid '+(bar.ok?'rgba(88,166,255,.5)':'#f85149')+';border-radius:8px;overflow:hidden;cursor:grab;background:'+(nightTint?'linear-gradient(90deg,rgba(40,50,80,.65),rgba(30,35,55,.65))':'linear-gradient(90deg,rgba(60,70,90,.45),rgba(45,52,68,.45))')+';min-height:50px;width:'+widthPx+'px;flex-shrink:0;user-select:none;';
 
-      // left: dep time + dep icao
+      // left block: dep time (top) + dep airport (bottom)
       const left=document.createElement('div');
-      left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 12px;background:rgba(0,0,0,.18);min-width:74px;';
-      left.innerHTML='<div style="font-size:14px;font-weight:700;font-family:monospace;color:#fff;">'+fmt(bar.depLocal)+'</div><div style="font-size:12px;font-weight:700;color:#9fc7ff;letter-spacing:.04em;">'+bar.depIcao+'</div>';
+      left.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
+      left.innerHTML='<div style="font-size:13px;font-weight:700;font-family:monospace;color:#fff;line-height:1.1;">'+fmt(bar.depLocal)+'</div>'
+        +'<div style="font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;">'+bar.depIcao+'</div>';
 
-      // middle: airline + eqp
+      // middle: aircraft type only (hidden if compact)
       const mid=document.createElement('div');
-      mid.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 18px;flex:1;';
-      mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;">'+bar.airline+' '+bar.eqp+'</div>'
-        +'<div style="font-size:9px;color:var(--txt3);">'+(nightTint?'☾ +'+bar.dayCross+'d':'☀ same day')+' · '+fmt(bar.block)+' block · '+bar.ground+'m gnd</div>';
+      mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
+      if(!compact){
+        mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+bar.airline+' '+bar.eqp+'</div>';
+      }
 
-      // right: arr icao + arr time (+ground shown)
+      // right block: arr airport (top) + arr time (bottom)
       const right=document.createElement('div');
-      right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:5px 12px;background:rgba(0,0,0,.18);min-width:74px;';
-      right.innerHTML='<div style="font-size:12px;font-weight:700;color:#9fc7ff;letter-spacing:.04em;">'+bar.arrIcao+'</div><div style="font-size:14px;font-weight:700;font-family:monospace;color:#fff;">'+fmt(bar.arrLocal)+(bar.dayCross>=1?'<span style="font-size:9px;color:#f0b400;">+'+bar.dayCross+'</span>':'')+'</div>';
+      right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
+      right.innerHTML='<div style="font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;">'+bar.arrIcao+'</div>'
+        +'<div style="font-size:13px;font-weight:700;font-family:monospace;color:#fff;line-height:1.1;">'+fmt(bar.arrLocal)+(bar.dayCross>=1?'<span style="font-size:9px;color:#f0b400;">+'+bar.dayCross+'</span>':'')+'</div>';
 
-      barEl.appendChild(left); barEl.appendChild(mid); barEl.appendChild(right);
+      barEl.appendChild(left);
+      barEl.appendChild(mid);
+      barEl.appendChild(right);
 
-      barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', bar.legIdx+'|'+bar.dir); barEl.style.opacity='0.5'; });
+      // click → popup with full details
+      barEl.addEventListener('click', e=>{ e.stopPropagation(); showBarPopup(bar); });
+      barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', legIdx+'|pair'); barEl.style.opacity='0.5'; });
       barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
 
-      rowWrap.appendChild(counter);
       rowWrap.appendChild(barEl);
     });
 
     container.appendChild(rowWrap);
   });
+}
+
+function showBarPopup(bar) {
+  const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
+  let pop=document.getElementById('rot-bar-popup');
+  if(pop) pop.remove();
+  pop=document.createElement('div');
+  pop.id='rot-bar-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5);';
+  pop.onclick=()=>pop.remove();
+  const card=document.createElement('div');
+  card.style.cssText='background:var(--surf);border:1px solid var(--bdr2);border-radius:12px;padding:18px 22px;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,.6);';
+  card.onclick=e=>e.stopPropagation();
+  const night = bar.dayCross>=1;
+  card.innerHTML =
+    '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:10px;">'+bar.airline+' '+bar.eqp+' · '+(bar.dir==='out'?'Outbound':'Return')+'</div>'
+    +'<div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:12px;color:var(--txt2);">'
+    +'<span style="color:var(--txt3);">Route</span><span style="font-weight:600;color:#fff;">'+bar.depIcao+' → '+bar.arrIcao+'</span>'
+    +'<span style="color:var(--txt3);">Departure</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.depLocal)+' local ('+bar.depIcao+')</span>'
+    +'<span style="color:var(--txt3);">Arrival</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.arrLocal)+' local ('+bar.arrIcao+')'+(night?' +'+bar.dayCross+'d':'')+'</span>'
+    +'<span style="color:var(--txt3);">Block time</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.block)+'</span>'
+    +'<span style="color:var(--txt3);">Min ground</span><span style="font-family:monospace;color:#fff;">'+bar.ground+' min</span>'
+    +'<span style="color:var(--txt3);">Flight no.</span><span style="font-family:monospace;color:#fff;">'+bar.fnum+'</span>'
+    +'<span style="color:var(--txt3);">Type</span><span style="color:'+(night?'#5a8dee':'#f0b400')+';">'+(night?'☾ Overnight (+'+bar.dayCross+' day)':'☀ Same day')+'</span>'
+    +'<span style="color:var(--txt3);">Assigned</span><span style="color:#fff;">'+(bar.assigned||0)+' / 7</span>'
+    +'</div>'
+    +(bar.ok?'':'<div style="margin-top:10px;font-size:11px;color:#f85149;">⚠ Could not satisfy all time windows / day-night for this leg. Adjust the route times and regenerate.</div>')
+    +'<div style="margin-top:14px;text-align:right;"><button onclick="document.getElementById(\'rot-bar-popup\').remove()" style="font-size:12px;padding:5px 16px;border-radius:6px;border:1px solid var(--bdr);background:var(--acc);color:#fff;cursor:pointer;">Close</button></div>';
+  pop.appendChild(card);
+  document.body.appendChild(pop);
 }
 
 
