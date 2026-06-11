@@ -6222,6 +6222,22 @@ function buildRotationBars(validLegs, research) {
   renderRotationBars();
 }
 
+// Count this leg's OUTBOUND departures per UTC weekday (0=Sun..6=Sat) → Map(day → count)
+function legDepartureDays(legIdx) {
+  const counts=new Map();
+  rotAircraft.forEach(ac=>{
+    Object.keys(ac.assignments).forEach(di=>{
+      ac.assignments[di].forEach(asg=>{
+        if(asg.legIdx===legIdx){
+          const d = ((((asg.dropDay!=null)?asg.dropDay:parseInt(di))%7)+7)%7;
+          counts.set(d,(counts.get(d)||0)+1);
+        }
+      });
+    });
+  });
+  return counts;
+}
+
 function renderRotationBars() {
   const container = document.getElementById('rot-bars-container');
   if (!container) return;
@@ -6263,11 +6279,30 @@ function renderRotationBars() {
     idCell.appendChild(logoBox); idCell.appendChild(eqpLbl);
     rowWrap.appendChild(idCell);
 
-    // ── single counter ──
+    // ── weekday departure tracker: S M T W T F S · ✓ = one departure · ⚡ = double-booked ──
+    const DOW=['S','M','T','W','T','F','S'];
+    const depCounts = legDepartureDays(parseInt(legIdx));  // Map(day → count)
     const counter = document.createElement('div');
     counter.id='rot-counter-'+legIdx;
-    counter.style.cssText='display:flex;align-items:center;justify-content:center;min-width:44px;border:1.5px solid var(--bdr2);border-radius:6px;font-size:12px;font-weight:700;font-family:monospace;color:'+(outBar.assigned>=7?'#3fb950':'var(--txt3)')+';background:'+(outBar.assigned>=7?'rgba(63,185,80,.1)':'transparent')+';flex-shrink:0;';
-    counter.textContent = (outBar.assigned||0)+'/7';
+    let coveredDays=0, hasDouble=false;
+    for(let d=0; d<7; d++){ const c=depCounts.get(d)||0; if(c>=1)coveredDays++; if(c>=2)hasDouble=true; }
+    const allCovered = coveredDays>=7;
+    const borderCol = hasDouble ? '#f85149' : (allCovered ? '#3fb950' : 'var(--bdr2)');
+    const bgCol = hasDouble ? 'rgba(248,81,73,.08)' : (allCovered ? 'rgba(63,185,80,.1)' : 'transparent');
+    counter.style.cssText='display:flex;align-items:center;gap:1px;padding:3px 5px;border:1.5px solid '+borderCol+';border-radius:6px;background:'+bgCol+';flex-shrink:0;';
+    const dayName=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+    for(let d=0; d<7; d++){
+      const c=depCounts.get(d)||0;
+      const cellEl=document.createElement('div');
+      let glyph, col;
+      if(c===0){ glyph=DOW[d]; col='var(--txt3)'; }
+      else if(c===1){ glyph='✓'; col='#3fb950'; }
+      else { glyph='⚡'; col='#f85149'; }
+      cellEl.style.cssText='width:13px;text-align:center;font-size:11px;font-weight:700;font-family:monospace;line-height:1;color:'+col+';';
+      cellEl.textContent=glyph;
+      cellEl.title = dayName[d] + (c===0?' — no departure yet' : c===1?' — departure assigned' : ' — ⚡ '+c+' departures (double-booked!)');
+      counter.appendChild(cellEl);
+    }
     rowWrap.appendChild(counter);
 
     pair.forEach(bar=>{
