@@ -6152,11 +6152,14 @@ function buildRotationBars(validLegs, research) {
     const retWin=[hm(l.ad1)??360, hm(l.ad2)??1350];
     const homeWin=[hm(l.da1)??330, hm(l.da2)??1380];
 
-    // Find outbound dep (local at DEP) so arrival (local at ARR) is within window + day/night
+    // Find outbound dep (local at DEP) so arrival (local at ARR) is within window + day/night.
+    // Collect ALL valid departure times, then pick one at random (so duplicate routes differ).
+    // Return chaining (return after outbound arrival + ground) is enforced at placement time.
     const findTime=(depWinL,arrWinL,depOff,arrOff,dayNight,blockMin)=>{
       const lo=depWinL[0], hi=depWinL[1];
       const span=(lo<=hi)?(hi-lo):(1440-lo+hi);
-      let arrWinMiss=0, dnMiss=0;
+      const valid=[];
+      let arrWinMiss=0, dnMiss=0, earlyMiss=0;
       for(let step=0; step<=span; step+=5){
         const depLocal=((lo+step)%1440+1440)%1440;
         const depUTCm=depLocal-depOff*60;
@@ -6167,9 +6170,9 @@ function buildRotationBars(validLegs, research) {
         if(!inWin(arrLocal,arrWinL[0],arrWinL[1])){ arrWinMiss++; continue; }
         if(dayNight==='night' && !isNight){ dnMiss++; continue; }
         if(dayNight==='day' && isNight){ dnMiss++; continue; }
-        return {depLocal,arrLocal,dayCross,ok:true};
+        valid.push({depLocal,arrLocal,dayCross,ok:true,depUTCm:((depUTCm%1440)+1440)%1440});
       }
-      // No exact fit — return best-effort using earliest dep in window, plus reason
+      if(valid.length){ return valid[Math.floor(Math.random()*valid.length)]; }
       const depLocal=lo;
       const depUTCm=depLocal-depOff*60;
       const arrUTCm=depUTCm+blockMin;
