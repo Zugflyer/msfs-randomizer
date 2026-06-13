@@ -779,8 +779,32 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
 
       <!-- Airline mode -->
-      <div id="aigen-airline-mode" style="display:none;flex:1;align-items:center;justify-content:center;color:var(--txt3);font-size:13px;">
-        Airline mode — coming soon
+      <div id="aigen-airline-mode" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
+
+        <!-- Row: airline logo + ICAO input -->
+        <div style="padding:14px 16px 12px;display:flex;align-items:center;justify-content:center;gap:14px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;">
+
+          <!-- Logo box (fills once a code is typed) -->
+          <div id="aigen-al-logo" style="width:120px;height:48px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg);flex-shrink:0;overflow:hidden;"></div>
+
+          <!-- ICAO input + resolved name -->
+          <div style="display:flex;flex-direction:column;gap:4px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Airline ICAO</span>
+              <input id="aigen-al-input" placeholder="e.g. DLH, BAW, UAE…" maxlength="3"
+                style="width:160px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:14px;font-family:monospace;letter-spacing:.12em;text-transform:uppercase;outline:none;padding:7px 10px;box-sizing:border-box;"
+                oninput="aiGenAirlineInput(this)">
+            </div>
+            <div id="aigen-al-name" style="font-size:11px;color:var(--txt3);min-height:14px;padding-left:2px;"></div>
+          </div>
+
+        </div>
+
+        <!-- Body (next build steps go here) -->
+        <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-al-body">
+          <div style="color:var(--txt3);font-size:12px;padding:20px 0;">Enter an airline ICAO code above to start.</div>
+        </div>
+
       </div>
 
     </div>
@@ -5720,6 +5744,7 @@ function gatesAddRow() {
 let aiGenMode = 'airport';
 let aiGenTarget = null;
 let aiGenLegs = [];
+let aiGenAirline = '';   // selected airline ICAO (airline mode)
 
 function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
@@ -5747,6 +5772,30 @@ function setAiGenMode(mode) {
   if (apPanel) apPanel.style.display = mode==='airport' ? 'flex' : 'none';
   if (alPanel) alPanel.style.display = mode==='airline' ? 'flex' : 'none';
   if (mode === 'airport') renderAiGenLegs();
+  if (mode === 'airline') renderAiGenAirline();
+}
+
+// ── Airline mode: ICAO input → fill logo box + resolved name ──────────────────
+function aiGenAirlineInput(inp) {
+  const code = (inp.value || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3);
+  if (inp.value !== code) inp.value = code;
+  aiGenAirline = code;
+  renderAiGenAirline();
+}
+
+function renderAiGenAirline() {
+  const inp = document.getElementById('aigen-al-input');
+  if (inp && inp.value !== aiGenAirline) inp.value = aiGenAirline;
+  const logo = document.getElementById('aigen-al-logo');
+  const name = document.getElementById('aigen-al-name');
+  const code = aiGenAirline;
+  if (!code || code.length < 3) {
+    if (logo) logo.innerHTML = '<span style="font-size:10px;color:var(--txt3);">logo</span>';
+    if (name) name.textContent = '';
+    return;
+  }
+  if (logo) logo.innerHTML = airlineLogoHtml(code);
+  if (name) name.textContent = AIRLINE_NAMES[code] || 'Unknown airline code';
 }
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
