@@ -781,7 +781,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <!-- Airline mode -->
       <div id="aigen-airline-mode" style="display:none;flex-direction:column;flex:1;overflow:hidden;">
 
-        <!-- Row: airline logo + ICAO input -->
+        <!-- Row: airline logo + ICAO input + hub + time windows -->
         <div style="padding:14px 16px 12px;display:flex;align-items:center;justify-content:center;gap:14px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;">
 
           <!-- Logo box (fills once a code is typed) -->
@@ -798,11 +798,61 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <div id="aigen-al-name" style="font-size:11px;color:var(--txt3);min-height:14px;padding-left:2px;"></div>
           </div>
 
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
+          <!-- Hub -->
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Hub</span>
+            <div style="position:relative;">
+              <input id="aigen-al-hub-input" placeholder="ICAO, IATA or city…"
+                style="width:200px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;">
+            </div>
+            <div id="aigen-al-hub-box" style="display:none;align-items:center;"></div>
+          </div>
+
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
+          <!-- DEP window -->
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">DEP window</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
+              <input id="aigen-al-dep-from" type="text" value="06:00" maxlength="5"
+                style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenAlDefaults('depFrom',this.value);">
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
+              <input id="aigen-al-dep-until" type="text" value="22:30" maxlength="5"
+                style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenAlDefaults('depUntil',this.value);">
+            </div>
+          </div>
+
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
+          <!-- ARR window -->
+          <div style="display:flex;flex-direction:column;gap:3px;">
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">ARR window</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">from</span>
+              <input id="aigen-al-arr-from" type="text" value="05:30" maxlength="5"
+                style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenAlDefaults('arrFrom',this.value);">
+            </div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <span style="font-size:10px;color:var(--txt3);white-space:nowrap;">until</span>
+              <input id="aigen-al-arr-until" type="text" value="23:00" maxlength="5"
+                style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenAlDefaults('arrUntil',this.value);">
+            </div>
+          </div>
+
         </div>
 
-        <!-- Body (next build steps go here) -->
+        <!-- Body (route rows) -->
         <div style="flex:1;overflow-y:auto;padding:10px 16px;" id="aigen-al-body">
-          <div style="color:var(--txt3);font-size:12px;padding:20px 0;">Enter an airline ICAO code above to start.</div>
+          <div id="aigen-al-legs-container" style="color:var(--txt3);font-size:12px;padding:20px 0;">Enter an airline ICAO code above to start.</div>
         </div>
 
       </div>
@@ -5745,6 +5795,15 @@ let aiGenMode = 'airport';
 let aiGenTarget = null;
 let aiGenLegs = [];
 let aiGenAirline = '';   // selected airline ICAO (airline mode)
+let aiGenAlHub = null;   // selected hub airport array (airline mode)
+let aiGenAlLegs = [];    // route rows (airline mode)
+
+function aiGenAlEmptyLeg() {
+  return { eqp:'', dep: aiGenAlHub || null, arr:null,
+           depFixed:'', dd1:'', dd2:'',
+           arrFixed:'', aa1:'', aa2:'',
+           blockTime:'', blockTimeReal:false };
+}
 
 function aiGenEmptyLeg() {
   return { dep: null, arr: aiGenTarget || null,
@@ -5792,10 +5851,254 @@ function renderAiGenAirline() {
   if (!code || code.length < 3) {
     if (logo) logo.innerHTML = '<span style="font-size:10px;color:var(--txt3);">logo</span>';
     if (name) name.textContent = '';
+  } else {
+    if (logo) logo.innerHTML = airlineLogoHtml(code);
+    if (name) name.textContent = AIRLINE_NAMES[code] || 'Unknown airline code';
+  }
+  setupAiGenAlHub();
+  renderAiGenAlLegs();
+}
+
+// Wire up the hub airport search box (only once)
+function setupAiGenAlHub() {
+  const inp = document.getElementById('aigen-al-hub-input');
+  const box = document.getElementById('aigen-al-hub-box');
+  if (!inp || !box) return;
+  // Already resolved → show the box
+  if (aiGenAlHub) {
+    inp.value = `${aiGenAlHub[0]}${aiGenAlHub[1]?' / '+aiGenAlHub[1]:''} — ${aiGenAlHub[7]||aiGenAlHub[2]}`;
+  }
+  if (inp._alHubWired) return;
+  inp._alHubWired = true;
+  buildSuggestBox(inp, ap => {
+    aiGenAlHub = ap;
+    inp.value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
+    // Prefill DEP airport on legs that still point at the old hub or are empty
+    aiGenAlLegs.forEach(l => { if (!l.dep) l.dep = ap; });
+    renderAiGenAlLegs();
+  });
+}
+
+// Master DEP/ARR window changed → push to legs that weren't manually edited
+function syncAiGenAlDefaults(field, value) {
+  const map = { depFrom:'dd1', depUntil:'dd2', arrFrom:'aa1', arrUntil:'aa2' };
+  const f = map[field];
+  if (!f) return;
+  aiGenAlLegs.forEach(l => { if (!l['_custom_'+f]) l[f] = value; });
+  renderAiGenAlLegs();
+}
+
+// ── Render airline-mode route rows ────────────────────────────────────────────
+function renderAiGenAlLegs() {
+  const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
+  container.innerHTML = '';
+
+  if (!aiGenAirline || aiGenAirline.length < 3) {
+    container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">Enter an airline ICAO code above to start.</div>';
     return;
   }
-  if (logo) logo.innerHTML = airlineLogoHtml(code);
-  if (name) name.textContent = AIRLINE_NAMES[code] || 'Unknown airline code';
+  if (!aiGenAlHub) {
+    container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">Select a hub airport above to start adding routes.</div>';
+    return;
+  }
+  if (!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg());
+
+  const mDepFrom  = document.getElementById('aigen-al-dep-from')?.value  || '06:00';
+  const mDepUntil = document.getElementById('aigen-al-dep-until')?.value || '22:30';
+  const mArrFrom  = document.getElementById('aigen-al-arr-from')?.value  || '05:30';
+  const mArrUntil = document.getElementById('aigen-al-arr-until')?.value || '23:00';
+
+  const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
+  const utcStr = ap => { if(!ap) return ''; const o=getUtcOffset(ap); return 'UTC'+(o>=0?'+':'')+o; };
+
+  aiGenAlLegs.forEach((leg, i) => {
+    if (!leg.dep) leg.dep = aiGenAlHub;
+    if (!leg.dd1) leg.dd1 = mDepFrom;
+    if (!leg.dd2) leg.dd2 = mDepUntil;
+    if (!leg.aa1) leg.aa1 = mArrFrom;
+    if (!leg.aa2) leg.aa2 = mArrUntil;
+
+    const wrapper = document.createElement('div');
+    wrapper.style.cssText = 'margin-bottom:3px;';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;';
+
+    // ── Logo (airline) ──
+    const logoCell = document.createElement('div');
+    logoCell.style.cssText = 'display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border:1px solid rgba(255,255,255,.25);border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
+    logoCell.innerHTML = airlineLogoHtml(aiGenAirline);
+
+    // ── EQP ──
+    const eqpCell = document.createElement('div');
+    eqpCell.style.cssText = bS+'width:90px;min-width:90px;align-items:center;gap:3px;';
+    const eqpLbl=document.createElement('div'); eqpLbl.style.cssText='font-size:9px;color:var(--txt3);'; eqpLbl.textContent='EQP';
+    const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=8;
+    eqpInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:76px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+    eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); };
+    eqpCell.appendChild(eqpLbl); eqpCell.appendChild(eqpInp);
+
+    // Helper: a fixed-time input (DEP/ARR exact time, optional)
+    function fixedTimeInput(label, field) {
+      const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
+      const I=document.createElement('input'); I.type='text'; I.value=leg[field]||''; I.maxLength=5; I.placeholder='--:--';
+      I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+      I.oninput=()=>{ leg[field]=I.value; };
+      I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; };
+      wrap.appendChild(L); wrap.appendChild(I);
+      return wrap;
+    }
+    // Helper: a from/until window pair (side by side)
+    function winPair(f1, f2) {
+      const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:4px;';
+      [['from',f1],['until',f2]].forEach(([lbl,fld])=>{
+        const col=document.createElement('div'); col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+        const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=lbl;
+        const I=document.createElement('input'); I.type='text'; I.value=leg[fld]||''; I.maxLength=5;
+        I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+        I.oninput=()=>{ leg[fld]=I.value; leg['_custom_'+fld]=true; };
+        I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[fld]=I.value; };
+        col.appendChild(L); col.appendChild(I); wrap.appendChild(col);
+      });
+      return wrap;
+    }
+
+    // ── DEP airport + time row (fixed DEP · DEP from/until · UTC) ──
+    const depCol = document.createElement('div');
+    depCol.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:230px;flex-shrink:0;';
+    const depApWrap = document.createElement('div');
+    depApWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
+    if (leg.dep) {
+      depApWrap.innerHTML=apBox(leg.dep); depApWrap.style.cursor='pointer'; depApWrap.title='Click to change';
+      depApWrap.onclick=()=>{ leg.dep=null; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs(); };
+    } else {
+      const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
+      const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
+      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
+      w.appendChild(inp); depApWrap.appendChild(w);
+      buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i); });
+    }
+    const depTimeRow = document.createElement('div');
+    depTimeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
+    depTimeRow.appendChild(fixedTimeInput('DEP','depFixed'));
+    depTimeRow.appendChild(winPair('dd1','dd2'));
+    const depUtc=document.createElement('div'); depUtc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+    const depUtcL=document.createElement('div'); depUtcL.style.cssText='font-size:9px;color:var(--txt3);'; depUtcL.textContent='offset';
+    const depUtcV=document.createElement('div'); depUtcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; depUtcV.textContent=utcStr(leg.dep);
+    depUtc.appendChild(depUtcL); depUtc.appendChild(depUtcV);
+    depTimeRow.appendChild(depUtc);
+    depCol.appendChild(depApWrap); depCol.appendChild(depTimeRow);
+
+    // ── Block time (lookup / estimate / editable) ──
+    const btCell = document.createElement('div');
+    btCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
+    const arrowDiv=document.createElement('div');
+    arrowDiv.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrowDiv.textContent='→'; arrowDiv.title='Search block time';
+    arrowDiv.onclick=()=>aiGenAlFetchBlockTime(i);
+    const btInp=document.createElement('input');
+    btInp.type='text'; btInp.id='aigen-al-bt-'+i; btInp.value=leg.blockTime||''; btInp.placeholder='H:MM';
+    btInp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?700:400)+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
+    btInp.oninput=()=>{ leg.blockTime=btInp.value; leg.blockTimeReal=false; };
+    const btL=document.createElement('div'); btL.style.cssText='font-size:9px;color:var(--txt3);'; btL.textContent='block';
+    btCell.appendChild(arrowDiv); btCell.appendChild(btInp); btCell.appendChild(btL);
+
+    // ── ARR airport + time row (fixed ARR · ARR from/until · UTC) ──
+    const arrCol = document.createElement('div');
+    arrCol.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:230px;flex-shrink:0;';
+    const arrApWrap = document.createElement('div');
+    arrApWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
+    if (leg.arr) {
+      arrApWrap.innerHTML=apBox(leg.arr); arrApWrap.style.cursor='pointer'; arrApWrap.title='Click to change';
+      arrApWrap.onclick=()=>{ leg.arr=null; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs(); };
+    } else {
+      const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
+      const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
+      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
+      w.appendChild(inp); arrApWrap.appendChild(w);
+      buildSuggestBox(inp, ap=>{ leg.arr=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i); });
+    }
+    const arrTimeRow = document.createElement('div');
+    arrTimeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
+    arrTimeRow.appendChild(fixedTimeInput('ARR','arrFixed'));
+    arrTimeRow.appendChild(winPair('aa1','aa2'));
+    const arrUtc=document.createElement('div'); arrUtc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+    const arrUtcL=document.createElement('div'); arrUtcL.style.cssText='font-size:9px;color:var(--txt3);'; arrUtcL.textContent='offset';
+    const arrUtcV=document.createElement('div'); arrUtcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; arrUtcV.textContent=utcStr(leg.arr);
+    arrUtc.appendChild(arrUtcL); arrUtc.appendChild(arrUtcV);
+    arrTimeRow.appendChild(arrUtc);
+    arrCol.appendChild(arrApWrap); arrCol.appendChild(arrTimeRow);
+
+    // ── Delete ──
+    const delCell = document.createElement('div');
+    delCell.style.cssText='display:flex;align-items:center;padding:0 2px;flex-shrink:0;';
+    const delBtn=document.createElement('button'); delBtn.textContent='✕';
+    delBtn.style.cssText='font-size:11px;padding:3px 7px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;';
+    delBtn.onclick=()=>{ aiGenAlLegs.splice(i,1); if(!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+    delCell.appendChild(delBtn);
+
+    row.appendChild(logoCell); row.appendChild(eqpCell);
+    row.appendChild(depCol); row.appendChild(btCell); row.appendChild(arrCol);
+    row.appendChild(delCell);
+    wrapper.appendChild(row);
+
+    // Sub-buttons
+    const sub=document.createElement('div'); sub.style.cssText='display:flex;gap:6px;padding:2px 0 6px;';
+    const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
+    dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
+    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i]}); renderAiGenAlLegs(); };
+    const addBtn=document.createElement('button'); addBtn.textContent='+ Add route';
+    addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
+    addBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+    sub.appendChild(dupBtn); sub.appendChild(addBtn);
+    wrapper.appendChild(sub);
+    container.appendChild(wrapper);
+  });
+
+  const globalAdd=document.createElement('button'); globalAdd.textContent='+ Add route';
+  globalAdd.style.cssText='margin-top:4px;font-size:11px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt2);cursor:pointer;';
+  globalAdd.onclick=()=>{ aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+  container.appendChild(globalAdd);
+}
+
+// Block time lookup for an airline-mode leg (same approach as airport mode)
+async function aiGenAlFetchBlockTime(i) {
+  const leg = aiGenAlLegs[i]; if (!leg||!leg.dep||!leg.arr) return;
+  const btEl = document.getElementById('aigen-al-bt-'+i);
+  if (btEl) { btEl.value='🔍'; btEl.style.color='#777'; }
+  const apiKey = typeof getApiKey==='function' ? getApiKey() : null;
+  if (apiKey) {
+    try {
+      const depIata=leg.dep[1]||leg.dep[0], arrIata=leg.arr[1]||leg.arr[0];
+      const resp = await fetch('https://api.anthropic.com/v1/messages',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:100,
+          tools:[{type:'web_search_20250305',name:'web_search'}],
+          messages:[{role:'user',content:`Search "flights ${depIata}-${arrIata} nonstop" and find nonstop duration. Reply ONLY in H:MM format (e.g. 1:05). If none found, reply NONE.`}]
+        })
+      });
+      if (resp.ok) {
+        const data=await resp.json();
+        const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
+        const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
+        if (m&&!txt.toUpperCase().includes('NONE')) {
+          leg.blockTime=m[0]; leg.blockTimeReal=true;
+          if (btEl){btEl.value=m[0];btEl.style.color='#3fb950';btEl.style.fontWeight='700';btEl.style.fontStyle='';}
+          return;
+        }
+      }
+    } catch(e) {}
+  }
+  // Fallback: great-circle distance estimate
+  const R=6371,φ1=leg.dep[3]*Math.PI/180,φ2=leg.arr[3]*Math.PI/180;
+  const Δφ=(leg.arr[3]-leg.dep[3])*Math.PI/180,Δλ=(leg.arr[4]-leg.dep[4])*Math.PI/180;
+  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  const spd=dist<200?400:dist<500?580:dist<2000?780:870;
+  const mins=Math.round(dist/spd*60)+(dist<500?15:25);
+  const bt=Math.floor(mins/60)+':'+(String(mins%60)).padStart(2,'0');
+  leg.blockTime=bt; leg.blockTimeReal=false;
+  if (btEl){btEl.value=bt;btEl.style.color='#777';btEl.style.fontStyle='italic';btEl.style.fontWeight='400';}
 }
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
