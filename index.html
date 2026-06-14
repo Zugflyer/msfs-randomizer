@@ -5804,7 +5804,57 @@ function aiGenAlEmptyLeg() {
            // return leg (arr → hub)
            rDepFixed:'', rdd1:'', rdd2:'',
            rArrFixed:'', raa1:'', raa2:'',
-           rBlockTime:'', rBlockTimeReal:false };
+           rBlockTime:'', rBlockTimeReal:false,
+           // when split into a multi-stop chain, `stops` holds the intermediate
+           // airports (arrays or null) between dep and arr. undefined/empty = simple.
+           stops: undefined };
+}
+
+// One hop in a split chain: a single flight segment dep→arr with its own time data.
+function aiGenAlEmptyHop(dep, arr) {
+  return { dep: dep||null, arr: arr||null, depFixed:'',
+           dd1:'', dd2:'', blockTime:'', blockTimeReal:false };
+}
+
+// Split a leg: add one more intermediate stop (initially empty). Builds `stops` if absent.
+function aiGenAlSplit(i) {
+  const leg = aiGenAlLegs[i]; if (!leg) return;
+  if (!Array.isArray(leg.stops)) leg.stops = [];
+  leg.stops.push(null);               // a new empty intermediate stop
+  rebuildAlChainHops(leg);
+  renderAiGenAlLegs();
+}
+
+// Remove the last intermediate stop (un-split one level). When none remain, leg is simple.
+function aiGenAlUnsplit(i) {
+  const leg = aiGenAlLegs[i]; if (!leg || !Array.isArray(leg.stops) || !leg.stops.length) return;
+  leg.stops.pop();
+  if (!leg.stops.length) { leg.stops = undefined; leg.outHops = undefined; leg.retHops = undefined; }
+  else rebuildAlChainHops(leg);
+  renderAiGenAlLegs();
+}
+
+// (Re)build the outbound and return hop arrays from dep + stops + arr.
+// Outbound chain: dep → stop1 → … → arr.  Return chain: arr → … → stop1 → dep.
+// Preserves existing hop time data where the endpoints still match.
+function rebuildAlChainHops(leg) {
+  const stops = leg.stops || [];
+  const fwd = [leg.dep, ...stops, leg.arr];           // forward airport sequence
+  const rev = fwd.slice().reverse();                  // return airport sequence
+  const carry = (oldHops, seq) => {
+    const out = [];
+    for (let k=0; k<seq.length-1; k++) {
+      const prev = (oldHops && oldHops[k]) || {};
+      out.push(Object.assign(aiGenAlEmptyHop(seq[k], seq[k+1]), {
+        depFixed: prev.depFixed||'', dd1: prev.dd1||'', dd2: prev.dd2||'',
+        blockTime: prev.blockTime||'', blockTimeReal: !!prev.blockTimeReal,
+        dep: seq[k], arr: seq[k+1],
+      }));
+    }
+    return out;
+  };
+  leg.outHops = carry(leg.outHops, fwd);
+  leg.retHops = carry(leg.retHops, rev);
 }
 
 function aiGenEmptyLeg() {
@@ -5984,6 +6034,12 @@ function renderAiGenAlLegs() {
     if (!leg.rdd2) leg.rdd2 = mDepUntil;
     if (!leg.raa1) leg.raa1 = mArrFrom;
     if (!leg.raa2) leg.raa2 = mArrUntil;
+
+    // Split (multi-stop chain) legs render with their own two-row builder.
+    if (Array.isArray(leg.stops) && leg.stops.length) {
+      renderAlChainLeg(container, leg, i, {bS, utcStr, mDepFrom, mDepUntil, mArrFrom, mArrUntil});
+      return;
+    }
 
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
@@ -6206,7 +6262,11 @@ function renderAiGenAlLegs() {
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
     addBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
-    leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn);
+    const splitBtn=document.createElement('button'); splitBtn.textContent='⑂ Splitten';
+    splitBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid rgba(123,97,255,.5);background:transparent;color:#a78bfa;cursor:pointer;width:100%;box-sizing:border-box;';
+    splitBtn.title='Add an intermediate stop (e.g. BEY→SYD becomes BEY→■→SYD with a separate return row)';
+    splitBtn.onclick=()=>aiGenAlSplit(i);
+    leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn); leftCol.appendChild(splitBtn);
 
     row.appendChild(leftCol);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
@@ -6219,7 +6279,259 @@ function renderAiGenAlLegs() {
   });
 }
 
-// Block time lookup for an airline-mode leg (same approach as airport mode)
+// ── Render a SPLIT (multi-stop chain) leg as two rows: outbound chain + return chain ──
+// Outbound: dep → stop1 → … → arr.  Return: arr → … → stop1 → dep.
+// Editing an empty stop fills the mirrored fields on both rows automatically.
+function renderAlChainLeg(container, leg, i, ctx) {
+  const { bS, utcStr } = ctx;
+  rebuildAlChainHops(leg);
+  const stops = leg.stops || [];
+  const fmtHM = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+  const hm = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1])*60+(+m[2]):null; };
+
+  // Compute a hop's arrival clock time from its fixed DEP + block (local at hop.arr)
+  const hopArr = hop => {
+    const d=hm(hop.depFixed), b=hm(hop.blockTime);
+    if (d==null||b==null||!hop.dep||!hop.arr) return '';
+    const tz=(getUtcOffset(hop.arr)-getUtcOffset(hop.dep))*60;
+    return fmtHM(d+b+tz);
+  };
+
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText='margin-bottom:8px;border:1px solid rgba(123,97,255,.25);border-radius:8px;padding:6px;background:rgba(123,97,255,.03);';
+
+  const gnd = alGroundTime(leg.eqp);
+
+  // Build a single hop's airport+time column (editable airport, fixed DEP, window, UTC, computed ARR)
+  // hops: the array (leg.outHops or leg.retHops); k: index; side: 'out'|'ret'
+  function hopAirportCol(hops, k, side, isFirstDep) {
+    const hop = hops[k];
+    const col = document.createElement('div');
+    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:200px;min-width:200px;flex-shrink:0;';
+
+    // The DEParture airport box for this hop
+    const apWrap = document.createElement('div');
+    apWrap.style.cssText='display:flex;align-items:center;min-height:46px;width:100%;';
+    const editableDep = isFirstDep; // only the very first dep of each row's first hop chains to leg.dep/arr; intermediate deps mirror stops
+    renderHopApBox(apWrap, hop.dep, ap => {
+      // editing the first departure airport of the outbound = leg.dep; of the return = leg.arr
+      if (side==='out') leg.dep = ap; else leg.arr = ap;
+      rebuildAlChainHops(leg); renderAiGenAlLegs();
+    }, editableDep);
+    col.appendChild(apWrap);
+
+    // time row: DEP fixed · window · UTC
+    const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
+    timeRow.appendChild(alSmallFixed('DEP', hop.depFixed, v=>{ hop.depFixed=v; renderAiGenAlLegs(); }));
+    timeRow.appendChild(alSmallWin(hop, 'dd1','dd2'));
+    timeRow.appendChild(alUtcMini(hop.dep, utcStr));
+    col.appendChild(timeRow);
+    return col;
+  }
+
+  // The ARR airport column for a hop (shows computed ARR in the fixed field). For
+  // intermediate stops this airport is editable and chains to leg.stops.
+  function hopArrCol(hops, k, side) {
+    const hop = hops[k];
+    const isLast = (k === hops.length-1);
+    const col = document.createElement('div');
+    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:200px;min-width:200px;flex-shrink:0;';
+
+    const apWrap=document.createElement('div'); apWrap.style.cssText='display:flex;align-items:center;min-height:46px;width:100%;';
+    if (isLast) {
+      // final destination of the row: outbound→leg.arr, return→leg.dep (editable endpoints)
+      renderHopApBox(apWrap, hop.arr, ap=>{
+        if (side==='out') leg.arr = ap; else leg.dep = ap;
+        rebuildAlChainHops(leg); renderAiGenAlLegs();
+      }, true);
+    } else {
+      // an intermediate stop: editable, writes into leg.stops (position depends on side)
+      renderHopApBox(apWrap, hop.arr, ap=>{
+        // outbound hop k arrives at stops[k]; return hop k arrives at stops[len-2-k]
+        const sIdx = (side==='out') ? k : (stops.length-1-k);
+        leg.stops[sIdx] = ap;
+        rebuildAlChainHops(leg); renderAiGenAlLegs();
+      }, true);
+    }
+    col.appendChild(apWrap);
+
+    const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
+    timeRow.appendChild(alSmallFixedRO('ARR', hopArr(hop)));
+    timeRow.appendChild(alUtcMini(hop.arr, utcStr));
+    col.appendChild(timeRow);
+    return col;
+  }
+
+  // Block cell for a hop
+  function hopBlockCell(hops, k, side) {
+    const hop = hops[k];
+    const cell=document.createElement('div');
+    cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
+    const arrow=document.createElement('div'); arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
+    arrow.onclick=()=>aiGenAlFetchHopBlock(i, side, k);
+    const inp=document.createElement('input'); inp.type='text'; inp.value=hop.blockTime||''; inp.placeholder='H:MM';
+    inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(hop.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(hop.blockTimeReal?700:400)+';'+(hop.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
+    inp.oninput=()=>{ hop.blockTime=inp.value; hop.blockTimeReal=false; };
+    inp.onblur=()=>renderAiGenAlLegs();
+    const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
+    cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
+    return cell;
+  }
+
+  function groundMini() {
+    const g=document.createElement('div');
+    g.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:80px;min-width:80px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    const v=document.createElement('div'); v.style.cssText='font-size:12px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; v.textContent=gnd+' min';
+    g.title='Turnaround at stop'; g.appendChild(v); return g;
+  }
+
+  // Render one chain row (sequence of hops with blocks + ground between)
+  function chainRow(hops, side, label) {
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:stretch;justify-content:center;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
+
+    // left column only on the outbound row (logo+eqp+buttons); return row gets a label spacer
+    if (side==='out') {
+      row.appendChild(buildChainLeftCol(leg, i));
+    } else {
+      const sp=document.createElement('div'); sp.style.cssText='width:175px;min-width:175px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:11px;font-weight:600;';
+      sp.textContent='↩ return';
+      row.appendChild(sp);
+    }
+
+    hops.forEach((hop, k) => {
+      row.appendChild(hopAirportCol(hops, k, side, k===0));
+      row.appendChild(hopBlockCell(hops, k, side));
+      if (k === hops.length-1) {
+        row.appendChild(hopArrCol(hops, k, side));
+      } else {
+        // intermediate stop column doubles as this hop's ARR and next hop's DEP
+        row.appendChild(hopArrCol(hops, k, side));
+        row.appendChild(groundMini());
+      }
+    });
+
+    // delete on the outbound row only (removes the whole split leg)
+    if (side==='out') {
+      const delCell=document.createElement('div'); delCell.style.cssText='display:flex;align-items:center;padding:0 2px;flex-shrink:0;';
+      const delBtn=document.createElement('button'); delBtn.textContent='✕';
+      delBtn.style.cssText='font-size:11px;padding:3px 7px;border-radius:var(--r);border:1px solid #3a1a1a;background:transparent;color:var(--red);cursor:pointer;';
+      delBtn.onclick=()=>{ aiGenAlLegs.splice(i,1); if(!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+      delCell.appendChild(delBtn); row.appendChild(delCell);
+    }
+    return row;
+  }
+
+  wrapper.appendChild(chainRow(leg.outHops, 'out', 'outbound'));
+  wrapper.appendChild(chainRow(leg.retHops, 'ret', 'return'));
+  container.appendChild(wrapper);
+}
+
+// Left column for a split leg: logo + EQP, then Duplicate / Add / Unsplit buttons.
+function buildChainLeftCol(leg, i) {
+  const leftCol=document.createElement('div'); leftCol.style.cssText='display:flex;flex-direction:column;gap:4px;flex-shrink:0;';
+  const logoEqpRow=document.createElement('div'); logoEqpRow.style.cssText='display:flex;gap:5px;';
+  const logoCell=document.createElement('div');
+  logoCell.style.cssText='display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border:1px solid rgba(255,255,255,.25);border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
+  logoCell.innerHTML=airlineLogoHtml(aiGenAirline);
+  const eqpCell=document.createElement('div');
+  eqpCell.style.cssText='display:flex;flex-direction:column;justify-content:center;align-items:center;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;width:90px;min-width:90px;';
+  const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=4;
+  eqpInp.style.cssText='background:transparent;border:none;color:#fff;font-size:21px;font-weight:700;letter-spacing:.04em;padding:0;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+  eqpInp.oninput=()=>{ const pos=eqpInp.selectionStart; eqpInp.value=eqpInp.value.toUpperCase(); leg.eqp=eqpInp.value; eqpInp.setSelectionRange(pos,pos); };
+  eqpCell.appendChild(eqpInp);
+  logoEqpRow.appendChild(logoCell); logoEqpRow.appendChild(eqpCell);
+  leftCol.appendChild(logoEqpRow);
+
+  const mk=(txt,col,fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid '+(col||'var(--bdr)')+';background:transparent;color:'+(col?'#a78bfa':'var(--txt3)')+';cursor:pointer;width:100%;box-sizing:border-box;'; b.onclick=fn; return b; };
+  leftCol.appendChild(mk('⧉ Duplicate',null,()=>{ const c=JSON.parse(JSON.stringify(aiGenAlLegs[i])); aiGenAlLegs.splice(i+1,0,c); renderAiGenAlLegs(); }));
+  leftCol.appendChild(mk('+ Add flight',null,()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); }));
+  leftCol.appendChild(mk('⑂ + Stop','rgba(123,97,255,.5)',()=>aiGenAlSplit(i)));
+  leftCol.appendChild(mk('⑀ − Stop','rgba(123,97,255,.5)',()=>aiGenAlUnsplit(i)));
+  return leftCol;
+}
+
+// Small reusable bits for chain rows
+function renderHopApBox(apWrap, ap, onSelect, editable) {
+  if (ap) {
+    apWrap.innerHTML = '<div style="width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:6px 8px;text-align:center;background:rgba(255,255,255,.02);">'
+      + '<div style="font-size:21px;font-weight:700;letter-spacing:.04em;color:#fff;line-height:1.1;">'+ap[0]+(ap[1]?' <span style="color:var(--blue);">/ '+ap[1]+'</span>':'')+'</div>'
+      + '<div style="font-size:10px;color:var(--txt3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+(ap[7]||ap[2])+'</div></div>';
+    if (editable) { apWrap.style.cursor='pointer'; apWrap.title='Click to change'; apWrap.onclick=()=>{ onSelect(null); }; }
+    else { apWrap.style.opacity='.85'; }
+  } else if (editable) {
+    const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
+    const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
+    inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:12px 7px;box-sizing:border-box;text-align:center;';
+    w.appendChild(inp); apWrap.appendChild(w);
+    buildSuggestBox(inp, onSelect);
+  } else {
+    const ph=document.createElement('div'); ph.style.cssText='width:100%;text-align:center;color:var(--txt3);font-size:11px;font-style:italic;padding:14px 7px;'; ph.textContent='—'; apWrap.appendChild(ph);
+  }
+}
+function alSmallFixed(label, val, onInput) {
+  const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+  const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
+  const I=document.createElement('input'); I.type='text'; I.value=val||''; I.maxLength=5; I.placeholder='--:--';
+  I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+  I.oninput=()=>onInput(I.value);
+  I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; onInput(I.value); };
+  wrap.appendChild(L); wrap.appendChild(I); return wrap;
+}
+function alSmallFixedRO(label, computed) {
+  const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+  const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
+  const I=document.createElement('input'); I.type='text'; I.value=computed||''; I.readOnly=true; I.placeholder='--:--';
+  I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(computed?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);color:'+(computed?'#3fb950':'var(--txt3)')+';font-weight:'+(computed?700:400)+';text-align:center;outline:none;cursor:default;';
+  wrap.appendChild(L); wrap.appendChild(I); return wrap;
+}
+function alSmallWin(hop, f1, f2) {
+  const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:4px;';
+  [['from',f1],['until',f2]].forEach(([lbl,fld])=>{
+    const col=document.createElement('div'); col.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+    const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=lbl;
+    const I=document.createElement('input'); I.type='text'; I.value=hop[fld]||''; I.maxLength=5;
+    I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+    I.oninput=()=>{ hop[fld]=I.value; };
+    I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; hop[fld]=I.value; };
+    col.appendChild(L); col.appendChild(I); wrap.appendChild(col);
+  });
+  return wrap;
+}
+function alUtcMini(ap, utcStr) {
+  const u=document.createElement('div'); u.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+  const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='offset';
+  const V=document.createElement('div'); V.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; V.textContent=utcStr(ap);
+  u.appendChild(L); u.appendChild(V); return u;
+}
+
+// Block-time lookup for one hop of a split chain.
+async function aiGenAlFetchHopBlock(i, side, k) {
+  const leg = aiGenAlLegs[i]; if (!leg) return;
+  const hops = side==='out' ? leg.outHops : leg.retHops;
+  const hop = hops && hops[k]; if (!hop || !hop.dep || !hop.arr) return;
+  const apiKey = typeof getApiKey==='function' ? getApiKey() : null;
+  const set=(v,real)=>{ hop.blockTime=v; hop.blockTimeReal=real; renderAiGenAlLegs(); };
+  if (apiKey) {
+    try {
+      const depIata=hop.dep[1]||hop.dep[0], arrIata=hop.arr[1]||hop.arr[0];
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body:JSON.stringify({model:'claude-haiku-4-5-20251001',max_tokens:100,tools:[{type:'web_search_20250305',name:'web_search'}],
+          messages:[{role:'user',content:`Search "flights ${depIata}-${arrIata} nonstop" and find nonstop duration. Reply ONLY in H:MM format (e.g. 1:05). If none found, reply NONE.`}]})});
+      if (r.ok) {
+        const d=await r.json();
+        const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
+        const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
+        if (m&&!txt.toUpperCase().includes('NONE')) { set(m[0],true); return; }
+      }
+    } catch(e){}
+  }
+  const eff=alEstimateEffectiveBlock(hop.dep, hop.arr);
+  if (eff!=null) set(Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'), false);
+}
+
+// Block time lookup for an airline-mode (simple) leg, outbound or return.
 async function aiGenAlFetchBlockTime(i, dir) {
   dir = dir || 'out';
   const isOut = dir === 'out';
@@ -6617,9 +6929,14 @@ async function createRotationsAirline() {
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
   if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
 
-  // Keep only legs with both airports, an EQP, and a block time on each direction.
-  const src = aiGenAlLegs.filter(l => l.dep && l.arr && l.eqp && l.blockTime && l.rBlockTime);
-  if (!src.length) { alert('Please complete at least one route (departure, arrival, EQP, and block times).'); return; }
+  // Keep only legs that are completely specified.
+  const isChain = l => Array.isArray(l.stops) && l.stops.length;
+  const chainComplete = l => l.outHops && l.outHops.every(h=>h.dep&&h.arr&&h.blockTime)
+                          && l.retHops && l.retHops.every(h=>h.dep&&h.arr&&h.blockTime);
+  const src = aiGenAlLegs.filter(l => l.eqp && (
+    isChain(l) ? chainComplete(l) : (l.dep && l.arr && l.blockTime && l.rBlockTime)
+  ));
+  if (!src.length) { alert('Please complete at least one route (all airports, EQP, and block times).'); return; }
 
   // Convert to the shape buildRotationBars expects.
   // If the user entered a FIXED departure time for a leg, pin that leg to exactly that
@@ -6627,6 +6944,23 @@ async function createRotationsAirline() {
   // window wide (so findTime returns precisely the entered time). Legs without a fixed
   // time keep their from/until windows and let findTime search as usual.
   const validLegs = src.map(l => {
+    if (isChain(l)) {
+      // A split chain → one rotation. hops = outbound hops then return hops, in order.
+      // Each hop carries its own block time + optional fixed departure (first hop only
+      // needs a start; the rest chain via block + ground at build time).
+      const hops = [...l.outHops, ...l.retHops].map((h,idx) => ({
+        dep: h.dep, arr: h.arr, block: h.blockTime,
+        depFixed: (h.depFixed && /^\d{1,2}:\d{2}$/.test(h.depFixed)) ? h.depFixed : null,
+        dd1: h.dd1, dd2: h.dd2,
+        // mark which half this hop belongs to for out/ret grouping
+        half: idx < l.outHops.length ? 'out' : 'ret',
+      }));
+      return {
+        dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
+        groundTime: String(alGroundTime(l.eqp)), dnOut:'any', dnRet:'any',
+        hops, // <-- presence of hops triggers chain bar building
+      };
+    }
     const outFixed = (l.depFixed && /^\d{1,2}:\d{2}$/.test(l.depFixed)) ? l.depFixed : null;
     const retFixed = (l.rDepFixed && /^\d{1,2}:\d{2}$/.test(l.rDepFixed)) ? l.rDepFixed : null;
     return {
@@ -6650,13 +6984,15 @@ async function createRotationsAirline() {
 
   // Pre-build research from UI data (UTC offsets + block times come straight from the inputs)
   const utc = {};
-  validLegs.forEach(l => { utc[l.dep[0]] = getUtcOffset(l.dep); utc[l.arr[0]] = getUtcOffset(l.arr); });
+  validLegs.forEach(l => {
+    if (l.hops) { l.hops.forEach(h=>{ if(h.dep) utc[h.dep[0]]=getUtcOffset(h.dep); if(h.arr) utc[h.arr[0]]=getUtcOffset(h.arr); }); }
+    else { utc[l.dep[0]] = getUtcOffset(l.dep); utc[l.arr[0]] = getUtcOffset(l.arr); }
+  });
   const hm = s => { const m=String(s||'').match(/(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; };
   const fmt = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const routes = validLegs.map((l,idx) => ({
-    r: idx+1,
-    block_out: l.blockTime, block_in: l.rBlockTime,
-  }));
+  const routes = validLegs.map((l,idx) => l.hops
+    ? { r: idx+1 } // chain flight numbers are assigned per-hop at build time
+    : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
 
   // Cache check (signature over the converted legs)
   const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime]));
@@ -6831,6 +7167,39 @@ function buildRotationBars(validLegs, research) {
   rotSplitLegs = new Set();
 
   validLegs.forEach((l,idx)=>{
+    // ── Split chain leg → one chained rotation (multiple hops, same legIdx) ──
+    if (l.hops && l.hops.length) {
+      const ground = parseInt(l.groundTime||'90')||90;
+      const cleanFnum=(v,fb)=>{ const d=String(v||'').replace(/\D/g,''); return d||fb; };
+      // Start time: first hop's fixed DEP, else mid of its window, else 08:00 (local at first dep).
+      let startLocal;
+      const h0=l.hops[0];
+      if (h0.depFixed!=null && hm(h0.depFixed)!=null) startLocal=hm(h0.depFixed);
+      else { const a=hm(h0.dd1), b=hm(h0.dd2); startLocal = (a!=null&&b!=null) ? Math.round((a+ (b>=a? b : b+1440))/2)%1440 : 480; }
+      let curLocal = startLocal;          // local clock at current hop's departure airport
+      l.hops.forEach((h,hi)=>{
+        const dOff=utc[h.dep[0]]??0, aOff=utc[h.arr[0]]??0;
+        const blockMin=hm(h.block)||120;
+        const depLocal=((curLocal%1440)+1440)%1440;
+        const arrLocalRaw = depLocal + blockMin + (aOff-dOff)*60;
+        const arrLocal=((arrLocalRaw%1440)+1440)%1440;
+        const dayCross=Math.floor((depLocal+blockMin+(aOff-dOff)*60)/1440);
+        rotBars.push({
+          legIdx:idx, dir:h.half, hop:hi, chain:true,
+          airline:l.airline, eqp:l.aircraft,
+          depIcao:h.dep[0], arrIcao:h.arr[0],
+          depLocal, arrLocal, dayCross,
+          depOff:dOff, arrOff:aOff,
+          block:blockMin, ground, fnum:cleanFnum(null, String(1000+idx*11+hi).padStart(4,'0')),
+          ok:true, reason:'', assigned:0
+        });
+        // chain to next hop: arrival local at this hop's ARR airport, + ground, expressed
+        // as the NEXT hop's departure-airport local clock (same airport, so no tz jump)
+        curLocal = arrLocal + ground;
+      });
+      return;
+    }
+
     const ri=rinfo[idx+1]||{};
     const ground = parseInt(l.groundTime||'90')||90;
     const depUtc = utc[l.dep[0]]??0;
