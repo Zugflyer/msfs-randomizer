@@ -7045,7 +7045,9 @@ async function createRotationsAirline() {
       // block + ground at build time.
       const hops = [...l.outHops, ...l.retHops].map((h,idx) => ({
         dep: h.dep, arr: h.arr, block: h.blockTime,
+        depFixed: (h.depFixed && /^\d{1,2}:\d{2}$/.test(h.depFixed)) ? h.depFixed : null,
         half: idx < l.outHops.length ? 'out' : 'ret',
+        firstOfRow: (idx === 0) || (idx === l.outHops.length), // first segment of outbound / of return row
       }));
       return {
         dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
@@ -7264,17 +7266,19 @@ function buildRotationBars(validLegs, research) {
     if (l.hops && l.hops.length) {
       const ground = parseInt(l.groundTime||'90')||90;
       const cleanFnum=(v,fb)=>{ const d=String(v||'').replace(/\D/g,''); return d||fb; };
-      // Start time: leg.startFixed if given, else 08:00 (local at first dep).
-      let startLocal;
-      if (l.startFixed!=null && hm(l.startFixed)!=null) startLocal=hm(l.startFixed);
-      else startLocal=480;
-      let curLocal = startLocal;          // local clock at current hop's departure airport
+      let curLocal = null;                // local clock at current hop's departure airport
       l.hops.forEach((h,hi)=>{
         const dOff=utc[h.dep[0]]??0, aOff=utc[h.arr[0]]??0;
         const blockMin=round5(hm(h.block)||120);
-        const depLocal=((curLocal%1440)+1440)%1440;
+        // The first segment of each row (outbound start, return start) uses the user's
+        // typed departure time; later segments chain from (previous arrival + ground).
+        let depMin;
+        if (h.firstOfRow && hm(h.depFixed)!=null) depMin = hm(h.depFixed);
+        else if (h.firstOfRow) depMin = (curLocal!=null ? curLocal : 480); // fallback
+        else depMin = (curLocal!=null ? curLocal : 480);
+        const depLocal=round5(((depMin%1440)+1440)%1440)%1440;
         const arrLocalRaw = depLocal + blockMin + (aOff-dOff)*60;
-        const arrLocal=((arrLocalRaw%1440)+1440)%1440;
+        const arrLocal=round5(((arrLocalRaw%1440)+1440)%1440)%1440;
         const dayCross=Math.floor((depLocal+blockMin+(aOff-dOff)*60)/1440);
         rotBars.push({
           legIdx:idx, dir:h.half, hop:hi, chain:true,
@@ -7285,8 +7289,7 @@ function buildRotationBars(validLegs, research) {
           block:blockMin, ground, fnum:cleanFnum(null, String(1000+idx*11+hi).padStart(4,'0')),
           ok:true, reason:'', assigned:0
         });
-        // chain to next hop: arrival local at this hop's ARR airport, + ground, expressed
-        // as the NEXT hop's departure-airport local clock (same airport, so no tz jump)
+        // next segment's departure local clock = this arrival + ground (same airport)
         curLocal = arrLocal + ground;
       });
       return;
