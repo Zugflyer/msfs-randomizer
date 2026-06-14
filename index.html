@@ -5980,7 +5980,7 @@ function renderAiGenAlLegs() {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
+    row.style.cssText = 'display:flex;align-items:stretch;justify-content:center;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
 
     // ── Logo (airline) ──
     const logoCell = document.createElement('div');
@@ -5990,9 +5990,17 @@ function renderAiGenAlLegs() {
     // ── EQP ──
     const eqpCell = document.createElement('div');
     eqpCell.style.cssText = bS+'width:90px;min-width:90px;align-items:center;justify-content:center;';
-    const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=8;
+    const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=4;
     eqpInp.style.cssText='background:transparent;border:none;color:#fff;font-size:21px;font-weight:700;letter-spacing:.04em;padding:0;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
-    eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); renderAiGenAlLegs(); };
+    eqpInp.oninput=()=>{
+      const pos=eqpInp.selectionStart;
+      eqpInp.value=eqpInp.value.toUpperCase();
+      leg.eqp=eqpInp.value;
+      eqpInp.setSelectionRange(pos,pos);
+      // live-update ground time without rebuilding the row (keeps focus)
+      const g=document.getElementById('aigen-al-gnd-'+i);
+      if (g) g.textContent=alGroundTime(leg.eqp)+' min';
+    };
     eqpCell.appendChild(eqpInp);
 
     // Helper: a fixed-time input. If `computed` is provided (non-null), render a
@@ -6158,8 +6166,8 @@ function renderAiGenAlLegs() {
     // ── Ground time between the two legs (turnaround at the destination) ──
     const gnd = alGroundTime(leg.eqp);
     const groundCell = document.createElement('div');
-    groundCell.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 8px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
-    const gVal=document.createElement('div'); gVal.style.cssText='font-size:13px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; gVal.textContent=gnd+' min';
+    groundCell.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:120px;min-width:120px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    const gVal=document.createElement('div'); gVal.id='aigen-al-gnd-'+i; gVal.style.cssText='font-size:13px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; gVal.textContent=gnd+' min';
     groundCell.title = 'Turnaround time by aircraft category: heavy 100 · narrowbody 45 · commuter 25 (derived from EQP)';
     groundCell.appendChild(gVal);
 
@@ -6176,13 +6184,8 @@ function renderAiGenAlLegs() {
     delBtn.onclick=()=>{ aiGenAlLegs.splice(i,1); if(!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
     delCell.appendChild(delBtn);
 
-    // Spacer pushes the return leg to the right edge (aligned with header end)
-    const spacer = document.createElement('div');
-    spacer.style.cssText='flex:1 1 auto;min-width:20px;';
-
     row.appendChild(logoCell); row.appendChild(eqpCell);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
-    row.appendChild(spacer);
     row.appendChild(groundCell);
     row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol);
     row.appendChild(delCell);
