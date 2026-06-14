@@ -838,6 +838,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             </div>
           </div>
 
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
+          <!-- Generate rotations -->
+          <button onclick="createRotationsAirline()"
+            style="font-size:13px;font-weight:700;padding:0 18px;height:60px;border-radius:6px;border:none;background:linear-gradient(135deg,#7b61ff,#5b8cff);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;">
+            ⊞ Generate Rotations
+          </button>
+
         </div>
 
         <!-- Body (route rows) -->
@@ -6184,30 +6192,31 @@ function renderAiGenAlLegs() {
     delBtn.onclick=()=>{ aiGenAlLegs.splice(i,1); if(!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
     delCell.appendChild(delBtn);
 
-    row.appendChild(logoCell); row.appendChild(eqpCell);
+    // ── Left column: logo+EQP on top, action buttons below ──
+    const leftCol = document.createElement('div');
+    leftCol.style.cssText='display:flex;flex-direction:column;gap:4px;flex-shrink:0;';
+    const logoEqpRow = document.createElement('div');
+    logoEqpRow.style.cssText='display:flex;gap:5px;';
+    logoEqpRow.appendChild(logoCell); logoEqpRow.appendChild(eqpCell);
+    leftCol.appendChild(logoEqpRow);
+
+    const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
+    dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
+    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i]}); renderAiGenAlLegs(); };
+    const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
+    addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
+    addBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+    leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn);
+
+    row.appendChild(leftCol);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
     row.appendChild(groundCell);
     row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol);
     row.appendChild(delCell);
     wrapper.appendChild(row);
 
-    // Sub-buttons
-    const sub=document.createElement('div'); sub.style.cssText='display:flex;gap:6px;padding:2px 0 6px;';
-    const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
-    dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
-    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i]}); renderAiGenAlLegs(); };
-    const addBtn=document.createElement('button'); addBtn.textContent='+ Add route';
-    addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;';
-    addBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
-    sub.appendChild(dupBtn); sub.appendChild(addBtn);
-    wrapper.appendChild(sub);
     container.appendChild(wrapper);
   });
-
-  const globalAdd=document.createElement('button'); globalAdd.textContent='+ Add route';
-  globalAdd.style.cssText='margin-top:4px;font-size:11px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--surf2);color:var(--txt2);cursor:pointer;';
-  globalAdd.onclick=()=>{ aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
-  container.appendChild(globalAdd);
 }
 
 // Block time lookup for an airline-mode leg (same approach as airport mode)
@@ -6595,6 +6604,127 @@ async function createRotations() {
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
   if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
 
+  return _rotationsFromValidLegs(validLegs, apiKey);
+}
+
+
+// ── Airline-mode: build rotations from aiGenAlLegs ────────────────────────────
+// Uses UI-computed block times + UTC offsets; one API call only for flight numbers
+// + registrations (keeps under the input-token limit and respects manual overrides).
+async function createRotationsAirline() {
+  if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
+  if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
+  const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
+  if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
+
+  // Keep only legs with both airports, an EQP, and a block time on each direction.
+  const src = aiGenAlLegs.filter(l => l.dep && l.arr && l.eqp && l.blockTime && l.rBlockTime);
+  if (!src.length) { alert('Please complete at least one route (departure, arrival, EQP, and block times).'); return; }
+
+  // Convert to the shape buildRotationBars expects.
+  const validLegs = src.map(l => ({
+    dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
+    blockTime: l.blockTime, rBlockTime: l.rBlockTime,
+    groundTime: String(alGroundTime(l.eqp)),
+    dnOut: 'any', dnRet: 'any',
+    // window mapping: outbound dep/arr, return dep (ad*) and home arr (da*)
+    dd1: l.dd1, dd2: l.dd2, aa1: l.aa1, aa2: l.aa2,
+    ad1: l.rdd1, ad2: l.rdd2, da1: l.raa1, da2: l.raa2,
+  }));
+
+  switchView('rotations');
+  const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
+  const container = document.getElementById('rot-bars-container');
+  if (container) container.innerHTML = '';
+
+  // Pre-build research from UI data (UTC offsets + block times come straight from the inputs)
+  const utc = {};
+  validLegs.forEach(l => { utc[l.dep[0]] = getUtcOffset(l.dep); utc[l.arr[0]] = getUtcOffset(l.arr); });
+  const hm = s => { const m=String(s||'').match(/(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; };
+  const fmt = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+  const routes = validLegs.map((l,idx) => ({
+    r: idx+1,
+    block_out: l.blockTime, block_in: l.rBlockTime,
+  }));
+
+  // Cache check (signature over the converted legs)
+  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime]));
+  if (rotResearch && rotResearch._sig === sig) {
+    setStatus('✓ Reusing cached research — rebuilding bars…');
+    buildRotationBars(validLegs, rotResearch);
+    renderRotationLanes();
+    setStatus('✓ '+rotBars.length+' bars ready (cached research) · drag onto aircraft below');
+    return;
+  }
+
+  let _swSecs=0, _aborted=false;
+  const _sw=setInterval(()=>{_swSecs++;},1000);
+  const abortBtn=document.getElementById('rot-abort');
+  if(abortBtn){abortBtn.style.display='inline-block';abortBtn.onclick=()=>{_aborted=true;clearInterval(_sw);abortBtn.style.display='none';setStatus('⚠ Aborted.');};}
+
+  // Single API call: flight numbers per route + registrations per EQP type.
+  const combos=[];
+  validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+  const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}->${l.arr[0]} (and return)`).join('\n');
+  const researchPrompt = `Research real aviation data for one airline. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
+
+AIRLINE: ${aiGenAirline}
+ROUTES (outbound and return each):
+${routeList}
+AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
+
+For each route: realistic flight numbers as DIGITS ONLY (no airline letters/IATA prefix — e.g. "431" not "ME431") — the airline's real numbers to that destination if known, else plausible; give fnum_out and fnum_in.
+For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "MEA A332").
+
+Output exactly this shape (one line is fine):
+{"routes":[{"r":1,"fnum_out":"0201","fnum_in":"0202"}],"registrations":{"MEA A332":["OD-MEA","OD-MEB","OD-MEC","OD-MED","OD-MEE","OD-MEF","OD-MEG","OD-MEH"]}}`;
+
+  setStatus('⏳ Researching flight numbers & registrations… (0s)');
+  const _t=setInterval(()=>{if(!_aborted)setStatus('⏳ Researching flight numbers & registrations… ('+_swSecs+'s)');},1000);
+
+  let apiPart=null, rawTxt='';
+  try {
+    let d=null;
+    for(let attempt=1; attempt<=4; attempt++){
+      if(_aborted)return;
+      const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+      if(r.ok){ d=await r.json(); break; }
+      if((r.status===529||r.status===429) && attempt<4){
+        const wait = r.status===429 ? 60 : 8*attempt;
+        for(let w=wait; w>0 && !_aborted; w--){ setStatus('⏳ Server '+(r.status===429?'rate limited':'overloaded')+' — retrying in '+w+'s (attempt '+attempt+'/3)…'); await new Promise(res=>setTimeout(res,1000)); }
+        if(_aborted)return;
+        continue;
+      }
+      throw new Error('API '+r.status+': '+(await r.text()).slice(0,160));
+    }
+    if(!d) throw new Error('Server stayed overloaded after several retries. Please try again in a minute.');
+    rawTxt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    apiPart = extractRotJSON(rawTxt);
+  } catch(e){ clearInterval(_t);clearInterval(_sw);if(abortBtn)abortBtn.style.display='none';setStatus('✗ Research failed: '+e.message);return; }
+  clearInterval(_t); clearInterval(_sw);
+  if(abortBtn)abortBtn.style.display='none';
+  if(_aborted)return;
+
+  // Merge UI-derived data (utc + block times) with API data (fnums + regs).
+  const fnumByR = {}; ((apiPart&&apiPart.routes)||[]).forEach(rr=>{ fnumByR[rr.r]=rr; });
+  const mergedRoutes = routes.map(rt => ({
+    r: rt.r, block_out: rt.block_out, block_in: rt.block_in,
+    fnum_out: (fnumByR[rt.r]||{}).fnum_out, fnum_in: (fnumByR[rt.r]||{}).fnum_in,
+  }));
+  const research = { utc, routes: mergedRoutes, registrations: (apiPart&&apiPart.registrations)||{}, _sig: sig };
+  rotResearch = research;
+
+  buildRotationBars(validLegs, research);
+  renderRotationLanes();
+  setStatus('✓ '+rotBars.length+' bars ready · drag onto aircraft below · '+_swSecs+'s');
+}
+
+// Shared rotation pipeline: research (single API call, cached) → bars → lanes.
+// validLegs items must have: dep, arr (airport arrays), airline, aircraft, blockTime,
+// groundTime, dnOut, dnRet, and window fields dd1/dd2, aa1/aa2, ad1/ad2, da1/da2.
+async function _rotationsFromValidLegs(validLegs, apiKey) {
   // Switch to the rotations view
   switchView('rotations');
   const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
