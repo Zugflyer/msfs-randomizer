@@ -5851,6 +5851,13 @@ function aiGenAlUnsplit(i) {
   renderAiGenAlLegs();
 }
 
+// Cancel splitting entirely → back to a single simple route row.
+function aiGenAlUnsplitAll(i) {
+  const leg = aiGenAlLegs[i]; if (!leg) return;
+  leg.stops = undefined; leg.outHops = undefined; leg.retHops = undefined;
+  renderAiGenAlLegs();
+}
+
 // (Re)build the outbound and return hop arrays from dep + stops + arr.
 // Outbound chain: dep → stop1 → … → arr.  Return chain: arr → … → stop1 → dep.
 // Preserves existing hop time data where the endpoints still match.
@@ -6005,7 +6012,11 @@ function alEstimateAirMin(dep, arr) {
   return Math.round(dist/spd*60);
 }
 // Ground/turnaround time (minutes) by EQP category.
-function alGroundTime(eqp) {
+function alGroundTime(eqp, leg) {
+  // explicit per-leg override wins
+  if (leg && leg.groundOverride!=null && leg.groundOverride!=='' && !isNaN(parseInt(leg.groundOverride))) {
+    return parseInt(leg.groundOverride);
+  }
   const e = String(eqp||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
   if (!e) return 45;
   // Heavies / widebodies
@@ -6061,7 +6072,7 @@ function renderAiGenAlLegs() {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:stretch;justify-content:center;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
+    row.style.cssText = 'display:flex;align-items:stretch;justify-content:flex-start;gap:5px;padding:4px 8px;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
 
     // ── Logo (airline) ──
     const logoCell = document.createElement('div');
@@ -6078,23 +6089,34 @@ function renderAiGenAlLegs() {
       eqpInp.value=eqpInp.value.toUpperCase();
       leg.eqp=eqpInp.value;
       eqpInp.setSelectionRange(pos,pos);
-      // live-update ground time without rebuilding the row (keeps focus)
-      const g=document.getElementById('aigen-al-gnd-'+i);
-      if (g) g.textContent=alGroundTime(leg.eqp)+' min';
+      // live-update ground time field (only if the user hasn't overridden it)
+      if (!(leg.groundOverride!=null && leg.groundOverride!=='')) {
+        const g=gInpRef.el; if (g) g.value=String(alGroundTime(leg.eqp, leg));
+      }
     };
     eqpCell.appendChild(eqpInp);
+    const gInpRef = {el:null}; // filled when the ground input is built below
 
     // Helper: a fixed-time input. If `computed` is provided (non-null), render a
     // read-only computed arrival value instead of an editable field.
-    function fixedTimeInput(label, field, computed) {
+    function fixedTimeInput(label, field, computed, editable) {
       const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
       const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.placeholder='--:--';
-      if (computed !== undefined) {
-        // read-only computed arrival
+      if (computed !== undefined && editable) {
+        // editable, pre-filled with a computed default (e.g. return DEP = arr + ground).
+        // Shows the user's override if set, else the computed value. Editing sets an override.
+        const shown = (leg[field] && leg['_custom_'+field]) ? leg[field] : (computed || '');
+        I.value = shown;
+        I.title = 'Auto = arrival + ground time. You can override.';
+        const overridden = !!(leg[field] && leg['_custom_'+field]);
+        I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(overridden?'rgba(255,255,255,.35)':'rgba(63,185,80,.4)')+';background:'+(overridden?'var(--bg)':'rgba(63,185,80,.07)')+';color:'+(overridden?'#fff':'#3fb950')+';font-weight:'+(overridden?400:700)+';text-align:center;outline:none;';
+        I.oninput=()=>{ leg[field]=I.value; leg['_custom_'+field]=true; };
+        I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; leg['_custom_'+field]=true; renderAiGenAlLegs(); };
+      } else if (computed !== undefined) {
+        // read-only computed value (e.g. arrival time)
         I.value = computed || '';
         I.readOnly = true;
-        I.placeholder = '--:--';
         I.title = computed ? 'Computed local arrival = fixed DEP + effective block time' : 'Enter a fixed DEP time to compute arrival';
         I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(computed?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);color:'+(computed?'#3fb950':'var(--txt3)')+';font-weight:'+(computed?700:400)+';text-align:center;outline:none;cursor:default;';
       } else {
@@ -6204,22 +6226,22 @@ function renderAiGenAlLegs() {
         const computed = alComputeArr(fromAp, toAp, leg[cfg.dFix], leg[cfg.blk], leg[cfg.real]);
         timeRow.appendChild(fixedTimeInput('ARR', cfg.fixed, computed));
       } else if (role==='retDep') {
-        // return departure is AUTO = outbound arrival (local at leg.arr) + ground time
+        // return departure default = outbound arrival (local at leg.arr) + ground time,
+        // but the field is editable (override wins).
         const outArr = alComputeArr(leg.dep, leg.arr, leg.depFixed, leg.blockTime, leg.blockTimeReal);
         let retDep = '';
         if (outArr) {
           const m = (s=>{const x=String(s).match(/(\d{1,2}):(\d{2})/);return x?(+x[1])*60+(+x[2]):null;})(outArr);
-          if (m!=null) { const t=(m+alGroundTime(leg.eqp))%1440; retDep=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); }
+          if (m!=null) { const t=(m+alGroundTime(leg.eqp,leg))%1440; retDep=String(Math.floor(t/60)).padStart(2,'0')+':'+String(t%60).padStart(2,'0'); }
         }
-        leg.rDepFixed = retDep; // keep model in sync so bar building / chaining uses it
-        timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed, retDep));
+        if (!(leg.rDepFixed && leg._custom_rDepFixed)) leg.rDepFixed = retDep; // keep auto value in model unless overridden
+        timeRow.appendChild(fixedTimeInput('DEP', 'rDepFixed', retDep, true));
       } else {
         // departure side: editable fixed DEP time
         timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed));
       }
-      // window: hidden on the return-departure column when its time is auto-computed
-      const hideWin = (role==='retDep' && leg.rDepFixed);
-      if (!hideWin) timeRow.appendChild(winPair(cfg.w1, cfg.w2));
+      // windows are always shown and editable (used by the random-time feature later)
+      timeRow.appendChild(winPair(cfg.w1, cfg.w2));
       const utc=document.createElement('div'); utc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const utcL=document.createElement('div'); utcL.style.cssText='font-size:9px;color:var(--txt3);'; utcL.textContent='offset';
       const utcV=document.createElement('div'); utcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; utcV.textContent=utcStr(boxAp);
@@ -6256,13 +6278,19 @@ function renderAiGenAlLegs() {
     const outBlock  = buildBlockCell('out');
     const outArrCol = buildAirportCol('outArr');
 
-    // ── Ground time between the two legs (turnaround at the destination) ──
-    const gnd = alGroundTime(leg.eqp);
+    // ── Ground time between the two legs (turnaround). Editable; default by EQP category. ──
+    const gnd = alGroundTime(leg.eqp, leg);
     const groundCell = document.createElement('div');
-    groundCell.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:120px;min-width:120px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
-    const gVal=document.createElement('div'); gVal.id='aigen-al-gnd-'+i; gVal.style.cssText='font-size:13px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; gVal.textContent=gnd+' min';
-    groundCell.title = 'Turnaround time by aircraft category: heavy 100 · narrowbody 45 · commuter 25 (derived from EQP)';
-    groundCell.appendChild(gVal);
+    groundCell.style.cssText='display:flex;align-items:center;justify-content:center;gap:3px;flex-shrink:0;width:120px;min-width:120px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    const gInp=document.createElement('input'); gInp.type='text'; gInp.value=String(gnd); gInp.maxLength=3;
+    const gOver = (leg.groundOverride!=null && leg.groundOverride!=='');
+    gInp.style.cssText='width:38px;font-size:13px;font-family:monospace;color:'+(gOver?'#e0b341':'#fff')+';font-weight:700;text-align:center;background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:2px 3px;outline:none;';
+    gInp.title='Turnaround minutes. Default by EQP (heavy 100 · narrowbody 45 · commuter 25). Override here.';
+    gInp.oninput=()=>{ leg.groundOverride=gInp.value.replace(/\D/g,''); };
+    gInp.onblur=()=>{ renderAiGenAlLegs(); };
+    gInpRef.el = gInp;
+    const gUnit=document.createElement('div'); gUnit.style.cssText='font-size:11px;color:var(--txt3);'; gUnit.textContent='min';
+    groundCell.appendChild(gInp); groundCell.appendChild(gUnit);
 
     // ── Return leg: DEP (=outbound arrival) · block · ARR (=hub) ──
     const retDepCol = buildAirportCol('retDep');
@@ -6343,7 +6371,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
   const timesFor = (side,k) => (side==='out'?chainTimes.out:chainTimes.ret)[k] || {dep:null,arr:null};
 
   const wrapper = document.createElement('div');
-  wrapper.style.cssText='margin-bottom:8px;border:1px solid rgba(123,97,255,.25);border-radius:8px;padding:6px;background:rgba(123,97,255,.03);';
+  wrapper.style.cssText='margin-bottom:8px;border:1px solid rgba(123,97,255,.25);border-radius:8px;padding:4px 2px;background:rgba(123,97,255,.03);';
 
   // Build a single hop's airport+time column. Departure time is editable ONLY on the very
   // first outbound hop (the rotation start); all other hops show a computed read-only DEP.
@@ -6364,22 +6392,10 @@ function renderAlChainLeg(container, leg, i, ctx) {
     }, editableDep);
     col.appendChild(apWrap);
 
-    // time row: DEP (editable only on the first outbound hop) · UTC. No windows in chains.
+    // time row: editable DEP · from/until window · UTC (every hop behaves like a normal flight)
     const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    const t = timesFor(side,k);
-    const isRotationStart = (side==='out' && k===0);
-    if (isRotationStart) {
-      // editable start time of the whole rotation; only re-render on blur (keeps focus while typing)
-      const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
-      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='DEP';
-      const I=document.createElement('input'); I.type='text'; I.value=(leg.startFixed||t.dep||''); I.maxLength=5; I.placeholder='08:00';
-      I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.3);background:var(--bg);color:#fff;text-align:center;outline:none;';
-      I.oninput=()=>{ leg.startFixed=I.value; };
-      I.onblur=()=>{ leg.startFixed=formatTimeStr(I.value)||I.value; renderAiGenAlLegs(); };
-      wrap.appendChild(L); wrap.appendChild(I); timeRow.appendChild(wrap);
-    } else {
-      timeRow.appendChild(alSmallFixedRO('DEP', t.dep));
-    }
+    timeRow.appendChild(alSmallFixed('DEP', hop.depFixed, v=>{ hop.depFixed=v; }, ()=>renderAiGenAlLegs()));
+    timeRow.appendChild(alSmallWin(hop, 'dd1','dd2'));
     timeRow.appendChild(alUtcMini(hop.dep, utcStr));
     col.appendChild(timeRow);
     return col;
@@ -6412,7 +6428,11 @@ function renderAlChainLeg(container, leg, i, ctx) {
     col.appendChild(apWrap);
 
     const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    timeRow.appendChild(alSmallFixedRO('ARR', timesFor(side,k).arr));
+    // per-hop computed arrival = this hop's fixed DEP + its block (local at hop.arr)
+    let hopArrStr='';
+    { const d=hm(hop.depFixed), b=hm(hop.blockTime);
+      if (d!=null && b!=null && hop.dep && hop.arr) { const tz=(getUtcOffset(hop.arr)-getUtcOffset(hop.dep))*60; hopArrStr=fmtHM(d+b+tz); } }
+    timeRow.appendChild(alSmallFixedRO('ARR', hopArrStr));
     timeRow.appendChild(alUtcMini(hop.arr, utcStr));
     col.appendChild(timeRow);
     return col;
@@ -6444,14 +6464,18 @@ function renderAlChainLeg(container, leg, i, ctx) {
   // Render one chain row (sequence of hops with blocks + ground between)
   function chainRow(hops, side, label) {
     const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:stretch;justify-content:center;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
+    row.style.cssText='display:flex;align-items:stretch;justify-content:flex-start;gap:5px;padding:4px 6px;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
 
     // left column only on the outbound row (logo+eqp+buttons); return row gets a label spacer
     if (side==='out') {
       row.appendChild(buildChainLeftCol(leg, i));
     } else {
-      const sp=document.createElement('div'); sp.style.cssText='width:175px;min-width:175px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#a78bfa;font-size:11px;font-weight:600;';
-      sp.textContent='↩ return';
+      const sp=document.createElement('div'); sp.style.cssText='width:175px;min-width:175px;flex-shrink:0;display:flex;align-items:center;justify-content:center;';
+      const rb=document.createElement('button'); rb.textContent='↩ return (cancel split)';
+      rb.style.cssText='font-size:10px;padding:5px 10px;border-radius:var(--r);border:1px solid rgba(123,97,255,.5);background:transparent;color:#a78bfa;cursor:pointer;';
+      rb.title='Cancel the split and go back to a single route row';
+      rb.onclick=()=>aiGenAlUnsplitAll(i);
+      sp.appendChild(rb);
       row.appendChild(sp);
     }
 
@@ -6525,13 +6549,13 @@ function renderHopApBox(apWrap, ap, onSelect, editable) {
     const ph=document.createElement('div'); ph.style.cssText='width:100%;text-align:center;color:var(--txt3);font-size:11px;font-style:italic;padding:14px 7px;'; ph.textContent='—'; apWrap.appendChild(ph);
   }
 }
-function alSmallFixed(label, val, onInput) {
+function alSmallFixed(label, val, onInput, onBlur) {
   const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
   const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
   const I=document.createElement('input'); I.type='text'; I.value=val||''; I.maxLength=5; I.placeholder='--:--';
   I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
   I.oninput=()=>onInput(I.value);
-  I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; onInput(I.value); };
+  I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; onInput(I.value); if(onBlur) onBlur(); };
   wrap.appendChild(L); wrap.appendChild(I); return wrap;
 }
 function alSmallFixedRO(label, computed) {
