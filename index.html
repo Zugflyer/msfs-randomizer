@@ -5991,7 +5991,7 @@ function renderAiGenAlLegs() {
     const eqpCell = document.createElement('div');
     eqpCell.style.cssText = bS+'width:90px;min-width:90px;align-items:center;justify-content:center;';
     const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=8;
-    eqpInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:13px;padding:6px 5px;width:78px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+    eqpInp.style.cssText='background:transparent;border:none;color:#fff;font-size:21px;font-weight:700;letter-spacing:.04em;padding:0;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
     eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); renderAiGenAlLegs(); };
     eqpCell.appendChild(eqpInp);
 
