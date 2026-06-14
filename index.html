@@ -5980,7 +5980,7 @@ function renderAiGenAlLegs() {
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;';
+    row.style.cssText = 'display:flex;align-items:stretch;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
 
     // ── Logo (airline) ──
     const logoCell = document.createElement('div');
@@ -5989,12 +5989,11 @@ function renderAiGenAlLegs() {
 
     // ── EQP ──
     const eqpCell = document.createElement('div');
-    eqpCell.style.cssText = bS+'width:90px;min-width:90px;align-items:center;gap:3px;';
-    const eqpLbl=document.createElement('div'); eqpLbl.style.cssText='font-size:9px;color:var(--txt3);'; eqpLbl.textContent='EQP';
+    eqpCell.style.cssText = bS+'width:90px;min-width:90px;align-items:center;justify-content:center;';
     const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=8;
-    eqpInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:76px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
-    eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); };
-    eqpCell.appendChild(eqpLbl); eqpCell.appendChild(eqpInp);
+    eqpInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:13px;padding:6px 5px;width:78px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+    eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); renderAiGenAlLegs(); };
+    eqpCell.appendChild(eqpInp);
 
     // Helper: a fixed-time input. If `computed` is provided (non-null), render a
     // read-only computed arrival value instead of an editable field.
@@ -6177,8 +6176,13 @@ function renderAiGenAlLegs() {
     delBtn.onclick=()=>{ aiGenAlLegs.splice(i,1); if(!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
     delCell.appendChild(delBtn);
 
+    // Spacer pushes the return leg to the right edge (aligned with header end)
+    const spacer = document.createElement('div');
+    spacer.style.cssText='flex:1 1 auto;min-width:20px;';
+
     row.appendChild(logoCell); row.appendChild(eqpCell);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
+    row.appendChild(spacer);
     row.appendChild(groundCell);
     row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol);
     row.appendChild(delCell);
