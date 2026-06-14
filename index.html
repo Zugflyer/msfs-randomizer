@@ -5802,7 +5802,11 @@ function aiGenAlEmptyLeg() {
   return { eqp:'', dep: aiGenAlHub || null, arr:null,
            depFixed:'', dd1:'', dd2:'',
            arrFixed:'', aa1:'', aa2:'',
-           blockTime:'', blockTimeReal:false };
+           blockTime:'', blockTimeReal:false,
+           // return leg (arr → hub)
+           rDepFixed:'', rdd1:'', rdd2:'',
+           rArrFixed:'', raa1:'', raa2:'',
+           rBlockTime:'', rBlockTimeReal:false };
 }
 
 function aiGenEmptyLeg() {
@@ -5888,6 +5892,71 @@ function syncAiGenAlDefaults(field, value) {
   renderAiGenAlLegs();
 }
 
+// ── Airline-mode helpers: effective block time, arrival calc, ground time ──────
+// Parse "H:MM" → minutes; null if invalid
+function alHmToMin(s) {
+  const m = String(s||'').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return null;
+  return parseInt(m[1])*60 + parseInt(m[2]);
+}
+function alMinToHm(t) {
+  t = ((t % (24*60)) + 24*60) % (24*60);
+  return Math.floor(t/60) + ':' + String(t%60).padStart(2,'0');
+}
+// Is this leg broadly eastbound→westbound (against rotation)? lon index 4
+function alIsEastWest(dep, arr) {
+  if (!dep || !arr) return false;
+  const dl = dep[4], al = arr[4];
+  if (isNaN(dl) || isNaN(al)) return false;
+  return al < dl;
+}
+// Effective block time in minutes used to compute arrival.
+// Researched → use as-is. Estimated → +30 taxi, +30 long E→W, -30 long W→E.
+function alEffectiveBlockMin(dep, arr, blockTime, isReal) {
+  const base = alHmToMin(blockTime);
+  if (base == null) return null;
+  if (isReal) return base;
+  let eff = base + 30; // taxi
+  const ew = alIsEastWest(dep, arr);
+  if (base >= 360) { // long flight (>=6h block)
+    eff += ew ? 30 : -30;
+  }
+  return eff;
+}
+// Compute ARR clock time (local at arr airport) from fixed DEP + effective block.
+// Returns "H:MM" string or '' if not computable.
+function alComputeArr(dep, arr, depFixed, blockTime, isReal) {
+  const depMin = alHmToMin(depFixed);
+  const blk = alEffectiveBlockMin(dep, arr, blockTime, isReal);
+  if (depMin == null || blk == null) return '';
+  const depOff = dep ? getUtcOffset(dep) : 0;
+  const arrOff = arr ? getUtcOffset(arr) : 0;
+  const tzShift = (arrOff - depOff) * 60;
+  return alMinToHm(depMin + blk + tzShift);
+}
+// Pure great-circle AIR time in minutes (no taxi, no API). For instant estimates.
+function alEstimateAirMin(dep, arr) {
+  if (!dep || !arr) return null;
+  const R=6371,φ1=dep[3]*Math.PI/180,φ2=arr[3]*Math.PI/180;
+  const Δφ=(arr[3]-dep[3])*Math.PI/180,Δλ=(arr[4]-dep[4])*Math.PI/180;
+  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
+  const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+  const spd=dist<200?400:dist<500?580:dist<2000?780:870;
+  return Math.round(dist/spd*60);
+}
+// Ground/turnaround time (minutes) by EQP category.
+function alGroundTime(eqp) {
+  const e = String(eqp||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if (!e) return 45;
+  // Heavies / widebodies
+  if (/^(A30|A31|A33|A34|A35|A38|B74|B76|B77|B78|B767|B777|B787|IL96|MD11|A330|A340|A350|A380|A300|A310)/.test(e)
+      || /^(764|772|773|77W|77L|763|762|781|788|789|332|333|339|342|343|346|351|359|35K|388|781)/.test(e)) return 100;
+  // Commuters / regional turboprops & small RJ
+  if (/^(DH8|DHC|AT4|AT7|ATR|E13|E14|E17|E45|CRJ|CR2|CR7|CR9|SF3|SAAB|J32|J41|BE|D38|EM2|E120|E110|L41|C208|BNI|DO228|F50)/.test(e)) return 25;
+  // Default: mainline narrowbody (A320/B737 family, etc.)
+  return 45;
+}
+
 // ── Render airline-mode route rows ────────────────────────────────────────────
 function renderAiGenAlLegs() {
   const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
@@ -5948,7 +6017,7 @@ function renderAiGenAlLegs() {
       wrap.appendChild(L); wrap.appendChild(I);
       return wrap;
     }
-    // Helper: a from/until window pair (side by side)
+    // Helper: a from/until window pair (side by side). flagPrefix marks manual edits.
     function winPair(f1, f2) {
       const wrap=document.createElement('div'); wrap.style.cssText='display:flex;gap:4px;';
       [['from',f1],['until',f2]].forEach(([lbl,fld])=>{
@@ -5963,72 +6032,141 @@ function renderAiGenAlLegs() {
       return wrap;
     }
 
-    // ── DEP airport + time row (fixed DEP · DEP from/until · UTC) ──
-    const depCol = document.createElement('div');
-    depCol.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:230px;flex-shrink:0;';
-    const depApWrap = document.createElement('div');
-    depApWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
-    if (leg.dep) {
-      depApWrap.innerHTML=apBox(leg.dep); depApWrap.style.cursor='pointer'; depApWrap.title='Click to change';
-      depApWrap.onclick=()=>{ leg.dep=null; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs(); };
-    } else {
-      const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
-      const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
-      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
-      w.appendChild(inp); depApWrap.appendChild(w);
-      buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i); });
+    // Build one AIRPORT column: airport box + (fixed time · from/until window · UTC) + optional computed-ARR line.
+    // role: 'outDep' | 'outArr' | 'retDep' | 'retArr'
+    function buildAirportCol(role) {
+      // Field mapping per role
+      const cfg = {
+        outDep: { ap:'dep', fixed:'depFixed', w1:'dd1', w2:'dd2', editable:true,  mirror:null,  showArr:false },
+        outArr: { ap:'arr', fixed:'arrFixed', w1:'aa1', w2:'aa2', editable:true,  mirror:null,  showArr:true, arrFrom:()=>leg.dep, arrTo:()=>leg.arr, dFix:'depFixed', blk:'blockTime', real:'blockTimeReal' },
+        retDep: { ap:'arr', fixed:'rDepFixed', w1:'rdd1', w2:'rdd2', editable:false, mirror:'arr', showArr:false },
+        retArr: { ap:null,  fixed:'rArrFixed', w1:'raa1', w2:'raa2', editable:false, mirror:'hub', showArr:true, arrFrom:()=>leg.arr, arrTo:()=>(leg.dep||aiGenAlHub), dFix:'rDepFixed', blk:'rBlockTime', real:'rBlockTimeReal' },
+      }[role];
+
+      // Which airport this column's box represents
+      let boxAp = null;
+      if (role==='outDep') boxAp = leg.dep;
+      else if (role==='outArr') boxAp = leg.arr;
+      else if (role==='retDep') boxAp = leg.arr;          // return departs from outbound arrival
+      else if (role==='retArr') boxAp = leg.dep || aiGenAlHub; // return ends at hub
+
+      const col = document.createElement('div');
+      col.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:200px;flex-shrink:0;';
+
+      // ── Airport box ──
+      const apWrap = document.createElement('div');
+      apWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
+      if (cfg.editable) {
+        if (boxAp) {
+          apWrap.innerHTML=apBox(boxAp); apWrap.style.cursor='pointer'; apWrap.title='Click to change';
+          apWrap.onclick=()=>{
+            if (role==='outDep'){ leg.dep=null; }
+            else { leg.arr=null; leg.rBlockTime=''; leg.rBlockTimeReal=false; }
+            leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs();
+          };
+        } else {
+          const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
+          const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
+          inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
+          w.appendChild(inp); apWrap.appendChild(w);
+          if (role==='outDep') {
+            buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
+          } else { // outArr
+            buildSuggestBox(inp, ap=>{ leg.arr=ap;
+              // pre-seed estimated return block (no API) so return ARR shows right away
+              if (!leg.rBlockTimeReal) {
+                const m = alEstimateAirMin(leg.arr, leg.dep || aiGenAlHub);
+                if (m != null) { leg.rBlockTime = Math.floor(m/60)+':'+String(m%60).padStart(2,'0'); leg.rBlockTimeReal=false; }
+              }
+              renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out');
+            });
+          }
+        }
+      } else {
+        // read-only mirror box
+        if (boxAp) {
+          apWrap.innerHTML=apBox(boxAp);
+          apWrap.style.opacity='.85';
+        } else {
+          const ph=document.createElement('div'); ph.style.cssText='color:var(--txt3);font-size:11px;font-style:italic;padding:5px 7px;'; ph.textContent='(set arrival first)';
+          apWrap.appendChild(ph);
+        }
+      }
+      col.appendChild(apWrap);
+
+      // ── Fixed time · window · UTC ──
+      const timeRow = document.createElement('div');
+      timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
+      const fixedLabel = (role==='outArr'||role==='retArr') ? 'ARR' : 'DEP';
+      timeRow.appendChild(fixedTimeInput(fixedLabel, cfg.fixed));
+      timeRow.appendChild(winPair(cfg.w1, cfg.w2));
+      const utc=document.createElement('div'); utc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const utcL=document.createElement('div'); utcL.style.cssText='font-size:9px;color:var(--txt3);'; utcL.textContent='offset';
+      const utcV=document.createElement('div'); utcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; utcV.textContent=utcStr(boxAp);
+      utc.appendChild(utcL); utc.appendChild(utcV);
+      timeRow.appendChild(utc);
+      col.appendChild(timeRow);
+
+      // ── Computed ARR line (only on arrival columns) ──
+      if (cfg.showArr) {
+        const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
+        const computed = alComputeArr(fromAp, toAp, leg[cfg.dFix], leg[cfg.blk], leg[cfg.real]);
+        const line = document.createElement('div');
+        line.style.cssText='display:flex;align-items:center;gap:8px;min-height:24px;padding:2px 4px;border-top:1px dashed rgba(255,255,255,.12);';
+        const lbl=document.createElement('span'); lbl.style.cssText='font-size:9px;color:var(--txt3);'; lbl.textContent='ARR (calc)';
+        const t=document.createElement('span');
+        t.style.cssText='font-size:13px;font-family:monospace;color:'+(computed?'#3fb950':'var(--txt3)')+';font-weight:'+(computed?700:400)+';margin-left:auto;';
+        t.textContent = computed || '— set fixed DEP';
+        t.title = computed ? 'Computed local arrival = fixed DEP + effective block time' : 'Enter a fixed DEP time on the departure side to compute arrival';
+        line.appendChild(lbl); line.appendChild(t);
+        col.appendChild(line);
+      }
+
+      return col;
     }
-    const depTimeRow = document.createElement('div');
-    depTimeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    depTimeRow.appendChild(fixedTimeInput('DEP','depFixed'));
-    depTimeRow.appendChild(winPair('dd1','dd2'));
-    const depUtc=document.createElement('div'); depUtc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
-    const depUtcL=document.createElement('div'); depUtcL.style.cssText='font-size:9px;color:var(--txt3);'; depUtcL.textContent='offset';
-    const depUtcV=document.createElement('div'); depUtcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; depUtcV.textContent=utcStr(leg.dep);
-    depUtc.appendChild(depUtcL); depUtc.appendChild(depUtcV);
-    depTimeRow.appendChild(depUtc);
-    depCol.appendChild(depApWrap); depCol.appendChild(depTimeRow);
 
-    // ── Block time (lookup / estimate / editable) ──
-    const btCell = document.createElement('div');
-    btCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
-    const arrowDiv=document.createElement('div');
-    arrowDiv.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrowDiv.textContent='→'; arrowDiv.title='Search block time';
-    arrowDiv.onclick=()=>aiGenAlFetchBlockTime(i);
-    const btInp=document.createElement('input');
-    btInp.type='text'; btInp.id='aigen-al-bt-'+i; btInp.value=leg.blockTime||''; btInp.placeholder='H:MM';
-    btInp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?700:400)+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
-    btInp.oninput=()=>{ leg.blockTime=btInp.value; leg.blockTimeReal=false; };
-    const btL=document.createElement('div'); btL.style.cssText='font-size:9px;color:var(--txt3);'; btL.textContent='block';
-    btCell.appendChild(arrowDiv); btCell.appendChild(btInp); btCell.appendChild(btL);
-
-    // ── ARR airport + time row (fixed ARR · ARR from/until · UTC) ──
-    const arrCol = document.createElement('div');
-    arrCol.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:230px;flex-shrink:0;';
-    const arrApWrap = document.createElement('div');
-    arrApWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
-    if (leg.arr) {
-      arrApWrap.innerHTML=apBox(leg.arr); arrApWrap.style.cursor='pointer'; arrApWrap.title='Click to change';
-      arrApWrap.onclick=()=>{ leg.arr=null; leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs(); };
-    } else {
-      const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
-      const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
-      inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
-      w.appendChild(inp); arrApWrap.appendChild(w);
-      buildSuggestBox(inp, ap=>{ leg.arr=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i); });
+    // Block-time cell for a direction ('out'|'ret')
+    function buildBlockCell(dir) {
+      const isOut = dir==='out';
+      const id = isOut ? ('aigen-al-bt-'+i) : ('aigen-al-rbt-'+i);
+      const val = isOut ? leg.blockTime : leg.rBlockTime;
+      const real = isOut ? leg.blockTimeReal : leg.rBlockTimeReal;
+      const cell = document.createElement('div');
+      cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
+      const arrow=document.createElement('div');
+      arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
+      arrow.onclick=()=>aiGenAlFetchBlockTime(i, dir);
+      const inp=document.createElement('input');
+      inp.type='text'; inp.id=id; inp.value=val||''; inp.placeholder='H:MM';
+      inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(real?'#3fb950':'#777')+';font-weight:'+(real?700:400)+';'+(real?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
+      inp.oninput=()=>{ if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;} };
+      inp.onblur=()=>{ renderAiGenAlLegs(); };
+      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
+      cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
+      return cell;
     }
-    const arrTimeRow = document.createElement('div');
-    arrTimeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    arrTimeRow.appendChild(fixedTimeInput('ARR','arrFixed'));
-    arrTimeRow.appendChild(winPair('aa1','aa2'));
-    const arrUtc=document.createElement('div'); arrUtc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
-    const arrUtcL=document.createElement('div'); arrUtcL.style.cssText='font-size:9px;color:var(--txt3);'; arrUtcL.textContent='offset';
-    const arrUtcV=document.createElement('div'); arrUtcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; arrUtcV.textContent=utcStr(leg.arr);
-    arrUtc.appendChild(arrUtcL); arrUtc.appendChild(arrUtcV);
-    arrTimeRow.appendChild(arrUtc);
-    arrCol.appendChild(arrApWrap); arrCol.appendChild(arrTimeRow);
 
-    // ── Delete ──
+    // ── Outbound leg: DEP (hub) · block · ARR (editable) ──
+    const outDepCol = buildAirportCol('outDep');
+    const outBlock  = buildBlockCell('out');
+    const outArrCol = buildAirportCol('outArr');
+
+    // ── Ground time between the two legs (turnaround at the destination) ──
+    const gnd = alGroundTime(leg.eqp);
+    const groundCell = document.createElement('div');
+    groundCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 6px;min-height:54px;gap:2px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    const gIcon=document.createElement('div'); gIcon.style.cssText='font-size:13px;color:var(--txt3);line-height:1;'; gIcon.textContent='⟳';
+    const gVal=document.createElement('div'); gVal.style.cssText='font-size:12px;font-family:monospace;color:#e0b341;font-weight:700;'; gVal.textContent=gnd;
+    const gL=document.createElement('div'); gL.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; gL.textContent='GND min';
+    groundCell.title = 'Turnaround time by aircraft category: heavy 100 · narrowbody 45 · commuter 25 (derived from EQP)';
+    groundCell.appendChild(gIcon); groundCell.appendChild(gVal); groundCell.appendChild(gL);
+
+    // ── Return leg: DEP (=outbound arrival) · block · ARR (=hub) ──
+    const retDepCol = buildAirportCol('retDep');
+    const retBlock  = buildBlockCell('ret');
+    const retArrCol = buildAirportCol('retArr');
+
+    // ── Delete (far right, after the return leg) ──
     const delCell = document.createElement('div');
     delCell.style.cssText='display:flex;align-items:center;padding:0 2px;flex-shrink:0;';
     const delBtn=document.createElement('button'); delBtn.textContent='✕';
@@ -6037,7 +6175,9 @@ function renderAiGenAlLegs() {
     delCell.appendChild(delBtn);
 
     row.appendChild(logoCell); row.appendChild(eqpCell);
-    row.appendChild(depCol); row.appendChild(btCell); row.appendChild(arrCol);
+    row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
+    row.appendChild(groundCell);
+    row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol);
     row.appendChild(delCell);
     wrapper.appendChild(row);
 
@@ -6061,14 +6201,25 @@ function renderAiGenAlLegs() {
 }
 
 // Block time lookup for an airline-mode leg (same approach as airport mode)
-async function aiGenAlFetchBlockTime(i) {
-  const leg = aiGenAlLegs[i]; if (!leg||!leg.dep||!leg.arr) return;
-  const btEl = document.getElementById('aigen-al-bt-'+i);
+async function aiGenAlFetchBlockTime(i, dir) {
+  dir = dir || 'out';
+  const isOut = dir === 'out';
+  const leg = aiGenAlLegs[i]; if (!leg) return;
+  // endpoints per direction
+  const dep = isOut ? leg.dep : leg.arr;
+  const arr = isOut ? leg.arr : (leg.dep || aiGenAlHub);
+  if (!dep || !arr) return;
+  const elId = isOut ? ('aigen-al-bt-'+i) : ('aigen-al-rbt-'+i);
+  const setVal = (v, real) => {
+    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; }
+    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; }
+  };
+  const btEl = document.getElementById(elId);
   if (btEl) { btEl.value='🔍'; btEl.style.color='#777'; }
   const apiKey = typeof getApiKey==='function' ? getApiKey() : null;
   if (apiKey) {
     try {
-      const depIata=leg.dep[1]||leg.dep[0], arrIata=leg.arr[1]||leg.arr[0];
+      const depIata=dep[1]||dep[0], arrIata=arr[1]||arr[0];
       const resp = await fetch('https://api.anthropic.com/v1/messages',{
         method:'POST',
         headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
@@ -6082,23 +6233,23 @@ async function aiGenAlFetchBlockTime(i) {
         const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
         const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
         if (m&&!txt.toUpperCase().includes('NONE')) {
-          leg.blockTime=m[0]; leg.blockTimeReal=true;
-          if (btEl){btEl.value=m[0];btEl.style.color='#3fb950';btEl.style.fontWeight='700';btEl.style.fontStyle='';}
+          setVal(m[0], true);
+          renderAiGenAlLegs();
           return;
         }
       }
     } catch(e) {}
   }
-  // Fallback: great-circle distance estimate
-  const R=6371,φ1=leg.dep[3]*Math.PI/180,φ2=leg.arr[3]*Math.PI/180;
-  const Δφ=(leg.arr[3]-leg.dep[3])*Math.PI/180,Δλ=(leg.arr[4]-leg.dep[4])*Math.PI/180;
+  // Fallback: pure great-circle AIR time (no taxi here — alEffectiveBlockMin adds +30 taxi for estimates)
+  const R=6371,φ1=dep[3]*Math.PI/180,φ2=arr[3]*Math.PI/180;
+  const Δφ=(arr[3]-dep[3])*Math.PI/180,Δλ=(arr[4]-dep[4])*Math.PI/180;
   const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
   const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   const spd=dist<200?400:dist<500?580:dist<2000?780:870;
-  const mins=Math.round(dist/spd*60)+(dist<500?15:25);
+  const mins=Math.round(dist/spd*60);
   const bt=Math.floor(mins/60)+':'+(String(mins%60)).padStart(2,'0');
-  leg.blockTime=bt; leg.blockTimeReal=false;
-  if (btEl){btEl.value=bt;btEl.style.color='#777';btEl.style.fontStyle='italic';btEl.style.fontWeight='400';}
+  setVal(bt, false);
+  renderAiGenAlLegs();
 }
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
