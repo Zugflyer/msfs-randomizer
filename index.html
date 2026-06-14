@@ -5980,6 +5980,9 @@ function alIsEastWest(dep, arr) {
 }
 // Estimated EFFECTIVE block time (minutes): great-circle air time + 30 taxi,
 // then +30 for long eastbound→westbound, -30 for long westbound→eastbound.
+// Round a minute value to the nearest 5 minutes (for estimated/derived times only).
+function round5(m) { return m==null ? null : Math.round(m/5)*5; }
+
 function alEstimateEffectiveBlock(dep, arr) {
   const air = alEstimateAirMin(dep, arr);
   if (air == null) return null;
@@ -5987,11 +5990,11 @@ function alEstimateEffectiveBlock(dep, arr) {
   if (air >= 330) { // long flight (>=5.5h pure air ~ 6h block)
     eff += alIsEastWest(dep, arr) ? 30 : -30;
   }
-  return eff;
+  return round5(eff); // estimated block times snap to 5-minute steps
 }
 // Compute ARR clock time (local at arr airport) from fixed DEP + displayed block time.
 // The block time shown in the field is already the effective gate-to-gate time.
-// Returns "H:MM" string or '' if not computable.
+// Returns "H:MM" string or '' if not computable. Result snaps to 5-minute steps.
 function alComputeArr(dep, arr, depFixed, blockTime, isReal) {
   const depMin = alHmToMin(depFixed);
   const blk = alHmToMin(blockTime);
@@ -5999,7 +6002,7 @@ function alComputeArr(dep, arr, depFixed, blockTime, isReal) {
   const depOff = dep ? getUtcOffset(dep) : 0;
   const arrOff = arr ? getUtcOffset(arr) : 0;
   const tzShift = (arrOff - depOff) * 60;
-  return alMinToHm(depMin + blk + tzShift);
+  return alMinToHm(round5(depMin + blk + tzShift));
 }
 // Pure great-circle AIR time in minutes (no taxi, no API). For instant estimates.
 function alEstimateAirMin(dep, arr) {
@@ -6371,7 +6374,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
       if (depMin==null || b==null || !h.dep || !h.arr) { res.push({dep:null,arr:null}); cur=null; return; }
       const dOff=getUtcOffset(h.dep), aOff=getUtcOffset(h.arr);
       const depLocal=((depMin%1440)+1440)%1440;
-      const arrLocal=((depLocal+b+(aOff-dOff)*60)%1440+1440)%1440;
+      const arrLocal=((round5(depLocal+b+(aOff-dOff)*60))%1440+1440)%1440;
       res.push({dep:fmtHM(depLocal), arr:fmtHM(arrLocal)});
       cur = arrLocal + gnd;                          // next segment's departure (same airport)
     });
@@ -7268,7 +7271,7 @@ function buildRotationBars(validLegs, research) {
       let curLocal = startLocal;          // local clock at current hop's departure airport
       l.hops.forEach((h,hi)=>{
         const dOff=utc[h.dep[0]]??0, aOff=utc[h.arr[0]]??0;
-        const blockMin=hm(h.block)||120;
+        const blockMin=round5(hm(h.block)||120);
         const depLocal=((curLocal%1440)+1440)%1440;
         const arrLocalRaw = depLocal + blockMin + (aOff-dOff)*60;
         const arrLocal=((arrLocalRaw%1440)+1440)%1440;
@@ -7312,6 +7315,7 @@ function buildRotationBars(validLegs, research) {
     if(!hm(ri.block_out) && !hm(ri.block_in)){
       if(outIsEastWest) blockOut = baseBlock + 40; else blockIn = baseBlock + 40;
     }
+    blockOut = round5(blockOut); blockIn = round5(blockIn); // snap all block times to 5-minute steps
 
     // Windows (local minutes)
     const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];
@@ -7328,10 +7332,10 @@ function buildRotationBars(validLegs, research) {
       const valid=[];
       let arrWinMiss=0, dnMiss=0, earlyMiss=0;
       for(let step=0; step<=span; step+=5){
-        const depLocal=((lo+step)%1440+1440)%1440;
+        const depLocal=round5(((lo+step)%1440+1440)%1440)%1440;
         const depUTCm=depLocal-depOff*60;
         const arrUTCm=depUTCm+blockMin;
-        const arrLocal=((arrUTCm+arrOff*60)%1440+1440)%1440;
+        const arrLocal=round5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
         const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
         const isNight=dayCross>=1;
         if(!inWin(arrLocal,arrWinL[0],arrWinL[1])){ arrWinMiss++; continue; }
@@ -7340,10 +7344,10 @@ function buildRotationBars(validLegs, research) {
         valid.push({depLocal,arrLocal,dayCross,ok:true,depUTCm:((depUTCm%1440)+1440)%1440});
       }
       if(valid.length){ return valid[Math.floor(Math.random()*valid.length)]; }
-      const depLocal=lo;
+      const depLocal=round5(lo)%1440;
       const depUTCm=depLocal-depOff*60;
       const arrUTCm=depUTCm+blockMin;
-      const arrLocal=((arrUTCm+arrOff*60)%1440+1440)%1440;
+      const arrLocal=round5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
       const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
       let reason='';
       if(dnMiss>0 && arrWinMiss===0) reason='day/night requirement cannot be met within the departure window';
