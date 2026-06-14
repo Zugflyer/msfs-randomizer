@@ -7049,7 +7049,7 @@ async function createRotationsAirline() {
       }));
       return {
         dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
-        groundTime: String(alGroundTime(l.eqp)), dnOut:'any', dnRet:'any',
+        groundTime: String(alGroundTime(l.eqp, l)), dnOut:'any', dnRet:'any',
         startFixed: (l.startFixed && /^\d{1,2}:\d{2}$/.test(l.startFixed)) ? l.startFixed : null,
         hops, // <-- presence of hops triggers chain bar building
       };
@@ -7059,7 +7059,7 @@ async function createRotationsAirline() {
     return {
       dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
       blockTime: l.blockTime, rBlockTime: l.rBlockTime,
-      groundTime: String(alGroundTime(l.eqp)),
+      groundTime: String(alGroundTime(l.eqp, l)),
       dnOut: 'any', dnRet: 'any',
       // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
       dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
@@ -7798,8 +7798,9 @@ function computePairSegs(legIdx, dropDay) {
     if (idx === 0) {
       absDep = dropDay*1440 + s.depUTC;
     } else {
-      const earliest = prevAbsArr + prevGround;          // must depart no earlier than this
-      // place this segment's local-departure (s.depUTC) on the earliest UTC day that fits
+      // must depart no earlier than (prev arrival + ground); allow a small tolerance so
+      // 5-minute rounding of the planned departure can't force an unnecessary full-day jump
+      const earliest = prevAbsArr + prevGround - 4;
       let cand = Math.floor(prevAbsArr/1440)*1440 + s.depUTC;
       while (cand < earliest) cand += 1440;
       absDep = cand;
@@ -7808,7 +7809,6 @@ function computePairSegs(legIdx, dropDay) {
     segs.push({ ...s, absDep: absDep%10080, absArr: absArr%10080 });
     prevAbsArr = absArr; prevGround = s.ground;
   });
-  if (window.__rotDebug) console.log('computePairSegs leg'+legIdx, segs.map(s=>s.depIcao+'->'+s.arrIcao+' depUTC='+s.depUTC+' block='+s.block+' grnd='+s.ground+' absDep='+s.absDep+' absArr='+s.absArr));
   return { pair: bars, segs };
 }
 
