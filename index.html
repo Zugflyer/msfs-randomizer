@@ -7780,26 +7780,31 @@ function barToUTCSeg(bar) {
   return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground };
 }
 
-// Compute outbound+return segments for a leg pair, starting on UTC weekday dropDay
+// Compute ALL segments of a leg (2 for a simple out/return, N for a split chain),
+// chained in flown order, starting on UTC weekday dropDay. Each later segment departs
+// at its own local time on the earliest UTC day that respects (prev arrival + ground).
 function computePairSegs(legIdx, dropDay) {
-  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort(rotBarOrder);
-  if(!pair.length) return null;
-  const outSeg = barToUTCSeg(pair[0]);
-  const retSeg = barToUTCSeg(pair[1]);
-  const outAbsDep = dropDay*1440 + outSeg.depUTC;
-  const outAbsArr = outAbsDep + outSeg.block;
-  let retAbsDep = Math.ceil((outAbsArr + outSeg.ground)/1440)*1440 + retSeg.depUTC;
-  while(retAbsDep < outAbsArr + outSeg.ground) retAbsDep += 1440;
-  const sameDayRet = Math.floor(outAbsArr/1440)*1440 + retSeg.depUTC;
-  if(sameDayRet >= outAbsArr + outSeg.ground) retAbsDep = sameDayRet;
-  const retAbsArr = retAbsDep + retSeg.block;
-  return {
-    pair,
-    segs: [
-      {...outSeg, absDep: outAbsDep%10080, absArr: outAbsArr%10080},
-      {...retSeg, absDep: retAbsDep%10080, absArr: retAbsArr%10080}
-    ]
-  };
+  const bars = rotBars.filter(b=>b.legIdx===legIdx).sort(rotBarOrder);
+  if(!bars.length) return null;
+  const rawSegs = bars.map(barToUTCSeg);
+  const segs = [];
+  let prevAbsArr = null, prevGround = 0;
+  rawSegs.forEach((s, idx) => {
+    let absDep;
+    if (idx === 0) {
+      absDep = dropDay*1440 + s.depUTC;
+    } else {
+      const earliest = prevAbsArr + prevGround;          // must depart no earlier than this
+      // place this segment's local-departure (s.depUTC) on the earliest UTC day that fits
+      let cand = Math.floor(prevAbsArr/1440)*1440 + s.depUTC;
+      while (cand < earliest) cand += 1440;
+      absDep = cand;
+    }
+    const absArr = absDep + s.block;
+    segs.push({ ...s, absDep: absDep%10080, absArr: absArr%10080 });
+    prevAbsArr = absArr; prevGround = s.ground;
+  });
+  return { pair: bars, segs };
 }
 
 // Compute a single direction's segment (split mode) starting on dropDay
