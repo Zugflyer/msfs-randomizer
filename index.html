@@ -706,10 +706,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <!-- Airport search -->
           <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Airport</span>
             <div style="position:relative;">
-              <input id="aigen-ap-input" placeholder="ICAO, IATA or city…"
-                style="width:220px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;"
+              <input id="aigen-ap-input" placeholder="Airport Code"
+                style="width:260px;height:60px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-size:30px;font-weight:700;font-family:monospace;letter-spacing:.06em;text-transform:uppercase;text-align:center;outline:none;padding:0 10px;box-sizing:border-box;"
                 oninput="aiGenApSuggest(this)">
               <div id="aigen-ap-suggest" style="display:none;position:absolute;top:100%;left:0;min-width:300px;z-index:500;background:var(--surf);border:1px solid var(--bdr2);border-radius:var(--r);max-height:220px;overflow-y:auto;margin-top:2px;box-shadow:0 4px 16px rgba(0,0,0,.5);"></div>
             </div>
@@ -6718,10 +6717,12 @@ function aiGenSelectAp(e, code) {
   e.preventDefault();
   const ap = schedByCode[code]; if (!ap) return;
   aiGenTarget = ap;
-  document.getElementById('aigen-ap-input').value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
+  const apInp = document.getElementById('aigen-ap-input');
+  apInp.value = ap[0];
+  apInp.title = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
   document.getElementById('aigen-ap-suggest').style.display = 'none';
   const box = document.getElementById('aigen-ap-box');
-  box.style.display = 'flex'; box.innerHTML = apBox(ap);
+  box.style.display = 'none'; box.innerHTML = '';
   // Pre-fill arr only on legs that have no arr yet
   aiGenLegs.forEach(l => { if (!l.arr) l.arr = ap; });
   renderAiGenLegs();
@@ -6756,14 +6757,14 @@ function renderAiGenLegs() {
 
     // ── Airline + EQP ──
     const alCell = document.createElement('div');
-    alCell.style.cssText = bS+'width:96px;min-width:96px;gap:5px;';
+    alCell.style.cssText = 'display:flex;flex-direction:column;justify-content:center;align-items:center;gap:6px;min-height:54px;width:96px;min-width:96px;flex-shrink:0;';
     const alInp = document.createElement('input');
     alInp.placeholder='Airline'; alInp.value=leg.airline||''; alInp.maxLength=5;
-    alInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:82px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+    alInp.style.cssText='background:transparent;border:none;color:#fff;font-size:18px;font-weight:700;letter-spacing:.03em;padding:0;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
     alInp.oninput=()=>{ leg.airline=alInp.value=alInp.value.toUpperCase(); document.getElementById('aigen-logo-'+i).innerHTML=leg.airline?airlineLogoHtml(leg.airline):'<span style="font-size:9px;color:#aaa;">Logo</span>'; };
     const acInp = document.createElement('input');
     acInp.placeholder='EQP'; acInp.value=leg.aircraft||''; acInp.maxLength=8;
-    acInp.style.cssText='background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;color:#fff;font-size:12px;padding:3px 5px;width:82px;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+    acInp.style.cssText='background:transparent;border:none;color:#fff;font-size:18px;font-weight:700;letter-spacing:.03em;padding:0;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
     acInp.oninput=()=>{ leg.aircraft=acInp.value=acInp.value.toUpperCase(); };
     alCell.appendChild(alInp); alCell.appendChild(acInp);
 
