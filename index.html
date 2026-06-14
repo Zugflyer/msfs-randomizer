@@ -785,29 +785,19 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div style="padding:14px 16px 12px;display:flex;align-items:center;justify-content:center;gap:14px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;">
 
           <!-- Logo box (fills once a code is typed) -->
-          <div id="aigen-al-logo" style="width:120px;height:48px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg);flex-shrink:0;overflow:hidden;"></div>
+          <div id="aigen-al-logo" style="width:120px;height:60px;display:flex;align-items:center;justify-content:center;border:1px solid var(--bdr2);border-radius:6px;background:var(--bg);flex-shrink:0;overflow:hidden;"></div>
 
-          <!-- ICAO input + resolved name -->
-          <div style="display:flex;flex-direction:column;gap:4px;">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Airline ICAO</span>
-              <input id="aigen-al-input" placeholder="e.g. DLH, BAW, UAE…" maxlength="3"
-                style="width:160px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:14px;font-family:monospace;letter-spacing:.12em;text-transform:uppercase;outline:none;padding:7px 10px;box-sizing:border-box;"
-                oninput="aiGenAirlineInput(this)">
-            </div>
-            <div id="aigen-al-name" style="font-size:11px;color:var(--txt3);min-height:14px;padding-left:2px;"></div>
-          </div>
+          <!-- Big ICAO code input -->
+          <input id="aigen-al-input" placeholder="Airline Code" maxlength="3"
+            style="width:200px;height:60px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-size:30px;font-weight:700;font-family:monospace;letter-spacing:.14em;text-transform:uppercase;text-align:center;outline:none;padding:0 10px;box-sizing:border-box;"
+            oninput="aiGenAirlineInput(this)">
 
-          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+          <div style="width:1px;height:54px;background:var(--bdr2);flex-shrink:0;"></div>
 
-          <!-- Hub -->
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;">Hub</span>
-            <div style="position:relative;">
-              <input id="aigen-al-hub-input" placeholder="ICAO, IATA or city…"
-                style="width:200px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:6px 10px;box-sizing:border-box;">
-            </div>
-            <div id="aigen-al-hub-box" style="display:none;align-items:center;"></div>
+          <!-- Big hub input -->
+          <div style="position:relative;">
+            <input id="aigen-al-hub-input" placeholder="Hub"
+              style="width:260px;height:60px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-size:30px;font-weight:700;font-family:monospace;letter-spacing:.06em;text-transform:uppercase;text-align:center;outline:none;padding:0 10px;box-sizing:border-box;">
           </div>
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
@@ -5850,34 +5840,30 @@ function renderAiGenAirline() {
   const inp = document.getElementById('aigen-al-input');
   if (inp && inp.value !== aiGenAirline) inp.value = aiGenAirline;
   const logo = document.getElementById('aigen-al-logo');
-  const name = document.getElementById('aigen-al-name');
   const code = aiGenAirline;
   if (!code || code.length < 3) {
     if (logo) logo.innerHTML = '<span style="font-size:10px;color:var(--txt3);">logo</span>';
-    if (name) name.textContent = '';
   } else {
     if (logo) logo.innerHTML = airlineLogoHtml(code);
-    if (name) name.textContent = AIRLINE_NAMES[code] || 'Unknown airline code';
   }
   setupAiGenAlHub();
   renderAiGenAlLegs();
 }
 
-// Wire up the hub airport search box (only once)
+// Wire up the hub airport search box (only once). Input shows the bare ICAO code.
 function setupAiGenAlHub() {
   const inp = document.getElementById('aigen-al-hub-input');
-  const box = document.getElementById('aigen-al-hub-box');
-  if (!inp || !box) return;
-  // Already resolved → show the box
-  if (aiGenAlHub) {
-    inp.value = `${aiGenAlHub[0]}${aiGenAlHub[1]?' / '+aiGenAlHub[1]:''} — ${aiGenAlHub[7]||aiGenAlHub[2]}`;
+  if (!inp) return;
+  if (aiGenAlHub && document.activeElement !== inp) {
+    inp.value = aiGenAlHub[0];
+    inp.title = `${aiGenAlHub[0]}${aiGenAlHub[1]?' / '+aiGenAlHub[1]:''} — ${aiGenAlHub[7]||aiGenAlHub[2]}`;
   }
   if (inp._alHubWired) return;
   inp._alHubWired = true;
   buildSuggestBox(inp, ap => {
     aiGenAlHub = ap;
-    inp.value = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
-    // Prefill DEP airport on legs that still point at the old hub or are empty
+    inp.value = ap[0];
+    inp.title = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
     aiGenAlLegs.forEach(l => { if (!l.dep) l.dep = ap; });
     renderAiGenAlLegs();
   });
@@ -5910,24 +5896,23 @@ function alIsEastWest(dep, arr) {
   if (isNaN(dl) || isNaN(al)) return false;
   return al < dl;
 }
-// Effective block time in minutes used to compute arrival.
-// Researched → use as-is. Estimated → +30 taxi, +30 long E→W, -30 long W→E.
-function alEffectiveBlockMin(dep, arr, blockTime, isReal) {
-  const base = alHmToMin(blockTime);
-  if (base == null) return null;
-  if (isReal) return base;
-  let eff = base + 30; // taxi
-  const ew = alIsEastWest(dep, arr);
-  if (base >= 360) { // long flight (>=6h block)
-    eff += ew ? 30 : -30;
+// Estimated EFFECTIVE block time (minutes): great-circle air time + 30 taxi,
+// then +30 for long eastbound→westbound, -30 for long westbound→eastbound.
+function alEstimateEffectiveBlock(dep, arr) {
+  const air = alEstimateAirMin(dep, arr);
+  if (air == null) return null;
+  let eff = air + 30; // taxi
+  if (air >= 330) { // long flight (>=5.5h pure air ~ 6h block)
+    eff += alIsEastWest(dep, arr) ? 30 : -30;
   }
   return eff;
 }
-// Compute ARR clock time (local at arr airport) from fixed DEP + effective block.
+// Compute ARR clock time (local at arr airport) from fixed DEP + displayed block time.
+// The block time shown in the field is already the effective gate-to-gate time.
 // Returns "H:MM" string or '' if not computable.
 function alComputeArr(dep, arr, depFixed, blockTime, isReal) {
   const depMin = alHmToMin(depFixed);
-  const blk = alEffectiveBlockMin(dep, arr, blockTime, isReal);
+  const blk = alHmToMin(blockTime);
   if (depMin == null || blk == null) return '';
   const depOff = dep ? getUtcOffset(dep) : 0;
   const arrOff = arr ? getUtcOffset(arr) : 0;
@@ -5986,6 +5971,11 @@ function renderAiGenAlLegs() {
     if (!leg.dd2) leg.dd2 = mDepUntil;
     if (!leg.aa1) leg.aa1 = mArrFrom;
     if (!leg.aa2) leg.aa2 = mArrUntil;
+    // return-leg windows (DEP from the outbound destination, ARR back at hub)
+    if (!leg.rdd1) leg.rdd1 = mDepFrom;
+    if (!leg.rdd2) leg.rdd2 = mDepUntil;
+    if (!leg.raa1) leg.raa1 = mArrFrom;
+    if (!leg.raa2) leg.raa2 = mArrUntil;
 
     const wrapper = document.createElement('div');
     wrapper.style.cssText = 'margin-bottom:3px;';
@@ -6006,14 +5996,25 @@ function renderAiGenAlLegs() {
     eqpInp.oninput=()=>{ leg.eqp=eqpInp.value=eqpInp.value.toUpperCase(); };
     eqpCell.appendChild(eqpLbl); eqpCell.appendChild(eqpInp);
 
-    // Helper: a fixed-time input (DEP/ARR exact time, optional)
-    function fixedTimeInput(label, field) {
+    // Helper: a fixed-time input. If `computed` is provided (non-null), render a
+    // read-only computed arrival value instead of an editable field.
+    function fixedTimeInput(label, field, computed) {
       const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent=label;
-      const I=document.createElement('input'); I.type='text'; I.value=leg[field]||''; I.maxLength=5; I.placeholder='--:--';
-      I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
-      I.oninput=()=>{ leg[field]=I.value; };
-      I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; };
+      const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.placeholder='--:--';
+      if (computed !== undefined) {
+        // read-only computed arrival
+        I.value = computed || '';
+        I.readOnly = true;
+        I.placeholder = '--:--';
+        I.title = computed ? 'Computed local arrival = fixed DEP + effective block time' : 'Enter a fixed DEP time to compute arrival';
+        I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(computed?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);color:'+(computed?'#3fb950':'var(--txt3)')+';font-weight:'+(computed?700:400)+';text-align:center;outline:none;cursor:default;';
+      } else {
+        I.value=leg[field]||'';
+        I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+        I.oninput=()=>{ leg[field]=I.value; };
+        I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; renderAiGenAlLegs(); };
+      }
       wrap.appendChild(L); wrap.appendChild(I);
       return wrap;
     }
@@ -6032,7 +6033,18 @@ function renderAiGenAlLegs() {
       return wrap;
     }
 
-    // Build one AIRPORT column: airport box + (fixed time · from/until window · UTC) + optional computed-ARR line.
+    // Airline-mode airport box: big centered code (ICAO / IATA), city subline, full column width.
+    function alApBox(ap) {
+      if (!ap) return '';
+      const iata = ap[1] ? ' <span style="color:var(--blue);">/ '+ap[1]+'</span>' : '';
+      const city = ap[7] || ap[2];
+      return '<div style="width:100%;box-sizing:border-box;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:6px 8px;text-align:center;background:rgba(255,255,255,.02);">'
+        + '<div style="font-size:21px;font-weight:700;letter-spacing:.04em;color:#fff;line-height:1.1;">'+ap[0]+iata+'</div>'
+        + '<div style="font-size:10px;color:var(--txt3);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+city+'</div>'
+        + '</div>';
+    }
+
+    // Build one AIRPORT column: airport box + (fixed time · from/until window · UTC).
     // role: 'outDep' | 'outArr' | 'retDep' | 'retArr'
     function buildAirportCol(role) {
       // Field mapping per role
@@ -6051,14 +6063,14 @@ function renderAiGenAlLegs() {
       else if (role==='retArr') boxAp = leg.dep || aiGenAlHub; // return ends at hub
 
       const col = document.createElement('div');
-      col.style.cssText='display:flex;flex-direction:column;gap:4px;min-width:200px;flex-shrink:0;';
+      col.style.cssText='display:flex;flex-direction:column;gap:4px;width:220px;min-width:220px;flex-shrink:0;';
 
       // ── Airport box ──
       const apWrap = document.createElement('div');
-      apWrap.style.cssText='display:flex;align-items:center;min-height:30px;';
+      apWrap.style.cssText='display:flex;align-items:center;min-height:46px;width:100%;';
       if (cfg.editable) {
         if (boxAp) {
-          apWrap.innerHTML=apBox(boxAp); apWrap.style.cursor='pointer'; apWrap.title='Click to change';
+          apWrap.innerHTML=alApBox(boxAp); apWrap.style.cursor='pointer'; apWrap.title='Click to change';
           apWrap.onclick=()=>{
             if (role==='outDep'){ leg.dep=null; }
             else { leg.arr=null; leg.rBlockTime=''; leg.rBlockTimeReal=false; }
@@ -6067,7 +6079,7 @@ function renderAiGenAlLegs() {
         } else {
           const w=document.createElement('div'); w.style.cssText='position:relative;width:100%;';
           const inp=document.createElement('input'); inp.placeholder='ICAO or city…';
-          inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:12px;outline:none;padding:5px 7px;box-sizing:border-box;';
+          inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:12px 7px;box-sizing:border-box;text-align:center;';
           w.appendChild(inp); apWrap.appendChild(w);
           if (role==='outDep') {
             buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
@@ -6075,8 +6087,8 @@ function renderAiGenAlLegs() {
             buildSuggestBox(inp, ap=>{ leg.arr=ap;
               // pre-seed estimated return block (no API) so return ARR shows right away
               if (!leg.rBlockTimeReal) {
-                const m = alEstimateAirMin(leg.arr, leg.dep || aiGenAlHub);
-                if (m != null) { leg.rBlockTime = Math.floor(m/60)+':'+String(m%60).padStart(2,'0'); leg.rBlockTimeReal=false; }
+                const eff = alEstimateEffectiveBlock(leg.arr, leg.dep || aiGenAlHub);
+                if (eff != null) { leg.rBlockTime = Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'); leg.rBlockTimeReal=false; }
               }
               renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out');
             });
@@ -6085,10 +6097,10 @@ function renderAiGenAlLegs() {
       } else {
         // read-only mirror box
         if (boxAp) {
-          apWrap.innerHTML=apBox(boxAp);
+          apWrap.innerHTML=alApBox(boxAp);
           apWrap.style.opacity='.85';
         } else {
-          const ph=document.createElement('div'); ph.style.cssText='color:var(--txt3);font-size:11px;font-style:italic;padding:5px 7px;'; ph.textContent='(set arrival first)';
+          const ph=document.createElement('div'); ph.style.cssText='width:100%;text-align:center;color:var(--txt3);font-size:11px;font-style:italic;padding:14px 7px;'; ph.textContent='(set arrival first)';
           apWrap.appendChild(ph);
         }
       }
@@ -6097,8 +6109,16 @@ function renderAiGenAlLegs() {
       // ── Fixed time · window · UTC ──
       const timeRow = document.createElement('div');
       timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-      const fixedLabel = (role==='outArr'||role==='retArr') ? 'ARR' : 'DEP';
-      timeRow.appendChild(fixedTimeInput(fixedLabel, cfg.fixed));
+      const isArrCol = (role==='outArr'||role==='retArr');
+      if (isArrCol) {
+        // arrival side: the fixed field shows the COMPUTED arrival time (read-only)
+        const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
+        const computed = alComputeArr(fromAp, toAp, leg[cfg.dFix], leg[cfg.blk], leg[cfg.real]);
+        timeRow.appendChild(fixedTimeInput('ARR', cfg.fixed, computed));
+      } else {
+        // departure side: editable fixed DEP time
+        timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed));
+      }
       timeRow.appendChild(winPair(cfg.w1, cfg.w2));
       const utc=document.createElement('div'); utc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const utcL=document.createElement('div'); utcL.style.cssText='font-size:9px;color:var(--txt3);'; utcL.textContent='offset';
@@ -6106,21 +6126,6 @@ function renderAiGenAlLegs() {
       utc.appendChild(utcL); utc.appendChild(utcV);
       timeRow.appendChild(utc);
       col.appendChild(timeRow);
-
-      // ── Computed ARR line (only on arrival columns) ──
-      if (cfg.showArr) {
-        const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
-        const computed = alComputeArr(fromAp, toAp, leg[cfg.dFix], leg[cfg.blk], leg[cfg.real]);
-        const line = document.createElement('div');
-        line.style.cssText='display:flex;align-items:center;gap:8px;min-height:24px;padding:2px 4px;border-top:1px dashed rgba(255,255,255,.12);';
-        const lbl=document.createElement('span'); lbl.style.cssText='font-size:9px;color:var(--txt3);'; lbl.textContent='ARR (calc)';
-        const t=document.createElement('span');
-        t.style.cssText='font-size:13px;font-family:monospace;color:'+(computed?'#3fb950':'var(--txt3)')+';font-weight:'+(computed?700:400)+';margin-left:auto;';
-        t.textContent = computed || '— set fixed DEP';
-        t.title = computed ? 'Computed local arrival = fixed DEP + effective block time' : 'Enter a fixed DEP time on the departure side to compute arrival';
-        line.appendChild(lbl); line.appendChild(t);
-        col.appendChild(line);
-      }
 
       return col;
     }
@@ -6154,12 +6159,10 @@ function renderAiGenAlLegs() {
     // ── Ground time between the two legs (turnaround at the destination) ──
     const gnd = alGroundTime(leg.eqp);
     const groundCell = document.createElement('div');
-    groundCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 6px;min-height:54px;gap:2px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
-    const gIcon=document.createElement('div'); gIcon.style.cssText='font-size:13px;color:var(--txt3);line-height:1;'; gIcon.textContent='⟳';
-    const gVal=document.createElement('div'); gVal.style.cssText='font-size:12px;font-family:monospace;color:#e0b341;font-weight:700;'; gVal.textContent=gnd;
-    const gL=document.createElement('div'); gL.style.cssText='font-size:9px;color:var(--txt3);white-space:nowrap;'; gL.textContent='GND min';
+    groundCell.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 8px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    const gVal=document.createElement('div'); gVal.style.cssText='font-size:13px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; gVal.textContent=gnd+' min';
     groundCell.title = 'Turnaround time by aircraft category: heavy 100 · narrowbody 45 · commuter 25 (derived from EQP)';
-    groundCell.appendChild(gIcon); groundCell.appendChild(gVal); groundCell.appendChild(gL);
+    groundCell.appendChild(gVal);
 
     // ── Return leg: DEP (=outbound arrival) · block · ARR (=hub) ──
     const retDepCol = buildAirportCol('retDep');
@@ -6240,15 +6243,12 @@ async function aiGenAlFetchBlockTime(i, dir) {
       }
     } catch(e) {}
   }
-  // Fallback: pure great-circle AIR time (no taxi here — alEffectiveBlockMin adds +30 taxi for estimates)
-  const R=6371,φ1=dep[3]*Math.PI/180,φ2=arr[3]*Math.PI/180;
-  const Δφ=(arr[3]-dep[3])*Math.PI/180,Δλ=(arr[4]-dep[4])*Math.PI/180;
-  const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
-  const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
-  const spd=dist<200?400:dist<500?580:dist<2000?780:870;
-  const mins=Math.round(dist/spd*60);
-  const bt=Math.floor(mins/60)+':'+(String(mins%60)).padStart(2,'0');
-  setVal(bt, false);
+  // Fallback: estimated effective block time (great-circle air + 30 taxi ± 30 east/west)
+  const eff = alEstimateEffectiveBlock(dep, arr);
+  if (eff != null) {
+    const bt = Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0');
+    setVal(bt, false);
+  }
   renderAiGenAlLegs();
 }
 
