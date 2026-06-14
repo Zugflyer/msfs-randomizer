@@ -7808,6 +7808,7 @@ function computePairSegs(legIdx, dropDay) {
     segs.push({ ...s, absDep: absDep%10080, absArr: absArr%10080 });
     prevAbsArr = absArr; prevGround = s.ground;
   });
+  if (window.__rotDebug) console.log('computePairSegs leg'+legIdx, segs.map(s=>s.depIcao+'->'+s.arrIcao+' depUTC='+s.depUTC+' block='+s.block+' grnd='+s.ground+' absDep='+s.absDep+' absArr='+s.absArr));
   return { pair: bars, segs };
 }
 
