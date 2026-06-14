@@ -6340,46 +6340,57 @@ function renderAiGenAlLegs() {
 // Outbound: dep → stop1 → … → arr.  Return: arr → … → stop1 → dep.
 // Editing an empty stop fills the mirrored fields on both rows automatically.
 function renderAlChainLeg(container, leg, i, ctx) {
-  const { bS, utcStr } = ctx;
+  const { bS, utcStr, mDepFrom, mDepUntil } = ctx;
   rebuildAlChainHops(leg);
+  // give each hop a default DEP window (from the master DEP window) if empty
+  [...(leg.outHops||[]), ...(leg.retHops||[])].forEach(h=>{
+    if (!h.dd1) h.dd1 = mDepFrom || '06:00';
+    if (!h.dd2) h.dd2 = mDepUntil || '22:30';
+    // estimate a block time (no API) once both endpoints are known and none set yet
+    if (!h.blockTime && h.dep && h.arr) {
+      const eff = alEstimateEffectiveBlock(h.dep, h.arr);
+      if (eff!=null) { h.blockTime = Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'); h.blockTimeReal=false; }
+    }
+  });
   const stops = leg.stops || [];
   const fmtHM = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
   const hm = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1])*60+(+m[2]):null; };
-  const gnd = alGroundTime(leg.eqp);
+  const gnd = alGroundTime(leg.eqp, leg);
 
   // Chain the whole rotation: only the very first outbound departure has an editable
-  // clock time (leg.startFixed); every later hop departs at previous arrival + ground.
-  // Returns {out:[{dep,arr}], ret:[{dep,arr}]} as "H:MM" strings (local), plus a flag
-  // marking whether each hop's times are computable.
-  function computeChainTimes() {
-    const seq = [...(leg.outHops||[]), ...(leg.retHops||[])];
-    const start = (leg.startFixed!=null && hm(leg.startFixed)!=null) ? hm(leg.startFixed) : 480; // 08:00 default
-    let cur = start; const res = [];
-    seq.forEach(h => {
+  // Per-row chaining: the FIRST segment of a row has a typed departure time
+  // (hop.depFixed); each later segment departs at (previous ARR + ground), local.
+  // Returns per side an array of {dep, arr} "H:MM" strings (or null if not computable).
+  function chainRowTimes(hops) {
+    const res = []; let cur = null;
+    hops.forEach((h, k) => {
       const b = hm(h.blockTime);
-      if (b==null || !h.dep || !h.arr) { res.push({dep:null,arr:null}); return; }
+      let depMin;
+      if (k === 0) depMin = hm(h.depFixed);          // typed by the user
+      else depMin = (cur!=null) ? cur : null;        // previous ARR + ground
+      if (depMin==null || b==null || !h.dep || !h.arr) { res.push({dep:null,arr:null}); cur=null; return; }
       const dOff=getUtcOffset(h.dep), aOff=getUtcOffset(h.arr);
-      const depLocal=((cur%1440)+1440)%1440;
+      const depLocal=((depMin%1440)+1440)%1440;
       const arrLocal=((depLocal+b+(aOff-dOff)*60)%1440+1440)%1440;
-      res.push({dep:fmtHM(depLocal), arr:fmtHM(arrLocal), depMin:depLocal, arrMin:arrLocal});
-      cur = arrLocal + gnd; // next hop departs after turnaround (same airport, no tz jump)
+      res.push({dep:fmtHM(depLocal), arr:fmtHM(arrLocal)});
+      cur = arrLocal + gnd;                          // next segment's departure (same airport)
     });
-    const nOut=(leg.outHops||[]).length;
-    return { out: res.slice(0,nOut), ret: res.slice(nOut) };
+    return res;
   }
-  const chainTimes = computeChainTimes();
-  const timesFor = (side,k) => (side==='out'?chainTimes.out:chainTimes.ret)[k] || {dep:null,arr:null};
+  const outTimes = chainRowTimes(leg.outHops||[]);
+  const retTimes = chainRowTimes(leg.retHops||[]);
+  const timesFor = (side,k) => (side==='out'?outTimes:retTimes)[k] || {dep:null,arr:null};
 
   const wrapper = document.createElement('div');
-  wrapper.style.cssText='margin-bottom:8px;border:1px solid rgba(123,97,255,.25);border-radius:8px;padding:4px 2px;background:rgba(123,97,255,.03);';
+  wrapper.style.cssText='margin-bottom:8px;border:1px solid rgba(123,97,255,.25);border-radius:8px;padding:0 7px;background:rgba(123,97,255,.03);box-sizing:border-box;';
 
-  // Build a single hop's airport+time column. Departure time is editable ONLY on the very
-  // first outbound hop (the rotation start); all other hops show a computed read-only DEP.
+  // Build a single segment's airport+time column. Departure time is editable on the FIRST
+  // segment of each row; later segments show a computed read-only DEP (prev ARR + ground).
   // hops: the array (leg.outHops or leg.retHops); k: index; side: 'out'|'ret'
   function hopAirportCol(hops, k, side, isFirstDep) {
     const hop = hops[k];
     const col = document.createElement('div');
-    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:200px;min-width:200px;flex-shrink:0;';
+    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:220px;min-width:220px;flex-shrink:0;';
 
     // The DEParture airport box for this hop
     const apWrap = document.createElement('div');
@@ -6392,9 +6403,13 @@ function renderAlChainLeg(container, leg, i, ctx) {
     }, editableDep);
     col.appendChild(apWrap);
 
-    // time row: editable DEP · from/until window · UTC (every hop behaves like a normal flight)
+    // time row: DEP (editable on segment 0, computed read-only after) · from/until window · UTC
     const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    timeRow.appendChild(alSmallFixed('DEP', hop.depFixed, v=>{ hop.depFixed=v; }, ()=>renderAiGenAlLegs()));
+    if (k === 0) {
+      timeRow.appendChild(alSmallFixed('DEP', hop.depFixed, v=>{ hop.depFixed=v; }, ()=>renderAiGenAlLegs()));
+    } else {
+      timeRow.appendChild(alSmallFixedRO('DEP', timesFor(side,k).dep));
+    }
     timeRow.appendChild(alSmallWin(hop, 'dd1','dd2'));
     timeRow.appendChild(alUtcMini(hop.dep, utcStr));
     col.appendChild(timeRow);
@@ -6407,7 +6422,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
     const hop = hops[k];
     const isLast = (k === hops.length-1);
     const col = document.createElement('div');
-    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:200px;min-width:200px;flex-shrink:0;';
+    col.style.cssText='display:flex;flex-direction:column;gap:4px;width:220px;min-width:220px;flex-shrink:0;';
 
     const apWrap=document.createElement('div'); apWrap.style.cssText='display:flex;align-items:center;min-height:46px;width:100%;';
     if (isLast) {
@@ -6428,11 +6443,8 @@ function renderAlChainLeg(container, leg, i, ctx) {
     col.appendChild(apWrap);
 
     const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
-    // per-hop computed arrival = this hop's fixed DEP + its block (local at hop.arr)
-    let hopArrStr='';
-    { const d=hm(hop.depFixed), b=hm(hop.blockTime);
-      if (d!=null && b!=null && hop.dep && hop.arr) { const tz=(getUtcOffset(hop.arr)-getUtcOffset(hop.dep))*60; hopArrStr=fmtHM(d+b+tz); } }
-    timeRow.appendChild(alSmallFixedRO('ARR', hopArrStr));
+    // arrival comes from the per-row chaining (segment 0 uses typed DEP, later ones use prev ARR + ground)
+    timeRow.appendChild(alSmallFixedRO('ARR', timesFor(side,k).arr));
     timeRow.appendChild(alUtcMini(hop.arr, utcStr));
     col.appendChild(timeRow);
     return col;
@@ -6456,7 +6468,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
 
   function groundMini() {
     const g=document.createElement('div');
-    g.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:80px;min-width:80px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
+    g.style.cssText='display:flex;align-items:center;justify-content:center;flex-shrink:0;width:120px;min-width:120px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
     const v=document.createElement('div'); v.style.cssText='font-size:12px;font-family:monospace;color:#fff;font-weight:700;white-space:nowrap;'; v.textContent=gnd+' min';
     g.title='Turnaround at stop'; g.appendChild(v); return g;
   }
@@ -6464,7 +6476,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
   // Render one chain row (sequence of hops with blocks + ground between)
   function chainRow(hops, side, label) {
     const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:stretch;justify-content:flex-start;gap:5px;padding:4px 6px;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
+    row.style.cssText='display:flex;align-items:stretch;justify-content:flex-start;gap:5px;padding:4px 0;flex-wrap:nowrap;overflow-x:auto;width:100%;box-sizing:border-box;';
 
     // left column only on the outbound row (logo+eqp+buttons); return row gets a label spacer
     if (side==='out') {
@@ -7410,6 +7422,14 @@ function legDepartureDays(legIdx, which) {
   return counts;
 }
 
+// Order bars within a leg: outbound before return, then by chain hop index (keeps the
+// real flown sequence, e.g. OLBA→VTBS, VTBS→YSSY, YSSY→VTBS, VTBS→OLBA).
+function rotBarOrder(a,b){
+  const da = a.dir==='out'?0:1, db = b.dir==='out'?0:1;
+  if (da!==db) return da-db;
+  return (a.hop||0)-(b.hop||0);
+}
+
 function renderRotationBars() {
   const container = document.getElementById('rot-bars-container');
   if (!container) return;
@@ -7566,7 +7586,7 @@ function renderRotationBars() {
   };
 
   Object.keys(byLeg).sort((a,b)=>a-b).forEach(legIdx=>{
-    const bars = byLeg[legIdx].slice().sort((a,b)=> a.dir==='out'?-1:1);
+    const bars = byLeg[legIdx].slice().sort(rotBarOrder);
     const isSplit = rotSplitLegs.has(parseInt(legIdx));
     if(!isSplit){
       buildRow(legIdx, bars, 'pair', false);
@@ -7762,7 +7782,7 @@ function barToUTCSeg(bar) {
 
 // Compute outbound+return segments for a leg pair, starting on UTC weekday dropDay
 function computePairSegs(legIdx, dropDay) {
-  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort((a,b)=> a.dir==='out'?-1:1);
+  const pair = rotBars.filter(b=>b.legIdx===legIdx).sort(rotBarOrder);
   if(!pair.length) return null;
   const outSeg = barToUTCSeg(pair[0]);
   const retSeg = barToUTCSeg(pair[1]);
