@@ -6622,15 +6622,26 @@ async function createRotationsAirline() {
   if (!src.length) { alert('Please complete at least one route (departure, arrival, EQP, and block times).'); return; }
 
   // Convert to the shape buildRotationBars expects.
-  const validLegs = src.map(l => ({
-    dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
-    blockTime: l.blockTime, rBlockTime: l.rBlockTime,
-    groundTime: String(alGroundTime(l.eqp)),
-    dnOut: 'any', dnRet: 'any',
-    // window mapping: outbound dep/arr, return dep (ad*) and home arr (da*)
-    dd1: l.dd1, dd2: l.dd2, aa1: l.aa1, aa2: l.aa2,
-    ad1: l.rdd1, ad2: l.rdd2, da1: l.raa1, da2: l.raa2,
-  }));
+  // If the user entered a FIXED departure time for a leg, pin that leg to exactly that
+  // time by collapsing its departure window to a single minute and opening the arrival
+  // window wide (so findTime returns precisely the entered time). Legs without a fixed
+  // time keep their from/until windows and let findTime search as usual.
+  const validLegs = src.map(l => {
+    const outFixed = (l.depFixed && /^\d{1,2}:\d{2}$/.test(l.depFixed)) ? l.depFixed : null;
+    const retFixed = (l.rDepFixed && /^\d{1,2}:\d{2}$/.test(l.rDepFixed)) ? l.rDepFixed : null;
+    return {
+      dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
+      blockTime: l.blockTime, rBlockTime: l.rBlockTime,
+      groundTime: String(alGroundTime(l.eqp)),
+      dnOut: 'any', dnRet: 'any',
+      // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
+      dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
+      aa1: outFixed ? '00:00' : l.aa1, aa2: outFixed ? '23:59' : l.aa2,
+      // return dep window (ad*) (pinned if fixed) + home/arr window (da*) (wide-open if fixed)
+      ad1: retFixed || l.rdd1, ad2: retFixed || l.rdd2,
+      da1: retFixed ? '00:00' : l.raa1, da2: retFixed ? '23:59' : l.raa2,
+    };
+  });
 
   switchView('rotations');
   const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
