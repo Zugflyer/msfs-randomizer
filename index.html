@@ -331,8 +331,22 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 <div class="app">
 
 <!-- TOP NAV -->
-<div class="topnav">
+<div class="topnav" style="position:relative;">
+  <!-- LEFT GROUP: MSFS Operations | Data -->
   <div class="topnav-tabs">
+    <button class="topnav-tab topnav-primary" id="t-operations" onclick="switchView('operations')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9v.01M9 12v.01M9 15v.01M9 18v.01"/></svg>
+      MSFS Operations
+    </button>
+    <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      Data
+    </button>
+  </div>
+
+  <!-- CENTER GROUP: Logbook, Next Destination | Legs | AI Generator -->
+  <div class="topnav-tabs" style="position:absolute;left:50%;transform:translateX(-50%);">
     <button class="topnav-tab topnav-secondary active" id="t-logbook" onclick="switchView('logbook')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
       Logbook
@@ -347,16 +361,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       Legs
     </button>
     <div class="topnav-sep"></div>
-    <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-      Data
-    </button>
-    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-aigen" onclick="switchView('aigen')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       AI Generator
     </button>
-
   </div>
   <div style="margin-left:auto;font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 8px;">
     <span id="cloud-status"></span>
@@ -450,6 +458,15 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           <div class="results-row" id="row-r5"></div>
           <div class="results-row" id="row-r6"></div>
         </div>
+      </div>
+    </div>
+
+    <!-- MSFS OPERATIONS (placeholder — to be built) -->
+    <div id="view-operations" style="display:none;flex:1;flex-direction:column;overflow:hidden;align-items:center;justify-content:center;">
+      <div style="text-align:center;color:var(--txt3);">
+        <div style="font-size:32px;margin-bottom:10px;">🛫</div>
+        <div style="font-size:15px;font-weight:600;color:var(--txt2);">MSFS Operations</div>
+        <div style="font-size:12px;margin-top:6px;">Coming soon.</div>
       </div>
     </div>
 
@@ -2690,7 +2707,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2701,7 +2718,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
