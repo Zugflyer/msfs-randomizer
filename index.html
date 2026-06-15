@@ -462,7 +462,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
 
     <!-- MSFS OPERATIONS (placeholder — to be built) -->
-    <div id="view-operations" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+    <div id="view-operations" style="display:none;flex:1;flex-direction:row;overflow:hidden;">
+      <!-- LEFT: To dos -->
+      <div style="flex:1;overflow-y:auto;padding:20px 24px;border-right:1px solid var(--bdr);">
+        <div id="ops-todos" style="max-width:560px;margin:0 auto;"></div>
+      </div>
+      <!-- RIGHT: reference tables -->
       <div style="flex:1;overflow-y:auto;padding:20px 24px;">
         <div id="ops-tables" style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:28px;"></div>
       </div>
@@ -8219,13 +8224,18 @@ function loadOpsData() {
   if (opsData) return opsData;
   try {
     const raw = localStorage.getItem('ops_tables_v1');
-    if (raw) { opsData = JSON.parse(raw); return opsData; }
+    if (raw) { opsData = JSON.parse(raw); }
   } catch(e){}
-  // seed from defaults: each row = {name, paris:false, suisse:false}
-  opsData = {
-    aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
-    heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
-  };
+  if (!opsData) {
+    opsData = {
+      aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
+      heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
+    };
+  }
+  // ensure a todos list exists (added later) — at least one empty row to type into
+  if (!Array.isArray(opsData.todos) || !opsData.todos.length) {
+    opsData.todos = [{name:'', paris:false, suisse:false}];
+  }
   saveOpsData();
   return opsData;
 }
@@ -8234,14 +8244,21 @@ function saveOpsData() {
 }
 
 function renderOpsTables() {
-  const host = document.getElementById('ops-tables'); if (!host) return;
   const data = loadOpsData();
-  host.innerHTML = '';
-  host.appendChild(buildOpsTable('AIG plans with own aircraft allocation', 'aig', data.aig));
-  host.appendChild(buildOpsTable('Embraer and Heavy coding', 'heavy', data.heavy));
+  const todoHost = document.getElementById('ops-todos');
+  if (todoHost) {
+    todoHost.innerHTML='';
+    todoHost.appendChild(buildOpsTable('To dos', 'todos', data.todos, 'To do'));
+  }
+  const host = document.getElementById('ops-tables');
+  if (host) {
+    host.innerHTML = '';
+    host.appendChild(buildOpsTable('AIG plans with own aircraft allocation', 'aig', data.aig, 'Airline'));
+    host.appendChild(buildOpsTable('Embraer and Heavy coding', 'heavy', data.heavy, 'Airline'));
+  }
 }
 
-function buildOpsTable(title, key, rows) {
+function buildOpsTable(title, key, rows, firstColLabel) {
   const wrap = document.createElement('div');
 
   const h = document.createElement('div');
@@ -8255,7 +8272,7 @@ function buildOpsTable(title, key, rows) {
   // header row
   const thead = document.createElement('thead');
   const htr = document.createElement('tr');
-  ['Airline','Paris','Suisse'].forEach((c,ci)=>{
+  [firstColLabel||'Airline','Paris','Suisse'].forEach((c,ci)=>{
     const th=document.createElement('th');
     th.textContent=c;
     th.style.cssText='text-align:'+(ci===0?'left':'center')+';font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;'+(ci===0?'':'width:90px;')+'border-bottom:2px solid #c2cad8;';
