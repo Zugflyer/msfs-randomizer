@@ -462,11 +462,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
 
     <!-- MSFS OPERATIONS (placeholder — to be built) -->
-    <div id="view-operations" style="display:none;flex:1;flex-direction:column;overflow:hidden;align-items:center;justify-content:center;">
-      <div style="text-align:center;color:var(--txt3);">
-        <div style="font-size:32px;margin-bottom:10px;">🛫</div>
-        <div style="font-size:15px;font-weight:600;color:var(--txt2);">MSFS Operations</div>
-        <div style="font-size:12px;margin-top:6px;">Coming soon.</div>
+    <div id="view-operations" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div style="flex:1;overflow-y:auto;padding:20px 24px;">
+        <div id="ops-tables" style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:28px;"></div>
       </div>
     </div>
 
@@ -2743,6 +2741,7 @@ function switchView(view) {
       else initTovisitMap();
     }, 120);
   }
+  if (view === 'operations') renderOpsTables();
 }
 
 const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
@@ -8195,6 +8194,130 @@ function ttoolsDownload(content, filename) {
   const a=document.createElement('a'); a.href=url; a.download=filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
+// ═══ MSFS OPERATIONS — reference tables ═══════════════════════════════════════
+const OPS_DEFAULTS = {
+  aig: [
+    'Aegean','Aer Lingus (only NC)','Air Canada (only NC)','Air Canada Express (only NC)',
+    'Air Canada Cargo','Air France (only NC)','Air France HOP','Air New Zealand (no Wamos, only NC)',
+    'American Eagle (Embraers)','Austrian (only NC, no partners)','Brussels (no Air Baltic)',
+    'El Al (only NC)','Etihad (only NC)','Etihad Cargo (only NC)','Eurowings (some order)',
+    'FedEx (no MD11)','Iberia (no wetleases)','Iberia Regional (only NC)','ITA Airways (no A332)',
+    'KLM','KLM Cityhopper','KMMalta','Korean (only NC)','Lufthansa (only NC)',
+    'Lufthansa Regional (only NC)','Luxair','Qantas (only NC)','SAS (only NC, Skyteam logo)',
+    'Swiss (no Air Baltic)','United (only NC)','United Express (Embraers, only NC)','UPS (no MD11)',
+    'Westjet (only NC)','JAL (Domestic widebodies)','ANA (Domestic widebodies)','Saudia (only NC)',
+    'Wideroe (only NC)'
+  ],
+  heavy: ['Austrian','Finnair','American','Delta','Alaska','United','Swiss','JAL']
+};
+
+let opsData = null;
+
+function loadOpsData() {
+  if (opsData) return opsData;
+  try {
+    const raw = localStorage.getItem('ops_tables_v1');
+    if (raw) { opsData = JSON.parse(raw); return opsData; }
+  } catch(e){}
+  // seed from defaults: each row = {name, paris:false, suisse:false}
+  opsData = {
+    aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
+    heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
+  };
+  saveOpsData();
+  return opsData;
+}
+function saveOpsData() {
+  try { localStorage.setItem('ops_tables_v1', JSON.stringify(opsData)); } catch(e){}
+}
+
+function renderOpsTables() {
+  const host = document.getElementById('ops-tables'); if (!host) return;
+  const data = loadOpsData();
+  host.innerHTML = '';
+  host.appendChild(buildOpsTable('AIG plans with own aircraft allocation', 'aig', data.aig));
+  host.appendChild(buildOpsTable('Embraer and Heavy coding', 'heavy', data.heavy));
+}
+
+function buildOpsTable(title, key, rows) {
+  const wrap = document.createElement('div');
+
+  const h = document.createElement('div');
+  h.textContent = title;
+  h.style.cssText = 'font-size:15px;font-weight:700;color:#fff;margin-bottom:10px;letter-spacing:.01em;';
+  wrap.appendChild(h);
+
+  const table = document.createElement('table');
+  table.style.cssText = 'width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
+
+  // header row
+  const thead = document.createElement('thead');
+  const htr = document.createElement('tr');
+  ['Airline','Paris','Suisse'].forEach((c,ci)=>{
+    const th=document.createElement('th');
+    th.textContent=c;
+    th.style.cssText='text-align:'+(ci===0?'left':'center')+';font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;'+(ci===0?'':'width:90px;')+'border-bottom:2px solid #c2cad8;';
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr); table.appendChild(thead);
+
+  const tbody = document.createElement('tbody');
+  rows.forEach((row,ri)=> tbody.appendChild(buildOpsRow(key,row,ri,rows)));
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+
+  // add-row hint
+  const hint=document.createElement('div');
+  hint.textContent='Press Tab in the last cell to add a new row.';
+  hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
+  wrap.appendChild(hint);
+
+  return wrap;
+}
+
+function buildOpsRow(key,row,ri,rows) {
+  const tr=document.createElement('tr');
+  tr.style.cssText = 'background:'+(ri%2? '#eef1f6':'#f9fafc')+';';
+
+  // name cell (editable text)
+  const tdName=document.createElement('td');
+  tdName.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;';
+  const nameInp=document.createElement('input');
+  nameInp.type='text'; nameInp.value=row.name||'';
+  nameInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;padding:8px 12px;font-family:var(--ff);';
+  nameInp.oninput=()=>{ row.name=nameInp.value; saveOpsData(); };
+  tdName.appendChild(nameInp);
+  tr.appendChild(tdName);
+
+  // check cells
+  ['paris','suisse'].forEach(field=>{
+    const td=document.createElement('td');
+    td.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;cursor:pointer;user-select:none;font-size:15px;color:#1f7a3d;font-weight:700;padding:8px 0;';
+    td.textContent = row[field] ? '✓' : '';
+    td.title='Click to toggle';
+    td.onclick=()=>{ row[field]=!row[field]; td.textContent=row[field]?'✓':''; saveOpsData(); };
+    tr.appendChild(td);
+  });
+
+  // Tab in the name input of the LAST row adds a new row (Word-like)
+  nameInp.addEventListener('keydown', e=>{
+    if (e.key==='Tab' && !e.shiftKey) {
+      const isLast = (rows[rows.length-1]===row);
+      if (isLast) {
+        e.preventDefault();
+        const newRow={name:'',paris:false,suisse:false};
+        rows.push(newRow); saveOpsData();
+        const tbody=tr.parentNode;
+        tbody.appendChild(buildOpsRow(key,newRow,rows.length-1,rows));
+        const newInp=tbody.lastChild.querySelector('input');
+        if (newInp) newInp.focus();
+      }
+    }
+  });
+
+  return tr;
 }
 
 </script>
