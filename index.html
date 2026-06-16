@@ -8220,31 +8220,55 @@ const OPS_DEFAULTS = {
 
 let opsData = null;
 
-function loadOpsData() {
-  if (opsData) return opsData;
+function _opsSeed() {
+  return {
+    aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
+    heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
+    todos: [{name:'', paris:false, suisse:false}],
+  };
+}
+function _opsNormalize(d) {
+  d = d || {};
+  if (!Array.isArray(d.aig))   d.aig   = OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false}));
+  if (!Array.isArray(d.heavy)) d.heavy = OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false}));
+  if (!Array.isArray(d.todos) || !d.todos.length) d.todos = [{name:'', paris:false, suisse:false}];
+  return d;
+}
+
+// Load from Supabase (shared across devices); fall back to local cache, then seed.
+async function loadOpsDataAsync() {
+  // 1) try Supabase
   try {
-    const raw = localStorage.getItem('ops_tables_v1');
-    if (raw) { opsData = JSON.parse(raw); }
-  } catch(e){}
+    const res = await sb.from('categories').select('items').eq('name','__ops_tables__').single();
+    if (res && res.data && res.data.items) {
+      opsData = _opsNormalize(res.data.items);
+      try { localStorage.setItem('ops_tables_v1', JSON.stringify(opsData)); } catch(e){}
+      return opsData;
+    }
+  } catch(e){ /* offline or not yet created */ }
+  // 2) local cache
   if (!opsData) {
-    opsData = {
-      aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
-      heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
-    };
+    try { const raw=localStorage.getItem('ops_tables_v1'); if (raw) opsData=JSON.parse(raw); } catch(e){}
   }
-  // ensure a todos list exists (added later) — at least one empty row to type into
-  if (!Array.isArray(opsData.todos) || !opsData.todos.length) {
-    opsData.todos = [{name:'', paris:false, suisse:false}];
-  }
+  // 3) seed
+  if (!opsData) opsData = _opsSeed();
+  opsData = _opsNormalize(opsData);
   saveOpsData();
   return opsData;
 }
+// Synchronous accessor for the in-memory copy (used by row builders after load)
+function loadOpsData() {
+  if (!opsData) opsData = _opsNormalize(_opsSeed());
+  return opsData;
+}
+// Persist to both Supabase (shared) and localStorage (cache)
 function saveOpsData() {
   try { localStorage.setItem('ops_tables_v1', JSON.stringify(opsData)); } catch(e){}
+  try { sb.from('categories').upsert({ name:'__ops_tables__', items: opsData }, { onConflict:'name' }); } catch(e){}
 }
 
-function renderOpsTables() {
-  const data = loadOpsData();
+async function renderOpsTables() {
+  const data = await loadOpsDataAsync();
   const todoHost = document.getElementById('ops-todos');
   if (todoHost) {
     todoHost.innerHTML='';
@@ -8279,6 +8303,11 @@ function buildOpsTable(title, key, rows, firstColLabel) {
     htr.appendChild(th);
   });
   thead.appendChild(htr); table.appendChild(thead);
+  if (key==='todos') {
+    const thx=document.createElement('th');
+    thx.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;';
+    htr.appendChild(thx);
+  }
 
   const tbody = document.createElement('tbody');
   rows.forEach((row,ri)=> tbody.appendChild(buildOpsRow(key,row,ri,rows)));
@@ -8295,30 +8324,58 @@ function buildOpsTable(title, key, rows, firstColLabel) {
 }
 
 function buildOpsRow(key,row,ri,rows) {
+  const isTodo = (key==='todos');
   const tr=document.createElement('tr');
   tr.style.cssText = 'background:'+(ri%2? '#eef1f6':'#f9fafc')+';';
 
-  // name cell (editable text)
+  // name cell — textarea (auto-growing) for to-dos, single-line input otherwise
   const tdName=document.createElement('td');
-  tdName.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;';
-  const nameInp=document.createElement('input');
-  nameInp.type='text'; nameInp.value=row.name||'';
-  nameInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;padding:8px 12px;font-family:var(--ff);';
-  nameInp.oninput=()=>{ row.name=nameInp.value; saveOpsData(); };
+  tdName.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;vertical-align:top;';
+  let nameInp;
+  if (isTodo) {
+    nameInp=document.createElement('textarea');
+    nameInp.rows=1; nameInp.value=row.name||'';
+    nameInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;line-height:1.4;padding:8px 12px;font-family:var(--ff);resize:none;overflow:hidden;display:block;';
+    const autosize=()=>{ nameInp.style.height='auto'; nameInp.style.height=(nameInp.scrollHeight)+'px'; };
+    nameInp.oninput=()=>{ row.name=nameInp.value; autosize(); saveOpsData(); };
+    setTimeout(autosize,0);
+  } else {
+    nameInp=document.createElement('input');
+    nameInp.type='text'; nameInp.value=row.name||'';
+    nameInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;padding:8px 12px;font-family:var(--ff);';
+    nameInp.oninput=()=>{ row.name=nameInp.value; saveOpsData(); };
+  }
   tdName.appendChild(nameInp);
   tr.appendChild(tdName);
 
   // check cells
   ['paris','suisse'].forEach(field=>{
     const td=document.createElement('td');
-    td.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;cursor:pointer;user-select:none;font-size:15px;color:#1f7a3d;font-weight:700;padding:8px 0;';
+    td.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;cursor:pointer;user-select:none;font-size:15px;color:#1f7a3d;font-weight:700;padding:8px 0;vertical-align:top;';
     td.textContent = row[field] ? '✓' : '';
     td.title='Click to toggle';
     td.onclick=()=>{ row[field]=!row[field]; td.textContent=row[field]?'✓':''; saveOpsData(); };
     tr.appendChild(td);
   });
 
-  // Tab in the name input of the LAST row adds a new row (Word-like)
+  // delete cell (to-dos only)
+  if (isTodo) {
+    const tdDel=document.createElement('td');
+    tdDel.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;width:32px;vertical-align:top;';
+    const x=document.createElement('span');
+    x.textContent='✕'; x.title='Delete this to-do';
+    x.style.cssText='cursor:pointer;color:#c0392b;font-size:13px;font-weight:700;padding:8px 6px;display:inline-block;';
+    x.onclick=()=>{
+      const idx=rows.indexOf(row);
+      if (idx>-1) rows.splice(idx,1);
+      if (!rows.length) rows.push({name:'',paris:false,suisse:false});
+      saveOpsData(); renderOpsTables();
+    };
+    tdDel.appendChild(x);
+    tr.appendChild(tdDel);
+  }
+
+  // Tab in the name field of the LAST row adds a new row (Word-like)
   nameInp.addEventListener('keydown', e=>{
     if (e.key==='Tab' && !e.shiftKey) {
       const isLast = (rows[rows.length-1]===row);
@@ -8328,7 +8385,7 @@ function buildOpsRow(key,row,ri,rows) {
         rows.push(newRow); saveOpsData();
         const tbody=tr.parentNode;
         tbody.appendChild(buildOpsRow(key,newRow,rows.length-1,rows));
-        const newInp=tbody.lastChild.querySelector('input');
+        const newInp=tbody.lastChild.querySelector('input,textarea');
         if (newInp) newInp.focus();
       }
     }
