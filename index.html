@@ -8227,6 +8227,7 @@ function _opsSeed() {
   return {
     aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
     heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
+    embraer: [{name:'', paris:false, suisse:false}],
     todos: [{name:'', paris:false, suisse:false}],
   };
 }
@@ -8234,6 +8235,7 @@ function _opsNormalize(d) {
   d = d || {};
   if (!Array.isArray(d.aig))   d.aig   = OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false}));
   if (!Array.isArray(d.heavy)) d.heavy = OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false}));
+  if (!Array.isArray(d.embraer) || !d.embraer.length) d.embraer = [{name:'', paris:false, suisse:false}];
   if (!Array.isArray(d.todos) || !d.todos.length) d.todos = [{name:'', paris:false, suisse:false}];
   return d;
 }
@@ -8289,7 +8291,8 @@ async function renderOpsTables() {
   if (host) {
     host.innerHTML = '';
     host.appendChild(buildOpsTable('AIG plans with own aircraft allocation', 'aig', data.aig, 'Airline'));
-    host.appendChild(buildOpsTable('Embraer and Heavy coding', 'heavy', data.heavy, 'Airline'));
+    host.appendChild(buildOpsTable('Heavies', 'heavy', data.heavy, 'Airline'));
+    host.appendChild(buildOpsTable('Embraer', 'embraer', data.embraer, 'Airline'));
   }
 }
 
@@ -8311,14 +8314,23 @@ function buildOpsTable(title, key, rows, firstColLabel) {
     const th=document.createElement('th');
     th.textContent=c;
     th.style.cssText='text-align:'+(ci===0?'left':'center')+';font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;'+(ci===0?'':'width:90px;')+'border-bottom:2px solid #c2cad8;';
+    if (ci>0) {
+      const field = (ci===1)?'paris':'suisse';
+      th.style.cursor='pointer';
+      th.title='Click to set / clear this column for all rows';
+      th.onclick=()=>{
+        const allSet = rows.length && rows.every(r=>r[field]);
+        rows.forEach(r=>{ r[field]=!allSet; });
+        saveOpsData(); renderOpsTables();
+      };
+    }
     htr.appendChild(th);
   });
+  // empty header cell for the delete column (all tables now have delete)
+  const thDel=document.createElement('th');
+  thDel.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;';
+  htr.appendChild(thDel);
   thead.appendChild(htr); table.appendChild(thead);
-  if (key==='todos') {
-    const thx=document.createElement('th');
-    thx.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;';
-    htr.appendChild(thx);
-  }
 
   const tbody = document.createElement('tbody');
   rows.forEach((row,ri)=> tbody.appendChild(buildOpsRow(key,row,ri,rows)));
@@ -8371,12 +8383,12 @@ function buildOpsRow(key,row,ri,rows) {
     tr.appendChild(td);
   });
 
-  // delete cell (to-dos only)
-  if (isTodo) {
+  // delete cell (all tables)
+  {
     const tdDel=document.createElement('td');
     tdDel.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;width:32px;vertical-align:top;';
     const x=document.createElement('span');
-    x.textContent='✕'; x.title='Delete this to-do';
+    x.textContent='✕'; x.title='Delete this row';
     x.style.cssText='cursor:pointer;color:#c0392b;font-size:13px;font-weight:700;padding:8px 6px;display:inline-block;';
     x.onclick=()=>{
       const idx=rows.indexOf(row);
