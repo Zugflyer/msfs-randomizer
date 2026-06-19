@@ -7139,7 +7139,7 @@ Output exactly this shape (one line is fine):
       if(_aborted)return;
       const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+        body:JSON.stringify({model:'claude-sonnet-4-5-20250929',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
       if(r.ok){ d=await r.json(); break; }
       if((r.status===529||r.status===429) && attempt<4){
         const wait = r.status===429 ? 60 : 8*attempt;
@@ -7228,7 +7228,7 @@ Output exactly this shape (one line is fine):
       if(_aborted)return;
       const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
         headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
-        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
+        body:JSON.stringify({model:'claude-sonnet-4-5-20250929',max_tokens:16000,tools:[{type:'web_search_20250305',name:'web_search'}],messages:[{role:'user',content:researchPrompt}]})});
       if(r.ok){ d=await r.json(); break; }
       if((r.status===529||r.status===429) && attempt<4){
         const wait = r.status===429 ? 60 : 8*attempt; // overloaded: short backoff; rate limit: a minute
