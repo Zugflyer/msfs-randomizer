@@ -339,6 +339,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       MSFS Operations
     </button>
     <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-settings" onclick="switchView('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      MSFS Settings
+    </button>
+    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
@@ -473,6 +478,104 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div style="flex:1;overflow-y:auto;padding:20px 24px;">
         <div id="ops-tables" style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:28px;"></div>
       </div>
+      </div>
+    </div>
+
+    <!-- MSFS SETTINGS (graphics settings reference) -->
+    <div id="view-settings" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
+      <div style="flex:1;overflow-y:auto;padding:24px;">
+        <div style="max-width:1100px;margin:0 auto;background:#ffffff;color:#222;border-radius:10px;padding:24px 28px;box-shadow:0 4px 20px rgba(0,0,0,.4);font-family:Arial,sans-serif;font-size:13px;">
+          <style>
+            #view-settings .mset-h2 { color:#1a1a2e; margin:0 0 4px; font-size:20px; }
+            #view-settings .mset-sub { color:#555; margin:0 0 16px; font-size:12px; }
+            #view-settings table.mset { border-collapse:collapse; width:100%; }
+            #view-settings table.mset th, #view-settings table.mset td { border:1px solid #ccc; padding:6px 10px; text-align:left; vertical-align:top; }
+            #view-settings table.mset th { background:#1a1a2e; color:#fff; font-weight:bold; }
+            #view-settings table.mset tr:nth-child(even) { background:#f4f4f4; }
+            #view-settings table.mset tr.mset-section td { background:#dde3f0; font-weight:bold; color:#1a1a2e; }
+            #view-settings table.mset tr.mset-highlight td { background:#fff3cd; }
+            #view-settings .pc-suisse { color:#0a5c36; font-weight:bold; }
+            #view-settings .pc-paris-light { color:#1a4a8a; font-weight:bold; }
+            #view-settings .pc-paris-heavy { color:#8a1a1a; font-weight:bold; }
+            #view-settings .mset-note { font-size:11px; color:#666; margin-top:16px; }
+          </style>
+
+          <h2 class="mset-h2">MSFS 2020 – Grafikeinstellungen</h2>
+          <p class="mset-sub">Letzte Aktualisierung: Juni 2026 &nbsp;|&nbsp; Erstellt mit Claude</p>
+
+          <table class="mset">
+            <thead>
+              <tr>
+                <th style="width:30%">Einstellung</th>
+                <th style="width:23%"><span class="pc-suisse">🖥 SUISSE</span><br>HP Omen | i9-12900K | RTX 3090<br>64GB RAM</th>
+                <th style="width:23%"><span class="pc-paris-light">💻 PARIS – Leicht</span><br>ASUS ROG | i9-12900H | RTX 3080 Ti<br>32GB RAM | FSS E170</th>
+                <th style="width:23%"><span class="pc-paris-heavy">💻 PARIS – Schwer</span><br>ASUS ROG | i9-12900H | RTX 3080 Ti<br>32GB RAM | TolIss A346</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr class="mset-section"><td colspan="4">🔧 GRUNDEINSTELLUNGEN</td></tr>
+              <tr><td>Display Mode</td><td>Full Screen</td><td>Full Screen</td><td>Full Screen</td></tr>
+              <tr><td>Full Screen Resolution</td><td>1920×1080</td><td>1920×1080</td><td>1920×1080</td></tr>
+              <tr class="mset-highlight"><td>Anti-Aliasing</td><td>TAA</td><td>TAA</td><td>TAA</td></tr>
+              <tr><td>Render Scaling</td><td>100</td><td>100</td><td>100</td></tr>
+              <tr><td>AMD FidelityFX Sharpening</td><td>30</td><td>50</td><td>50</td></tr>
+              <tr><td>V-Sync</td><td>Off</td><td>Off</td><td>Off</td></tr>
+              <tr><td>NVIDIA Reflex Low Latency</td><td>On</td><td>On</td><td>On</td></tr>
+              <tr><td>DirectX Version</td><td>DX11</td><td>DX11</td><td>DX11</td></tr>
+
+              <tr class="mset-section"><td colspan="4">🌍 TERRAIN & OBJEKTE</td></tr>
+              <tr class="mset-highlight"><td>Terrain Level of Detail</td><td>100</td><td>80</td><td>50</td></tr>
+              <tr><td>Off Screen Terrain Pre-Caching</td><td>High</td><td>High</td><td>High</td></tr>
+              <tr><td>Terrain Vector Data</td><td>Ultra</td><td>High</td><td>High</td></tr>
+              <tr><td>Buildings</td><td>Ultra</td><td>High</td><td>Medium</td></tr>
+              <tr><td>Trees</td><td>Ultra</td><td>High</td><td>Medium</td></tr>
+              <tr><td>Grass and Bushes</td><td>Ultra</td><td>High</td><td>Low</td></tr>
+              <tr class="mset-highlight"><td>Objects Level of Detail</td><td>100</td><td>80</td><td>50</td></tr>
+
+              <tr class="mset-section"><td colspan="4">☁️ WOLKEN & TEXTUREN</td></tr>
+              <tr><td>Volumetric Clouds</td><td>Ultra</td><td>High</td><td>Medium</td></tr>
+              <tr><td>Texture Resolution</td><td>Ultra</td><td>High</td><td>High</td></tr>
+              <tr><td>Anisotropic Filtering</td><td>16x</td><td>16x</td><td>16x</td></tr>
+              <tr><td>Texture Supersampling</td><td>4x4</td><td>2x2</td><td>2x2</td></tr>
+              <tr><td>Texture Synthesis</td><td>High</td><td>High</td><td>High</td></tr>
+              <tr><td>Water Waves</td><td>High</td><td>High</td><td>High</td></tr>
+
+              <tr class="mset-section"><td colspan="4">🌑 SCHATTEN</td></tr>
+              <tr><td>Shadow Maps</td><td>1536</td><td>1536</td><td>1024</td></tr>
+              <tr><td>Terrain Shadows</td><td>512</td><td>512</td><td>512</td></tr>
+              <tr><td>Contact Shadows</td><td>Medium</td><td>Medium</td><td>Medium</td></tr>
+
+              <tr class="mset-section"><td colspan="4">✨ EFFEKTE & REFLEXIONEN</td></tr>
+              <tr><td>Windshield Effects</td><td>High</td><td>High</td><td>High</td></tr>
+              <tr><td>Ambient Occlusion</td><td>Medium</td><td>Medium</td><td>Medium</td></tr>
+              <tr><td>Cubemap Reflections</td><td>192</td><td>192</td><td>192</td></tr>
+              <tr><td>Raymarched Reflections</td><td>High</td><td>High</td><td>Medium</td></tr>
+              <tr><td>Light Shafts</td><td>Medium</td><td>High</td><td>Medium</td></tr>
+              <tr><td>Bloom</td><td>Off</td><td>On</td><td>On</td></tr>
+              <tr><td>Depth of Field</td><td>Off</td><td>Off</td><td>Off</td></tr>
+              <tr><td>Motion Blur</td><td>Off</td><td>Off</td><td>Off</td></tr>
+              <tr><td>Lens Correction</td><td>Off</td><td>Off</td><td>Off</td></tr>
+              <tr><td>Lens Flare</td><td>On</td><td>On</td><td>On</td></tr>
+              <tr><td>Glass Cockpit Refresh Rate</td><td>Medium</td><td>Medium</td><td>Medium</td></tr>
+
+              <tr class="mset-section"><td colspan="4">🚦 ADD-ONS & TRAFFIC</td></tr>
+              <tr><td>AIG Traffic Controller</td><td>AIG via FSHUD, ~30-40%</td><td>AIG via FSHUD, ~30%</td><td>AIG via FSHUD, ~20-30%</td></tr>
+              <tr class="mset-highlight"><td>FSHUD</td><td>An</td><td>Am Boden, im Flug schliessen</td><td>Am Boden, im Flug schliessen ⚠️</td></tr>
+              <tr><td>GSX (Couatl Engine)</td><td>An</td><td>An</td><td>An (nur am Boden relevant)</td></tr>
+
+              <tr class="mset-section"><td colspan="4">📊 ERWARTETE PERFORMANCE</td></tr>
+              <tr><td>FPS Reiseflug</td><td class="pc-suisse">45–55 FPS</td><td class="pc-paris-light">35–45 FPS</td><td class="pc-paris-heavy">28–35 FPS</td></tr>
+              <tr><td>FPS grosser Airport (EGLL/LFMN)</td><td class="pc-suisse">35–45 FPS</td><td class="pc-paris-light">25–35 FPS</td><td class="pc-paris-heavy">18–28 FPS</td></tr>
+              <tr><td>Hauptbottleneck</td><td>MainThread (AIG)</td><td>MainThread (AIG + FSHUD)</td><td>MainThread (A346 + AIG + FSHUD)</td></tr>
+            </tbody>
+          </table>
+
+          <p class="mset-note">
+            ⚠️ FSHUD auf Paris immer vor dem Flug schliessen – kostet ~10-15 FPS im Reiseflug.<br>
+            ⚠️ Windows GPU-Einstellung auf Paris: System → Display → Graphics → Microsoft Flight Simulator → High Performance (NVIDIA GeForce RTX 3080 Ti)<br>
+            💡 Gelbe Zeilen = wichtigste Einstellungen die zwischen den Szenarien variieren.
+          </p>
+        </div>
       </div>
     </div>
 
@@ -2712,7 +2815,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations','settings'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2723,7 +2826,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations' || view === 'settings');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
