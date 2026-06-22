@@ -325,6 +325,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .calc-ta-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:'SF Mono','Courier New',monospace;width:58px;text-align:center;}
 #calc-table td{vertical-align:middle;}
 .calc-gate-input{font-size:12px;padding:4px 7px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);width:58px;text-align:center;}
+/* MSFS Operations — drag-reorder of parking tables */
+#ops-tables-list.ops-collapsed { gap:6px; }
+#ops-tables-list.ops-collapsed .ops-parking-body { display:none; }
+#ops-tables-list.ops-collapsed .ops-parking { padding:4px 8px;border:1px dashed var(--bdr2);border-radius:6px;background:rgba(255,255,255,.03); }
+.ops-parking.ops-drag-src { opacity:.5; }
 </style>
 </head>
 <body>
@@ -8325,21 +8330,40 @@ const OPS_DEFAULTS = {
 };
 
 let opsData = null;
+let _opsTblSeq = 0;
+function _opsNewId(){ return 'tbl_'+(Date.now().toString(36))+'_'+(_opsTblSeq++); }
 
 function _opsSeed() {
   return {
-    aig:   OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})),
-    heavy: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})),
-    embraer: [{name:'', paris:false, suisse:false}],
     todos: [{name:'', paris:false, suisse:false}],
+    tables: [
+      { id:_opsNewId(), title:'AIG plans with own aircraft allocation',
+        rows: OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false})) },
+      { id:_opsNewId(), title:'Heavies',
+        rows: OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false})) },
+      { id:_opsNewId(), title:'Embraer',
+        rows: [{name:'', paris:false, suisse:false}] },
+    ],
   };
 }
 function _opsNormalize(d) {
   d = d || {};
-  if (!Array.isArray(d.aig))   d.aig   = OPS_DEFAULTS.aig.map(n=>({name:n, paris:false, suisse:false}));
-  if (!Array.isArray(d.heavy)) d.heavy = OPS_DEFAULTS.heavy.map(n=>({name:n, paris:false, suisse:false}));
-  if (!Array.isArray(d.embraer) || !d.embraer.length) d.embraer = [{name:'', paris:false, suisse:false}];
   if (!Array.isArray(d.todos) || !d.todos.length) d.todos = [{name:'', paris:false, suisse:false}];
+  // migrate old fixed-key format (aig/heavy/embraer) into the ordered tables list
+  if (!Array.isArray(d.tables)) {
+    const t = [];
+    if (Array.isArray(d.aig))     t.push({ id:_opsNewId(), title:'AIG plans with own aircraft allocation', rows:d.aig });
+    if (Array.isArray(d.heavy))   t.push({ id:_opsNewId(), title:'Heavies', rows:d.heavy });
+    if (Array.isArray(d.embraer)) t.push({ id:_opsNewId(), title:'Embraer', rows:d.embraer });
+    d.tables = t.length ? t : _opsSeed().tables;
+    delete d.aig; delete d.heavy; delete d.embraer;
+  }
+  // ensure each table has an id, a title, and at least one row
+  d.tables.forEach(tb=>{
+    if (!tb.id) tb.id = _opsNewId();
+    if (typeof tb.title !== 'string') tb.title = 'Untitled';
+    if (!Array.isArray(tb.rows) || !tb.rows.length) tb.rows = [{name:'', paris:false, suisse:false}];
+  });
   return d;
 }
 
@@ -8388,29 +8412,47 @@ async function renderOpsTables() {
   const todoHost = document.getElementById('ops-todos');
   if (todoHost) {
     todoHost.innerHTML='';
-    todoHost.appendChild(buildOpsTable('To dos', 'todos', data.todos, 'To do'));
+    todoHost.appendChild(buildTodoTable(data.todos));
   }
   const host = document.getElementById('ops-tables');
   if (host) {
     host.innerHTML = '';
-    host.appendChild(buildOpsTable('AIG plans with own aircraft allocation', 'aig', data.aig, 'Airline'));
-    host.appendChild(buildOpsTable('Heavies', 'heavy', data.heavy, 'Airline'));
-    host.appendChild(buildOpsTable('Embraer', 'embraer', data.embraer, 'Airline'));
+
+    // toolbar: + New Aircraft Parking Table
+    const bar = document.createElement('div');
+    bar.style.cssText='display:flex;justify-content:flex-end;margin-bottom:4px;';
+    const addBtn=document.createElement('button');
+    addBtn.textContent='+ New Aircraft Parking Table';
+    addBtn.style.cssText='font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;';
+    addBtn.onclick=opsAddTable;
+    bar.appendChild(addBtn);
+    host.appendChild(bar);
+
+    // a dedicated list container so drag-reorder can manage its children
+    const list=document.createElement('div');
+    list.id='ops-tables-list';
+    list.style.cssText='display:flex;flex-direction:column;gap:28px;';
+    data.tables.forEach(tb => list.appendChild(buildParkingTable(tb)));
+    host.appendChild(list);
   }
 }
 
-function buildOpsTable(title, key, rows, firstColLabel) {
-  const wrap = document.createElement('div');
+// Prompt for a title and append a new empty parking table
+function opsAddTable() {
+  const title = prompt('Title of the new table:', '');
+  if (title===null) return;                       // cancelled
+  const data = loadOpsData();
+  data.tables.push({ id:_opsNewId(), title:(title.trim()||'Untitled'),
+                     rows:[{name:'', paris:false, suisse:false}] });
+  saveOpsData();
+  renderOpsTables();
+}
 
-  const h = document.createElement('div');
-  h.textContent = title;
-  h.style.cssText = 'font-size:15px;font-weight:700;color:#fff;margin-bottom:10px;letter-spacing:.01em;';
-  wrap.appendChild(h);
-
+// shared: build the <table> (header + body) for a rows array
+function _opsBuildTableEl(rows, key, firstColLabel) {
   const table = document.createElement('table');
   table.style.cssText = 'width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
 
-  // header row
   const thead = document.createElement('thead');
   const htr = document.createElement('tr');
   [firstColLabel||'Airline','Paris','Suisse'].forEach((c,ci)=>{
@@ -8429,7 +8471,6 @@ function buildOpsTable(title, key, rows, firstColLabel) {
     }
     htr.appendChild(th);
   });
-  // empty header cell for the delete column (all tables now have delete)
   const thDel=document.createElement('th');
   thDel.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;';
   htr.appendChild(thDel);
@@ -8438,15 +8479,111 @@ function buildOpsTable(title, key, rows, firstColLabel) {
   const tbody = document.createElement('tbody');
   rows.forEach((row,ri)=> tbody.appendChild(buildOpsRow(key,row,ri,rows)));
   table.appendChild(tbody);
-  wrap.appendChild(table);
+  return table;
+}
 
-  // add-row hint
+// LEFT: the To dos table (fixed title, first column "To do")
+function buildTodoTable(rows) {
+  const wrap = document.createElement('div');
+  const h = document.createElement('div');
+  h.textContent = 'To dos';
+  h.style.cssText = 'font-size:15px;font-weight:700;color:#fff;margin-bottom:10px;letter-spacing:.01em;';
+  wrap.appendChild(h);
+  wrap.appendChild(_opsBuildTableEl(rows, 'todos', 'To do'));
   const hint=document.createElement('div');
   hint.textContent='Press Tab in the last cell to add a new row.';
   hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
   wrap.appendChild(hint);
+  return wrap;
+}
+
+// RIGHT: a user parking table — editable title, drag handle, delete-table button
+function buildParkingTable(tb) {
+  const wrap = document.createElement('div');
+  wrap.className = 'ops-parking';
+  wrap.dataset.id = tb.id;
+
+  // title row: drag handle · editable title · delete-table
+  const titleRow = document.createElement('div');
+  titleRow.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:10px;';
+
+  const handle = document.createElement('span');
+  handle.textContent='⠿';
+  handle.title='Drag to reorder';
+  handle.style.cssText='cursor:grab;color:var(--txt3);font-size:18px;line-height:1;user-select:none;padding:2px 4px;flex-shrink:0;';
+  handle.setAttribute('draggable','true');
+  _opsWireDrag(handle, wrap, tb);
+  titleRow.appendChild(handle);
+
+  const titleInp = document.createElement('input');
+  titleInp.type='text'; titleInp.value=tb.title||'';
+  titleInp.placeholder='Table title';
+  titleInp.style.cssText='flex:1;background:transparent;border:none;border-bottom:1px solid transparent;color:#fff;font-size:15px;font-weight:700;letter-spacing:.01em;outline:none;padding:2px 0;font-family:var(--ff);';
+  titleInp.onfocus=()=>{ titleInp.style.borderBottom='1px solid var(--bdr2)'; };
+  titleInp.oninput=()=>{ tb.title=titleInp.value; };
+  titleInp.onblur=()=>{ titleInp.style.borderBottom='1px solid transparent'; tb.title=titleInp.value; saveOpsData(); };
+  titleRow.appendChild(titleInp);
+
+  const delTbl = document.createElement('button');
+  delTbl.textContent='🗑';
+  delTbl.title='Delete this table';
+  delTbl.style.cssText='background:transparent;border:none;color:#c0392b;cursor:pointer;font-size:14px;flex-shrink:0;';
+  delTbl.onclick=()=>{
+    if (!confirm('Delete the table "'+(tb.title||'Untitled')+'"?')) return;
+    const data=loadOpsData();
+    const i=data.tables.findIndex(t=>t.id===tb.id);
+    if (i>-1) data.tables.splice(i,1);
+    saveOpsData(); renderOpsTables();
+  };
+  titleRow.appendChild(delTbl);
+
+  wrap.appendChild(titleRow);
+
+  // body (collapsible while dragging)
+  const body = document.createElement('div');
+  body.className='ops-parking-body';
+  body.appendChild(_opsBuildTableEl(tb.rows, 'parking', 'Airline'));
+  const hint=document.createElement('div');
+  hint.textContent='Press Tab in the last cell to add a new row.';
+  hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
+  body.appendChild(hint);
+  wrap.appendChild(body);
 
   return wrap;
+}
+
+// Drag-to-reorder for parking tables. While dragging, the list collapses so only
+// titles show (class on the list container), making it easy to drop in place.
+function _opsWireDrag(handle, wrap, tb) {
+  handle.addEventListener('dragstart', e=>{
+    const list=document.getElementById('ops-tables-list');
+    if (list) list.classList.add('ops-collapsed');
+    wrap.classList.add('ops-drag-src');
+    e.dataTransfer.effectAllowed='move';
+    try { e.dataTransfer.setData('text/plain', tb.id); } catch(_){}
+  });
+  handle.addEventListener('dragend', ()=>{
+    const list=document.getElementById('ops-tables-list');
+    if (!list) return;
+    // read the new visual order and persist it
+    const order=[...list.querySelectorAll('.ops-parking')].map(el=>el.dataset.id);
+    const data=loadOpsData();
+    data.tables.sort((a,b)=> order.indexOf(a.id)-order.indexOf(b.id));
+    list.classList.remove('ops-collapsed');
+    wrap.classList.remove('ops-drag-src');
+    saveOpsData(); renderOpsTables();
+  });
+
+  // the whole wrapper is a drop target during a drag
+  wrap.addEventListener('dragover', e=>{
+    e.preventDefault();
+    const list=document.getElementById('ops-tables-list');
+    const dragging=list && list.querySelector('.ops-drag-src');
+    if (!dragging || dragging===wrap) return;
+    const rect=wrap.getBoundingClientRect();
+    const after = (e.clientY - rect.top) > rect.height/2;
+    if (after) wrap.after(dragging); else wrap.before(dragging);
+  });
 }
 
 function buildOpsRow(key,row,ri,rows) {
