@@ -8753,19 +8753,46 @@ function drawSceneriesMap() {
   });
 }
 
+function sceneriesSort() {
+  // alphabetical by ICAO; empty rows go to the bottom; keep at least one empty row to type in
+  sceneriesData.sort((a,b)=>{
+    const x=(a.icao||'').toUpperCase(), y=(b.icao||'').toUpperCase();
+    if (!x && !y) return 0;
+    if (!x) return 1;      // empty last
+    if (!y) return -1;
+    return x < y ? -1 : (x > y ? 1 : 0);
+  });
+  if (!sceneriesData.length || sceneriesData[sceneriesData.length-1].icao) {
+    sceneriesData.push({icao:'', note:''});
+  }
+  saveSceneries(); renderSceneriesTable(); drawSceneriesMap();
+}
+
 function renderSceneriesTable() {
   const host = document.getElementById('sceneries-table'); if (!host) return;
   host.innerHTML='';
+
+  // toolbar: sort A–Z
+  const bar=document.createElement('div');
+  bar.style.cssText='display:flex;justify-content:flex-end;margin-bottom:6px;';
+  const sortBtn=document.createElement('button');
+  sortBtn.textContent='⇅ Sort A–Z';
+  sortBtn.title='Sort entries alphabetically by ICAO';
+  sortBtn.style.cssText='font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;';
+  sortBtn.onclick=sceneriesSort;
+  bar.appendChild(sortBtn);
+  host.appendChild(bar);
 
   const table=document.createElement('table');
   table.style.cssText='width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
 
   const thead=document.createElement('thead');
   const htr=document.createElement('tr');
-  [['ICAO',70],['Airport / City',null],['Notes',null]].forEach(([label,w])=>{
+  [['ICAO',70],['Airport / City',null],['Notes',null]].forEach(([label,w],ci)=>{
     const th=document.createElement('th');
-    th.textContent=label;
+    th.textContent = label + (ci===0 ? '  ⇅' : '');
     th.style.cssText='text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;border-bottom:2px solid #c2cad8;'+(w?('width:'+w+'px;'):'');
+    if (ci===0){ th.style.cursor='pointer'; th.title='Click to sort alphabetically by ICAO'; th.onclick=sceneriesSort; }
     htr.appendChild(th);
   });
   const thDel=document.createElement('th'); thDel.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;'; htr.appendChild(thDel);
@@ -8797,7 +8824,17 @@ function buildSceneryRow(row, ri) {
   icaoInp.placeholder='ICAO';
   icaoInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:8px 12px;font-family:var(--ff);';
   icaoInp.oninput=()=>{ row.icao=icaoInp.value=icaoInp.value.toUpperCase(); };
-  icaoInp.onblur=()=>{ row.icao=icaoInp.value.toUpperCase().trim(); saveSceneries(); renderSceneriesTable(); drawSceneriesMap(); };
+  icaoInp.onblur=()=>{
+    row.icao=icaoInp.value.toUpperCase().trim();
+    // refresh only this row's name cell (no full re-render → no scroll jump)
+    const ap2 = row.icao ? schedByCode[row.icao.toUpperCase()] : null;
+    const nameCell = tr.children[1];
+    if (nameCell) {
+      nameCell.style.color = ap2 ? '#1d2433' : (row.icao ? '#b03030' : '#1d2433');
+      nameCell.textContent = ap2 ? ((ap2[7]||ap2[2]||'')+(ap2[1]?' ('+ap2[1]+')':'')) : (row.icao ? 'not found' : '');
+    }
+    saveSceneries(); drawSceneriesMap();
+  };
   tdIcao.appendChild(icaoInp);
   tr.appendChild(tdIcao);
 
@@ -8844,12 +8881,21 @@ function buildSceneryRow(row, ri) {
       if (isLast) {
         e.preventDefault();
         row.icao=icaoInp.value.toUpperCase().trim();
+        // update THIS row's name cell + map without a full re-render (keeps scroll & focus)
+        const ap0 = row.icao ? schedByCode[row.icao.toUpperCase()] : null;
+        const nameCell = tr.children[1];
+        if (nameCell) {
+          nameCell.style.color = ap0 ? '#1d2433' : (row.icao ? '#b03030' : '#1d2433');
+          nameCell.textContent = ap0 ? ((ap0[7]||ap0[2]||'')+(ap0[1]?' ('+ap0[1]+')':'')) : (row.icao ? 'not found' : '');
+        }
         const newRow={icao:'',note:''};
         sceneriesData.push(newRow); saveSceneries();
-        renderSceneriesTable(); drawSceneriesMap();
-        const tb=document.getElementById('sceneries-table');
-        const inputs=tb?tb.querySelectorAll('tbody tr:last-child input'):[];
-        if (inputs.length) inputs[0].focus();
+        // append just the new row to the existing tbody
+        const newTr = buildSceneryRow(newRow, sceneriesData.length-1);
+        tr.parentNode.appendChild(newTr);
+        drawSceneriesMap();
+        const inp = newTr.querySelector('input');
+        if (inp) inp.focus();
       }
     }
   });
