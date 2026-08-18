@@ -349,6 +349,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       MSFS Settings
     </button>
     <div class="topnav-sep"></div>
+    <button class="topnav-tab topnav-secondary" id="t-sceneries" onclick="switchView('sceneries')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+      Sceneries
+    </button>
+    <div class="topnav-sep"></div>
     <button class="topnav-tab topnav-secondary" id="t-categories" onclick="switchView('categories')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       Data
@@ -580,6 +585,24 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             ⚠️ Windows GPU-Einstellung auf Paris: System → Display → Graphics → Microsoft Flight Simulator → High Performance (NVIDIA GeForce RTX 3080 Ti)<br>
             💡 Gelbe Zeilen = wichtigste Einstellungen die zwischen den Szenarien variieren.
           </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- SCENERIES (add-on airport archive) -->
+    <div id="view-sceneries" style="display:none;flex:1;flex-direction:row;overflow:hidden;">
+      <!-- LEFT: world map -->
+      <div style="flex:1;min-width:0;position:relative;border-right:1px solid var(--bdr);">
+        <div id="sceneries-map" style="width:100%;height:100%;"></div>
+      </div>
+      <!-- RIGHT: table -->
+      <div style="width:520px;min-width:520px;display:flex;flex-direction:column;overflow:hidden;">
+        <div style="padding:12px 18px 6px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+          <div style="font-size:15px;font-weight:700;color:#fff;">My Add-on Sceneries</div>
+          <span id="sceneries-status" style="font-size:11px;color:#3fb950;"></span>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:6px 18px 18px;">
+          <div id="sceneries-table"></div>
         </div>
       </div>
     </div>
@@ -2820,7 +2843,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations','settings'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations','settings','sceneries'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2831,7 +2854,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations' || view === 'settings');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations' || view === 'settings' || view === 'sceneries');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2858,6 +2881,7 @@ function switchView(view) {
     }, 120);
   }
   if (view === 'operations') renderOpsTables();
+  if (view === 'sceneries') initSceneries();
 }
 
 const DEFAULT_LOGBOOK = [{"dep":"New York LGA","dep_icao":"KLGA","dep_iata":"LGA","arr":"Boston","arr_icao":"KBOS","arr_iata":"BOS","airline":"DAL","aircraft":"B738W"},{"dep":"Boston","dep_icao":"KBOS","dep_iata":"BOS","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"VIR","aircraft":"A35K"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Roma FCO","arr_icao":"LIRF","arr_iata":"FCO","airline":"ITY","aircraft":"A359"},{"dep":"Roma FCO","dep_icao":"LIRF","dep_iata":"FCO","arr":"Milano LIN","arr_icao":"LIML","arr_iata":"LIN","airline":"ITY","aircraft":"A320"},{"dep":"Madrid","dep_icao":"LEMD","dep_iata":"MAD","arr":"Quito","arr_icao":"SEQM","arr_iata":"UIO","airline":"IBE","aircraft":"A359"},{"dep":"Quito","dep_icao":"SEQM","dep_iata":"UIO","arr":"Cuenca","arr_icao":"SECU","arr_iata":"CUE","airline":"LNE","aircraft":"A319"},{"dep":"Cuenca","dep_icao":"SECU","dep_iata":"CUE","arr":"Lima","arr_icao":"SPJC","arr_iata":"LIM","airline":"LNE","aircraft":"A319"},{"dep":"Lima","dep_icao":"SPJC","dep_iata":"LIM","arr":"Cuzco","arr_icao":"SPZO","arr_iata":"CUZ","airline":"LPE","aircraft":"A320SL"},{"dep":"Cuzco","dep_icao":"SPZO","dep_iata":"CUZ","arr":"São Paulo GRU","arr_icao":"SBGR","arr_iata":"GRU","airline":"TAM","aircraft":"A320SL"},{"dep":"São Paulo GRU","dep_icao":"SBGR","dep_iata":"GRU","arr":"Rio de Janeiro SDU","arr_icao":"SBRJ","arr_iata":"SDU","airline":"TAM","aircraft":"A319"},{"dep":"Rio de Janeiro GIG","dep_icao":"SBGL","dep_iata":"GIG","arr":"Lisboa","arr_icao":"LPPT","arr_iata":"LIS","airline":"TAP","aircraft":"A339"},{"dep":"Lisboa","dep_icao":"LPPT","dep_iata":"LIS","arr":"Malaga","arr_icao":"LEMG","arr_iata":"AGP","airline":"TAP","aircraft":"AT76"},{"dep":"Malaga","dep_icao":"LEMG","dep_iata":"AGP","arr":"Melilla","arr_icao":"GEML","arr_iata":"MLN","airline":"ANE","aircraft":"AT76"},{"dep":"Melilla","dep_icao":"GEML","dep_iata":"MLN","arr":"Gibraltar","arr_icao":"LXGB","arr_iata":"GIB","airline":"ANE","aircraft":"AT76"},{"dep":"Gibraltar","dep_icao":"LXGB","dep_iata":"GIB","arr":"London LHR","arr_icao":"EGLL","arr_iata":"LHR","airline":"BAW","aircraft":"A320SL"},{"dep":"London LHR","dep_icao":"EGLL","dep_iata":"LHR","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"BAW","aircraft":"A388"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"AFR","aircraft":"B77W"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Bora Bora","arr_icao":"NTTB","arr_iata":"BOB","airline":"VTA","aircraft":"AT76"},{"dep":"Bora Bora","dep_icao":"NTTB","dep_iata":"BOB","arr":"Raiatea","arr_icao":"NTTR","arr_iata":"RFP","airline":"VTA","aircraft":"AT76"},{"dep":"Raiatea","dep_icao":"NTTR","dep_iata":"RFP","arr":"Huahine","arr_icao":"NTTH","arr_iata":"HUH","airline":"VTA","aircraft":"AT76"},{"dep":"Huahine","dep_icao":"NTTH","dep_iata":"HUH","arr":"Papeete","arr_icao":"NTAA","arr_iata":"PPT","airline":"VTA","aircraft":"AT76"},{"dep":"Papeete","dep_icao":"NTAA","dep_iata":"PPT","arr":"Singapore","arr_icao":"WSSS","arr_iata":"SIN","airline":"THT","aircraft":"B789"},{"dep":"Singapore","dep_icao":"WSSS","dep_iata":"SIN","arr":"Hamburg","arr_icao":"EDDH","arr_iata":"HAM","airline":"SIA","aircraft":"A359"},{"dep":"Hamburg","dep_icao":"EDDH","dep_iata":"HAM","arr":"Mannheim","arr_icao":"EDFM","arr_iata":"MHG","airline":"DLH","aircraft":"AT46"},{"dep":"Amsterdam","dep_icao":"EHAM","dep_iata":"AMS","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"DAL","aircraft":"A359"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Kahului","arr_icao":"PHOG","arr_iata":"OGG","airline":"DAL","aircraft":"B738W"},{"dep":"Kahului","dep_icao":"PHOG","dep_iata":"OGG","arr":"Hana","arr_icao":"PHHN","arr_iata":"HNM","airline":"FDY","aircraft":"C208"},{"dep":"Hana","dep_icao":"PHHN","dep_iata":"HNM","arr":"Honolulu","arr_icao":"PHNL","arr_iata":"HNL","airline":"FDY","aircraft":"C208"},{"dep":"Honolulu","dep_icao":"PHNL","dep_iata":"HNL","arr":"Salt Lake City","arr_icao":"KSLC","arr_iata":"SLC","airline":"DAL","aircraft":"A339"},{"dep":"Salt Lake City","dep_icao":"KSLC","dep_iata":"SLC","arr":"Ketchikan","arr_icao":"PAKT","arr_iata":"KTN","airline":"DAL","aircraft":"B738W"},{"dep":"Ketchikan","dep_icao":"PAKT","dep_iata":"KTN","arr":"Sitka","arr_icao":"PASI","arr_iata":"SIT","airline":"DAL","aircraft":"B738W"},{"dep":"Sitka","dep_icao":"PASI","dep_iata":"SIT","arr":"Juneau","arr_icao":"PAJN","arr_iata":"JNU","airline":"DAL","aircraft":"B738W"},{"dep":"Juneau","dep_icao":"PAJN","dep_iata":"JNU","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Akutan","arr_icao":"PAUT","arr_iata":"KQA","airline":"RRR","aircraft":"A400"},{"dep":"Akutan","dep_icao":"PAUT","dep_iata":"KQA","arr":"Dutch Harbor","arr_icao":"PADU","arr_iata":"DUT","airline":"RRR","aircraft":"A400"},{"dep":"Dutch Harbor","dep_icao":"PADU","dep_iata":"DUT","arr":"Anchorage","arr_icao":"PANC","arr_iata":"ANC","airline":"ASA","aircraft":"B73W"},{"dep":"Anchorage","dep_icao":"PANC","dep_iata":"ANC","arr":"Detroit","arr_icao":"KDTW","arr_iata":"DTW","airline":"DAL","aircraft":"A339"},{"dep":"Detroit","dep_icao":"KDTW","dep_iata":"DTW","arr":"Beyrouth","arr_icao":"OLBA","arr_iata":"BEY","airline":"MEA","aircraft":"A339"},{"dep":"Beyrouth","dep_icao":"OLBA","dep_iata":"BEY","arr":"Doha","arr_icao":"OTBD","arr_iata":"DIA","airline":"QTR","aircraft":"A35K"},{"dep":"Doha","dep_icao":"OTBD","dep_iata":"DIA","arr":"Tehran","arr_icao":"OIIE","arr_iata":"IKA","airline":"QTR","aircraft":"A388"},{"dep":"Tehran","dep_icao":"OIIE","dep_iata":"IKA","arr":"Los Angeles","arr_icao":"KLAX","arr_iata":"LAX","airline":"IRA","aircraft":"B748"},{"dep":"Los Angeles","dep_icao":"KLAX","dep_iata":"LAX","arr":"Telluride","arr_icao":"KTEX","arr_iata":"TEX","airline":"DAL","aircraft":"E175"},{"dep":"Telluride","dep_icao":"KTEX","dep_iata":"TEX","arr":"Denver","arr_icao":"KDEN","arr_iata":"DEN","airline":"UAL","aircraft":"E175"},{"dep":"Denver","dep_icao":"KDEN","dep_iata":"DEN","arr":"München","arr_icao":"EDDM","arr_iata":"MUC","airline":"DLH","aircraft":"A388"},{"dep":"München","dep_icao":"EDDM","dep_iata":"MUC","arr":"Firenze","arr_icao":"LIRQ","arr_iata":"FLR","airline":"DLH","aircraft":"E195"}];
@@ -8652,6 +8676,180 @@ function buildOpsRow(key,row,ri,rows) {
         tbody.appendChild(buildOpsRow(key,newRow,rows.length-1,rows));
         const newInp=tbody.lastChild.querySelector('input,textarea');
         if (newInp) newInp.focus();
+      }
+    }
+  });
+
+  return tr;
+}
+
+// ═══ SCENERIES — add-on airport archive ══════════════════════════════════════
+let sceneriesData = null;        // array of {icao, note}
+let sceneriesMap = null;
+let sceneriesLayers = [];
+
+async function loadSceneriesAsync() {
+  // Supabase first (shared across devices), then local cache, then empty
+  try {
+    const res = await sb.from('categories').select('items').eq('name','__sceneries__').single();
+    if (res && res.data && res.data.items && Array.isArray(res.data.items)) {
+      sceneriesData = res.data.items;
+      try { localStorage.setItem('sceneries_v1', JSON.stringify(sceneriesData)); } catch(e){}
+      return sceneriesData;
+    }
+  } catch(e){}
+  if (!sceneriesData) {
+    try { const raw=localStorage.getItem('sceneries_v1'); if (raw) sceneriesData=JSON.parse(raw); } catch(e){}
+  }
+  if (!Array.isArray(sceneriesData)) sceneriesData = [];
+  return sceneriesData;
+}
+function saveSceneries() {
+  try { localStorage.setItem('sceneries_v1', JSON.stringify(sceneriesData)); } catch(e){}
+  try {
+    sb.from('categories').upsert({ name:'__sceneries__', items: sceneriesData }, { onConflict:'name' })
+      .then(({error})=>{ _scnStatus(error?'⚠ Save failed':'✓ Saved'); });
+  } catch(e){ _scnStatus('⚠ Save failed'); }
+}
+function _scnStatus(txt){
+  const el=document.getElementById('sceneries-status');
+  if (el){ el.textContent=txt; clearTimeout(el._t); el._t=setTimeout(()=>{el.textContent='';},2000); }
+}
+
+async function initSceneries() {
+  await loadSceneriesAsync();
+  if (!sceneriesData.length) sceneriesData.push({icao:'', note:''}); // one empty row to type into
+  renderSceneriesTable();
+  // (re)build the map after layout settles
+  setTimeout(()=>{ initSceneriesMap(); drawSceneriesMap(); if (sceneriesMap) sceneriesMap.invalidateSize(); }, 150);
+}
+
+function initSceneriesMap() {
+  const el = document.getElementById('sceneries-map');
+  if (!el) return;
+  if (sceneriesMap) { sceneriesMap.invalidateSize(); return; }
+  sceneriesMap = L.map('sceneries-map', { center:[30,10], zoom:2, minZoom:1, zoomControl:true });
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+    { attribution:'© OpenStreetMap © CARTO', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png',
+    { attribution:'', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
+}
+
+function drawSceneriesMap() {
+  if (!sceneriesMap) return;
+  sceneriesLayers.forEach(l=>{ try{ sceneriesMap.removeLayer(l); }catch(e){} });
+  sceneriesLayers = [];
+  (sceneriesData||[]).forEach(item=>{
+    const ap = item.icao ? schedByCode[item.icao.toUpperCase()] : null;
+    if (!ap) return;
+    const lat=ap[3], lon=ap[4];
+    if (typeof lat!=='number' || typeof lon!=='number') return;
+    const tip='<b>'+ap[0]+(ap[1]?' / '+ap[1]:'')+'</b><br>'+(ap[7]||ap[2]||'')+(item.note?'<br><i>'+item.note.replace(/</g,'&lt;')+'</i>':'');
+    try {
+      const m=L.circleMarker([lat,lon], { radius:5, color:'#0e1117', weight:1.5, fillColor:'#3b82f6', fillOpacity:0.95 }).addTo(sceneriesMap);
+      m.bindTooltip(tip, { direction:'top', className:'lb-map-tip' });
+      sceneriesLayers.push(m);
+    } catch(e){}
+  });
+}
+
+function renderSceneriesTable() {
+  const host = document.getElementById('sceneries-table'); if (!host) return;
+  host.innerHTML='';
+
+  const table=document.createElement('table');
+  table.style.cssText='width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
+
+  const thead=document.createElement('thead');
+  const htr=document.createElement('tr');
+  [['ICAO',70],['Airport / City',null],['Notes',null]].forEach(([label,w])=>{
+    const th=document.createElement('th');
+    th.textContent=label;
+    th.style.cssText='text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;border-bottom:2px solid #c2cad8;'+(w?('width:'+w+'px;'):'');
+    htr.appendChild(th);
+  });
+  const thDel=document.createElement('th'); thDel.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;'; htr.appendChild(thDel);
+  thead.appendChild(htr); table.appendChild(thead);
+
+  const tbody=document.createElement('tbody');
+  sceneriesData.forEach((row,ri)=> tbody.appendChild(buildSceneryRow(row,ri)));
+  table.appendChild(tbody);
+  host.appendChild(table);
+
+  const hint=document.createElement('div');
+  hint.textContent='Type a 4-letter ICAO — the airport name fills in automatically. Press Tab in the last row to add another.';
+  hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
+  host.appendChild(hint);
+}
+
+function buildSceneryRow(row, ri) {
+  const tr=document.createElement('tr');
+  tr.style.cssText='background:'+(ri%2?'#eef1f6':'#f9fafc')+';';
+
+  // resolve airport for the name column
+  const ap = row.icao ? schedByCode[row.icao.toUpperCase()] : null;
+
+  // ICAO cell
+  const tdIcao=document.createElement('td');
+  tdIcao.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;vertical-align:top;';
+  const icaoInp=document.createElement('input');
+  icaoInp.type='text'; icaoInp.value=row.icao||''; icaoInp.maxLength=4;
+  icaoInp.placeholder='ICAO';
+  icaoInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:8px 12px;font-family:var(--ff);';
+  icaoInp.oninput=()=>{ row.icao=icaoInp.value=icaoInp.value.toUpperCase(); };
+  icaoInp.onblur=()=>{ row.icao=icaoInp.value.toUpperCase().trim(); saveSceneries(); renderSceneriesTable(); drawSceneriesMap(); };
+  tdIcao.appendChild(icaoInp);
+  tr.appendChild(tdIcao);
+
+  // Airport / City name cell (auto-filled, read-only)
+  const tdName=document.createElement('td');
+  tdName.style.cssText='padding:8px 12px;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;vertical-align:top;font-size:13px;color:'+(ap?'#1d2433':'#b03030')+';';
+  if (ap) tdName.textContent = (ap[7]||ap[2]||'') + (ap[1]?' ('+ap[1]+')':'');
+  else if (row.icao) tdName.textContent = 'not found';
+  else tdName.textContent = '';
+  tr.appendChild(tdName);
+
+  // free-text notes cell
+  const tdNote=document.createElement('td');
+  tdNote.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;vertical-align:top;';
+  const noteInp=document.createElement('textarea');
+  noteInp.rows=1; noteInp.value=row.note||''; noteInp.placeholder='e.g. bought on Orbx, freeware, …';
+  noteInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;line-height:1.4;padding:8px 12px;font-family:var(--ff);resize:none;overflow:hidden;display:block;';
+  const autosize=()=>{ noteInp.style.height='auto'; noteInp.style.height=(noteInp.scrollHeight)+'px'; };
+  noteInp.oninput=()=>{ row.note=noteInp.value; autosize(); };
+  noteInp.onblur=()=>{ row.note=noteInp.value; saveSceneries(); };
+  setTimeout(autosize,0);
+  tdNote.appendChild(noteInp);
+  tr.appendChild(tdNote);
+
+  // delete cell
+  const tdDel=document.createElement('td');
+  tdDel.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;width:32px;vertical-align:top;';
+  const x=document.createElement('span');
+  x.textContent='✕'; x.title='Delete this entry';
+  x.style.cssText='cursor:pointer;color:#c0392b;font-size:13px;font-weight:700;padding:8px 6px;display:inline-block;';
+  x.onclick=()=>{
+    const idx=sceneriesData.indexOf(row);
+    if (idx>-1) sceneriesData.splice(idx,1);
+    if (!sceneriesData.length) sceneriesData.push({icao:'',note:''});
+    saveSceneries(); renderSceneriesTable(); drawSceneriesMap();
+  };
+  tdDel.appendChild(x);
+  tr.appendChild(tdDel);
+
+  // Tab in the ICAO field of the LAST row adds a new row
+  icaoInp.addEventListener('keydown', e=>{
+    if (e.key==='Tab' && !e.shiftKey) {
+      const isLast=(sceneriesData[sceneriesData.length-1]===row);
+      if (isLast) {
+        e.preventDefault();
+        row.icao=icaoInp.value.toUpperCase().trim();
+        const newRow={icao:'',note:''};
+        sceneriesData.push(newRow); saveSceneries();
+        renderSceneriesTable(); drawSceneriesMap();
+        const tb=document.getElementById('sceneries-table');
+        const inputs=tb?tb.querySelectorAll('tbody tr:last-child input'):[];
+        if (inputs.length) inputs[0].focus();
       }
     }
   });
