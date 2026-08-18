@@ -8745,8 +8745,11 @@ function drawSceneriesMap() {
     const lat=ap[3], lon=ap[4];
     if (typeof lat!=='number' || typeof lon!=='number') return;
     const tip='<b>'+ap[0]+(ap[1]?' / '+ap[1]:'')+'</b><br>'+(ap[7]||ap[2]||'')+(item.note?'<br><i>'+item.note.replace(/</g,'&lt;')+'</i>':'');
+    // colour: freeware entries are grey/white, everything else is red
+    const isFreeware = /freeware/i.test(item.note||'');
+    const col = isFreeware ? '#8b949e' : '#f85149';
     try {
-      const m=L.circleMarker([lat,lon], { radius:5, color:'#0e1117', weight:1.5, fillColor:'#3b82f6', fillOpacity:0.95 }).addTo(sceneriesMap);
+      const m=L.circleMarker([lat,lon], { radius:5, color:'#0e1117', weight:1.5, fillColor:col, fillOpacity:0.95 }).addTo(sceneriesMap);
       m.bindTooltip(tip, { direction:'top', className:'lb-map-tip' });
       sceneriesLayers.push(m);
     } catch(e){}
@@ -8854,7 +8857,7 @@ function buildSceneryRow(row, ri) {
   noteInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;line-height:1.4;padding:8px 12px;font-family:var(--ff);resize:none;overflow:hidden;display:block;';
   const autosize=()=>{ noteInp.style.height='auto'; noteInp.style.height=(noteInp.scrollHeight)+'px'; };
   noteInp.oninput=()=>{ row.note=noteInp.value; autosize(); };
-  noteInp.onblur=()=>{ row.note=noteInp.value; saveSceneries(); };
+  noteInp.onblur=()=>{ row.note=noteInp.value; saveSceneries(); drawSceneriesMap(); };
   setTimeout(autosize,0);
   tdNote.appendChild(noteInp);
   tr.appendChild(tdNote);
