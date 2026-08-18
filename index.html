@@ -8850,7 +8850,7 @@ function buildSceneryRow(row, ri) {
   const tdNote=document.createElement('td');
   tdNote.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;vertical-align:top;';
   const noteInp=document.createElement('textarea');
-  noteInp.rows=1; noteInp.value=row.note||''; noteInp.placeholder='e.g. bought on Orbx, freeware, …';
+  noteInp.rows=1; noteInp.value=row.note||'';
   noteInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;line-height:1.4;padding:8px 12px;font-family:var(--ff);resize:none;overflow:hidden;display:block;';
   const autosize=()=>{ noteInp.style.height='auto'; noteInp.style.height=(noteInp.scrollHeight)+'px'; };
   noteInp.oninput=()=>{ row.note=noteInp.value; autosize(); };
