@@ -8481,8 +8481,24 @@ function _opsBuildTableEl(rows, key, firstColLabel) {
   const htr = document.createElement('tr');
   [firstColLabel||'Airline','Paris','Suisse'].forEach((c,ci)=>{
     const th=document.createElement('th');
-    th.textContent=c;
+    th.textContent = c + (ci===0 && key==='parking' ? '  ⇅' : '');
     th.style.cssText='text-align:'+(ci===0?'left':'center')+';font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;'+(ci===0?'':'width:90px;')+'border-bottom:2px solid #c2cad8;';
+    if (ci===0 && key==='parking') {
+      // click the first-column header to sort rows alphabetically by name
+      th.style.cursor='pointer';
+      th.title='Click to sort alphabetically';
+      th.onclick=()=>{
+        rows.sort((a,b)=>{
+          const x=(a.name||'').trim().toLowerCase(), y=(b.name||'').trim().toLowerCase();
+          if (!x && !y) return 0;
+          if (!x) return 1;   // empty rows last
+          if (!y) return -1;
+          return x < y ? -1 : (x > y ? 1 : 0);
+        });
+        if (!rows.length || (rows[rows.length-1].name||'').trim()) rows.push({name:'',paris:false,suisse:false});
+        saveOpsData(); renderOpsTables();
+      };
+    }
     if (ci>0) {
       const field = (ci===1)?'paris':'suisse';
       th.style.cursor='pointer';
