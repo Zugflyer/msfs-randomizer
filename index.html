@@ -3494,7 +3494,7 @@ function setCartoKey(k) { localStorage.setItem('carto_key', (k||'').trim()); }
 // without a key CARTO shows an "API KEY REQUIRED" watermark, so we prompt for it in the UI.
 function addDarkBaseLayer(map) {
   const key = getCartoKey();
-  const sfx = key ? ('?api_key=' + encodeURIComponent(key)) : '';
+  const sfx = key ? ('?key=' + encodeURIComponent(key)) : '';
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png' + sfx,
     { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png' + sfx,
