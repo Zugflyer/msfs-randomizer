@@ -2024,7 +2024,7 @@ function initMap() {
   });
 
   // Dark OpenStreetMap tile — CartoDB dark matter (no labels version for cleaner look)
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png', {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     attribution: '© OpenStreetMap contributors',
     subdomains: 'abcd',
     maxZoom: 19,
@@ -3795,7 +3795,7 @@ function initRosterMap() {
   const el = document.getElementById('roster-map');
   if (!el || rosterMap) return;
   rosterMap = L.map('roster-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
   L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
@@ -4559,7 +4559,7 @@ function initLbMapEu() {
     center: [48, 15], zoom: 4, minZoom: 2, maxZoom: 12,
     zoomControl: true, dragging: true, scrollWheelZoom: true
   });
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
   L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
@@ -4660,7 +4660,7 @@ function initLbMap() {
   const el = document.getElementById('lb-map');
   if (!el || lbMap) return;
   lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
   L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
@@ -5316,7 +5316,7 @@ function initCalcMap() {
   const el = document.getElementById('calc-map');
   if (!el || calcMap) return;
   calcMap = L.map('calc-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(calcMap);
   L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(calcMap);
@@ -8747,7 +8747,7 @@ function initSceneriesMap() {
   if (!el) return;
   if (sceneriesMap) { sceneriesMap.invalidateSize(); return; }
   sceneriesMap = L.map('sceneries-map', { center:[30,10], zoom:2, minZoom:1, zoomControl:true });
-  L.tileLayer('https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png',
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { attribution:'© OpenStreetMap contributors', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
   L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
     { attribution:'', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
