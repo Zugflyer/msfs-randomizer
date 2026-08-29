@@ -330,8 +330,6 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 #ops-tables-list.ops-collapsed .ops-parking-body { display:none; }
 #ops-tables-list.ops-collapsed .ops-parking { padding:4px 8px;border:1px dashed var(--bdr2);border-radius:6px;background:rgba(255,255,255,.03); }
 .ops-parking.ops-drag-src { opacity:.5; }
-/* Dark map tiles: OpenStreetMap HOT tiles rendered dark via CSS filter (keyless) */
-.leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(0.95) contrast(0.9); }
 </style>
 </head>
 <body>
@@ -1249,6 +1247,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <input id="githubtoken-input" type="password" placeholder="ghp_..." 
       style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
     
+    <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">CARTO Map Key</div>
+    <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">For the dark map tiles. Free, no account needed — get one in a minute at <a href="https://carto.com/basemaps" target="_blank" style="color:var(--acc);">carto.com/basemaps</a></div>
+    <input id="cartokey-input" type="text" placeholder="CARTO api key"
+      style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
+
     <div style="display:flex;gap:8px;justify-content:flex-end;">
       <button onclick="closeApiKeyDialog()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">Cancel</button>
       <button onclick="saveApiKey()" style="font-size:12px;padding:6px 16px;border-radius:var(--r);border:none;background:var(--acc);color:#fff;cursor:pointer;font-weight:600;">Save</button>
@@ -2023,20 +2026,8 @@ function initMap() {
     zoomControl: true,
   });
 
-  // Dark OpenStreetMap tile — CartoDB dark matter (no labels version for cleaner look)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-    subdomains: 'abcd',
-    maxZoom: 19,
-  }).addTo(leafletMap);
-
-  // Labels layer on top (shows city/country names in the OSM style)
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', {
-    attribution: '',
-    subdomains: 'abcd',
-    maxZoom: 19,
-    pane: 'overlayPane',
-  }).addTo(leafletMap);
+  // Dark base layer (CARTO dark matter with key; watermark until a key is set)
+  addDarkBaseLayer(leafletMap);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3456,6 +3447,8 @@ function openApiKeyDialog() {
   if (inp) inp.value = localStorage.getItem('anthropic_api_key') || '';
   var ghinp = document.getElementById('githubtoken-input');
   if (ghinp) ghinp.value = localStorage.getItem('github_token') || '';
+  var cinp = document.getElementById('cartokey-input');
+  if (cinp) cinp.value = localStorage.getItem('carto_key') || '';
   var st = document.getElementById('apikey-status');
   if (st) st.textContent = '';
   setTimeout(function() { if(inp) inp.focus(); }, 100);
@@ -3476,9 +3469,15 @@ function saveApiKey() {
   }
   if (key) localStorage.setItem('anthropic_api_key', key);
   if (ghkey) localStorage.setItem('github_token', ghkey);
+  var cinp = document.getElementById('cartokey-input');
+  var prevCarto = localStorage.getItem('carto_key') || '';
+  var cartoKey = (cinp ? cinp.value : '').trim();
+  localStorage.setItem('carto_key', cartoKey);
   if (st) { st.style.color='#3fb950'; st.textContent='✓ Keys saved'; }
   var btn = document.getElementById('apikey-btn');
   if (btn) btn.style.color = '#3fb950';
+  // if the CARTO key changed, reload so all maps pick up the new tile URLs
+  if (cartoKey !== prevCarto) { setTimeout(function(){ location.reload(); }, 800); return; }
   setTimeout(closeApiKeyDialog, 1200);
 }
 function getGitHubToken() {
@@ -3486,6 +3485,20 @@ function getGitHubToken() {
 }
 function getApiKey() {
   return localStorage.getItem('anthropic_api_key') || '';
+}
+
+// CARTO basemap key (free, from carto.com/basemaps). Stored locally.
+function getCartoKey() { return localStorage.getItem('carto_key') || ''; }
+function setCartoKey(k) { localStorage.setItem('carto_key', (k||'').trim()); }
+// Add a dark CARTO base layer (+ labels) to a Leaflet map. Uses the key if one is set;
+// without a key CARTO shows an "API KEY REQUIRED" watermark, so we prompt for it in the UI.
+function addDarkBaseLayer(map) {
+  const key = getCartoKey();
+  const sfx = key ? ('?api_key=' + encodeURIComponent(key)) : '';
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png' + sfx,
+    { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png' + sfx,
+    { attribution: '', subdomains: 'abcd', maxZoom: 19, pane: 'overlayPane' }).addTo(map);
 }
 
 async function fetchBlockTime(idx) {
@@ -3795,10 +3808,7 @@ function initRosterMap() {
   const el = document.getElementById('roster-map');
   if (!el || rosterMap) return;
   rosterMap = L.map('roster-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(rosterMap);
+  addDarkBaseLayer(rosterMap);
   drawLogbookLines();
   updateRosterLines();
 }
@@ -4559,10 +4569,7 @@ function initLbMapEu() {
     center: [48, 15], zoom: 4, minZoom: 2, maxZoom: 12,
     zoomControl: true, dragging: true, scrollWheelZoom: true
   });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
+  addDarkBaseLayer(lbMapEu);
   setTimeout(function() { if (lbMapEu) lbMapEu.invalidateSize(); }, 200);
 }
 
@@ -4660,10 +4667,7 @@ function initLbMap() {
   const el = document.getElementById('lb-map');
   if (!el || lbMap) return;
   lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
+  addDarkBaseLayer(lbMap);
   drawLbMap();
   lbMap.on('click', function(e) {
     // Delay to let marker click fire first
@@ -5316,10 +5320,7 @@ function initCalcMap() {
   const el = document.getElementById('calc-map');
   if (!el || calcMap) return;
   calcMap = L.map('calc-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution: '© OpenStreetMap contributors', subdomains: 'abcd', maxZoom: 19 }).addTo(calcMap);
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(calcMap);
+  addDarkBaseLayer(calcMap);
 }
 
 let calcMapLayers = [];
@@ -8747,10 +8748,7 @@ function initSceneriesMap() {
   if (!el) return;
   if (sceneriesMap) { sceneriesMap.invalidateSize(); return; }
   sceneriesMap = L.map('sceneries-map', { center:[30,10], zoom:2, minZoom:1, zoomControl:true });
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    { attribution:'© OpenStreetMap contributors', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
-  L.tileLayer('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-    { attribution:'', subdomains:'abcd', maxZoom:19 }).addTo(sceneriesMap);
+  addDarkBaseLayer(sceneriesMap);
 }
 
 function drawSceneriesMap() {
