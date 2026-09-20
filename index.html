@@ -7672,12 +7672,21 @@ function renderRotationBars() {
           }
         }
         syncBarTimesToLanes(bar.legIdx);
-        // Point 5: redraw without jumping — keep the bar container's scroll position
+        // Point 5: redraw without jumping — capture and restore scroll of both panes,
+        // and re-apply after the browser reflow (rAF) so it can't be reset to 0.
         const cont=document.getElementById('rot-bars-container');
+        const lanes=document.getElementById('rot-lanes-container');
         const sx=cont?cont.scrollLeft:0, sy=cont?cont.scrollTop:0;
+        const lx=lanes?lanes.scrollLeft:0, ly=lanes?lanes.scrollTop:0;
         renderRotationBars(); renderRotationLanes();
-        const c2=document.getElementById('rot-bars-container');
-        if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
+        const restore=()=>{
+          const c2=document.getElementById('rot-bars-container');
+          if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
+          const l2=document.getElementById('rot-lanes-container');
+          if(l2){ l2.scrollLeft=lx; l2.scrollTop=ly; }
+        };
+        restore();
+        requestAnimationFrame(restore);
       };
       inp.onkeydown=e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); inp.blur(); } };
       return inp;
