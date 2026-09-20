@@ -7646,20 +7646,40 @@ function renderRotationBars() {
       const inp=document.createElement('input');
       inp.type='text'; inp.maxLength=5;
       inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
-      inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;';
-      inp.title='Edit — the other time shifts to keep duration';
-      inp.onclick=e=>e.stopPropagation();
+      inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;cursor:text;';
+      inp.title='Click to edit — type 4 digits (e.g. 0825), Enter/Tab to confirm. Return leg follows automatically.';
+      inp.onclick=e=>{ e.stopPropagation(); inp.select(); };
+      inp.onfocus=()=>inp.select();
       inp.ondragstart=e=>e.preventDefault();
       inp.onblur=()=>{
-        const m=inp.value.match(/^(\d{1,2}):?(\d{2})$/);
+        const norm=formatTimeStr(inp.value);
+        const m=String(norm).match(/^(\d{1,2}):(\d{2})$/);
         if(!m){ inp.value=fmt(which==='dep'?bar.depLocal:bar.arrLocal); return; }
         const newMin=((+m[1])*60+(+m[2]));
         if(which==='dep'){ const shift=newMin-bar.depLocal; bar.depLocal=((newMin%1440)+1440)%1440; bar.arrLocal=((bar.arrLocal+shift)%1440+1440)%1440; }
         else { const shift=newMin-bar.arrLocal; bar.arrLocal=((newMin%1440)+1440)%1440; bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440; }
+        // Point 4: if this is an outbound bar, shift the paired return bar so it departs
+        // at (this arrival, local at the turn airport) + ground. Only for non-split pairs.
+        if(bar.dir==='out' && !rotSplitLegs.has(bar.legIdx)){
+          const ret = rotBars.find(b=>b.legIdx===bar.legIdx && b.dir==='ret');
+          if(ret){
+            // outbound arrival in UTC, + ground, expressed as the return's local dep clock
+            const outArrUTC = bar.depLocal - bar.depOff*60 + bar.block;
+            const retDepLocal = ((outArrUTC + ret.depOff*60 + bar.ground)%1440+1440)%1440;
+            const rShift = retDepLocal - ret.depLocal;
+            ret.depLocal = retDepLocal;
+            ret.arrLocal = ((ret.arrLocal + rShift)%1440+1440)%1440;
+          }
+        }
         syncBarTimesToLanes(bar.legIdx);
+        // Point 5: redraw without jumping — keep the bar container's scroll position
+        const cont=document.getElementById('rot-bars-container');
+        const sx=cont?cont.scrollLeft:0, sy=cont?cont.scrollTop:0;
         renderRotationBars(); renderRotationLanes();
+        const c2=document.getElementById('rot-bars-container');
+        if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
       };
-      inp.onkeydown=e=>{ if(e.key==='Enter'){ inp.blur(); } };
+      inp.onkeydown=e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); inp.blur(); } };
       return inp;
     };
     const left=document.createElement('div');
@@ -7881,10 +7901,12 @@ function renderRotationLanes() {
           const durMin = seg.block + seg.ground;
           const night=seg.utcDayCross>=1;
 
-          // local departure clock (what the user edits) — UTC dep + this segment's dep offset
+          // local clocks for display (read-only in the weekly plan)
           const depLocalMin = (((seg.depUTC + (seg.depOff||0)*60)%1440)+1440)%1440;
           const arrLocalMin = (((seg.arrUTC + (seg.arrOff||0)*60)%1440)+1440)%1440;
           const fmtLocal = m => { m=(((m%1440)+1440)%1440); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+          const innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtLocal(depLocalMin)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtLocal(arrLocalMin)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
+            +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>';
           const groundTail='<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
 
           // Helper to create one drawable piece [pieceStart, pieceWidth] in week minutes
@@ -7896,36 +7918,7 @@ function renderRotationLanes() {
             const radius=(isHead?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isHead?'4px':'0');
             el.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:'+radius+';background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);'+(isHead?'':'border-left:none;')+(isTail?'':'border-right:none;')+'overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
             el.title='Drag to move · right-click to remove'+(!isHead?' (continues from week start)':'');
-            if (isHead) {
-              // line 1: [editable local DEP] ICAO→ICAO localARR
-              const line1=document.createElement('div');
-              line1.style.cssText='font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;display:flex;align-items:center;gap:2px;';
-              const depInp=document.createElement('input');
-              depInp.type='text'; depInp.value=fmtLocal(depLocalMin); depInp.maxLength=5;
-              depInp.title='Local departure time — click to edit, type 4 digits (e.g. 0825), Enter/Tab to confirm';
-              depInp.style.cssText='width:34px;font-size:9px;font-family:monospace;color:#fff;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);border-radius:3px;text-align:center;padding:0 1px;outline:none;cursor:text;';
-              depInp.draggable=false;
-              depInp.addEventListener('mousedown', e=>{ e.stopPropagation(); });
-              depInp.addEventListener('focus', ()=>{ depInp.select(); });
-              depInp.addEventListener('click', e=>{ e.stopPropagation(); depInp.select(); });
-              const commit=()=>{ applySegDepEdit(acIdx, asg.uid, segIdx, depInp.value); };
-              depInp.addEventListener('keydown', e=>{
-                if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); depInp.blur(); }
-                else if(e.key==='Escape'){ depInp.value=fmtLocal(depLocalMin); depInp.blur(); }
-              });
-              depInp.addEventListener('blur', commit);
-              const rest=document.createElement('span');
-              rest.textContent=' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtLocal(arrLocalMin)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'');
-              rest.style.cssText='white-space:nowrap;';
-              line1.appendChild(depInp); line1.appendChild(rest);
-              const line2=document.createElement('div');
-              line2.style.cssText='font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;';
-              line2.textContent=seg.fnum;
-              el.appendChild(line1); el.appendChild(line2);
-              if(seg.ground>0){ const gt=document.createElement('div'); gt.innerHTML=groundTail; el.appendChild(gt.firstChild); }
-            } else {
-              el.innerHTML = '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
-            }
+            el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
             el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
             el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
             el.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
