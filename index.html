@@ -6406,7 +6406,12 @@ function renderAiGenAlLegs() {
       inp.type='text'; inp.id=id; inp.value=val||''; inp.placeholder='H:MM';
       inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(real?'#3fb950':'#777')+';font-weight:'+(real?700:400)+';'+(real?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
       inp.oninput=()=>{ if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;} };
-      inp.onblur=()=>{ renderAiGenAlLegs(); };
+      inp.onblur=()=>{
+        // reformat a 3-4 digit duration (e.g. 0825 -> 8:25) into H:MM
+        const f=fmtDuration(inp.value);
+        if(isOut){leg.blockTime=f;} else {leg.rBlockTime=f;}
+        renderAiGenAlLegs();
+      };
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
       cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
       return cell;
@@ -6813,7 +6818,8 @@ async function aiGenAlFetchBlockTime(i, dir) {
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
 function syncAiGenGround(value) {
-  aiGenLegs.forEach(l => { if (!l._custom_groundTime) l.groundTime = value; });
+  // Header ground time is the master: apply to every leg (clears per-row overrides).
+  aiGenLegs.forEach(l => { l.groundTime = value; l._custom_groundTime = false; });
   renderAiGenLegs();
 }
 function syncAiGenDefaults(masterField, value) {
@@ -7100,9 +7106,32 @@ async function aiGenFetchBlockTime(i) {
   if (btEl){btEl.value=bt;btEl.style.color='#777';btEl.style.fontStyle='italic';btEl.style.fontWeight='400';}
 }
 
+// Format a flight-duration entry into H:MM. Accepts "8:25", "825", "0825", "8".
+function fmtDuration(t) {
+  if (!t) return '';
+  t = String(t).trim();
+  let m=t.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (m) return (parseInt(m[1])||0)+':'+String(parseInt(m[2])||0).padStart(2,'0');
+  const digits=t.replace(/\D/g,'');
+  if (!digits) return '';
+  if (digits.length<=2) return (parseInt(digits)||0)+':00';
+  const mm=digits.slice(-2), hh=digits.slice(0,-2);
+  return (parseInt(hh)||0)+':'+mm;
+}
+
 function formatTimeStr(t) {
   if (!t) return '';
-  const m=t.match(/^(\d{1,2}):?(\d{2})?$/);
+  t = String(t).trim();
+  // already has a colon: HH:MM or H:MM
+  let m=t.match(/^(\d{1,2}):(\d{2})$/);
+  if (m) return m[1].padStart(2,'0')+':'+m[2];
+  // pure digits, no colon: 4 digits -> HHMM, 3 digits -> HMM, 1-2 -> hour only
+  const digits=t.replace(/\D/g,'');
+  if (/^\d{3,4}$/.test(digits)) {
+    const mm=digits.slice(-2), hh=digits.slice(0,-2);
+    return hh.padStart(2,'0')+':'+mm;
+  }
+  m=t.match(/^(\d{1,2}):?(\d{2})?$/);
   if (!m) return t;
   return m[1].padStart(2,'0')+':'+(m[2]||'00').padStart(2,'0');
 }
