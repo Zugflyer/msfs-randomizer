@@ -6980,6 +6980,7 @@ function renderAiGenLegs() {
     btInp.type='text'; btInp.id='aigen-bt-'+i; btInp.value=leg.blockTime||''; btInp.placeholder='H:MM';
     btInp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(leg.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(leg.blockTimeReal?700:400)+';'+(leg.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
     btInp.oninput=()=>{ leg.blockTime=btInp.value; leg.blockTimeReal=false; };
+    btInp.onblur=()=>{ const f=fmtDuration(btInp.value); leg.blockTime=f; btInp.value=f; renderAiGenLegs(); };
     btCell.appendChild(swapBtn); btCell.appendChild(arrowDiv); btCell.appendChild(btInp);
 
     // ── ARR ──
@@ -7880,9 +7881,10 @@ function renderRotationLanes() {
           const durMin = seg.block + seg.ground;
           const night=seg.utcDayCross>=1;
 
-          // Build the inner HTML once
-          const innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtU(seg.depUTC)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtU(seg.arrUTC)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
-            +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>';
+          // local departure clock (what the user edits) — UTC dep + this segment's dep offset
+          const depLocalMin = (((seg.depUTC + (seg.depOff||0)*60)%1440)+1440)%1440;
+          const arrLocalMin = (((seg.arrUTC + (seg.arrOff||0)*60)%1440)+1440)%1440;
+          const fmtLocal = m => { m=(((m%1440)+1440)%1440); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
           const groundTail='<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
 
           // Helper to create one drawable piece [pieceStart, pieceWidth] in week minutes
@@ -7891,12 +7893,39 @@ function renderRotationLanes() {
             el.draggable=true;
             const leftPx=pieceStartMin*pxPerMin;
             const wPx=Math.max(6, pieceWidthMin*pxPerMin);
-            // rounded only on the real ends
             const radius=(isHead?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isHead?'4px':'0');
             el.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:'+radius+';background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);'+(isHead?'':'border-left:none;')+(isTail?'':'border-right:none;')+'overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
             el.title='Drag to move · right-click to remove'+(!isHead?' (continues from week start)':'');
-            // only the head piece shows the text; tail-only pieces show a subtle marker
-            el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
+            if (isHead) {
+              // line 1: [editable local DEP] ICAO→ICAO localARR
+              const line1=document.createElement('div');
+              line1.style.cssText='font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;display:flex;align-items:center;gap:2px;';
+              const depInp=document.createElement('input');
+              depInp.type='text'; depInp.value=fmtLocal(depLocalMin); depInp.maxLength=5;
+              depInp.title='Local departure time — click to edit, type 4 digits (e.g. 0825), Enter/Tab to confirm';
+              depInp.style.cssText='width:34px;font-size:9px;font-family:monospace;color:#fff;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.25);border-radius:3px;text-align:center;padding:0 1px;outline:none;cursor:text;';
+              depInp.draggable=false;
+              depInp.addEventListener('mousedown', e=>{ e.stopPropagation(); });
+              depInp.addEventListener('focus', ()=>{ depInp.select(); });
+              depInp.addEventListener('click', e=>{ e.stopPropagation(); depInp.select(); });
+              const commit=()=>{ applySegDepEdit(acIdx, asg.uid, segIdx, depInp.value); };
+              depInp.addEventListener('keydown', e=>{
+                if(e.key==='Enter' || e.key==='Tab'){ e.preventDefault(); depInp.blur(); }
+                else if(e.key==='Escape'){ depInp.value=fmtLocal(depLocalMin); depInp.blur(); }
+              });
+              depInp.addEventListener('blur', commit);
+              const rest=document.createElement('span');
+              rest.textContent=' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtLocal(arrLocalMin)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'');
+              rest.style.cssText='white-space:nowrap;';
+              line1.appendChild(depInp); line1.appendChild(rest);
+              const line2=document.createElement('div');
+              line2.style.cssText='font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;';
+              line2.textContent=seg.fnum;
+              el.appendChild(line1); el.appendChild(line2);
+              if(seg.ground>0){ const gt=document.createElement('div'); gt.innerHTML=groundTail; el.appendChild(gt.firstChild); }
+            } else {
+              el.innerHTML = '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
+            }
             el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
             el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
             el.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
@@ -7968,7 +7997,7 @@ function barToUTCSeg(bar) {
   const arrUTCraw = depUTCraw + bar.block;
   const arrUTC = ((arrUTCraw%1440)+1440)%1440;
   const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor(depUTCraw/1440);
-  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground };
+  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground, depOff:bar.depOff, arrOff:bar.arrOff };
 }
 
 // Compute ALL segments of a leg (2 for a simple out/return, N for a split chain),
@@ -8008,6 +8037,55 @@ function computeSingleSeg(legIdx, dropDay, kind) {
   const absDep = dropDay*1440 + seg.depUTC;
   const absArr = absDep + seg.block;
   return { bar, seg: {...seg, absDep:absDep%10080, absArr:absArr%10080} };
+}
+
+// Edit a segment's LOCAL departure time in the weekly plan.
+// Recomputes this segment's UTC/abs times and re-chains all following segments
+// (each departs at previous arrival + ground). Keeps scroll position (point 5).
+function applySegDepEdit(acIdx, uid, segIdx, newLocalStr) {
+  const ac = rotAircraft[acIdx]; if(!ac) return;
+  let asg=null, dayKey=null;
+  Object.keys(ac.assignments).forEach(di=>{
+    (ac.assignments[di]||[]).forEach(a=>{ if(a.uid===uid){ asg=a; dayKey=di; } });
+  });
+  if(!asg || !asg.segs[segIdx]) return;
+
+  const norm = formatTimeStr(newLocalStr);
+  const m = String(norm).match(/^(\d{1,2}):(\d{2})$/);
+  if(!m){ renderRotationLanes(); return; }        // invalid → just redraw (revert)
+  const newLocalMin = (parseInt(m[1])*60 + parseInt(m[2]));
+
+  const seg = asg.segs[segIdx];
+  // new UTC dep minute-of-day from the edited local time and this segment's offset
+  const newDepUTC = (((newLocalMin - (seg.depOff||0)*60)%1440)+1440)%1440;
+  // keep the same UTC day this segment currently departs on
+  const dayBase = Math.floor(seg.absDep/1440)*1440;
+  let absDep = dayBase + newDepUTC;
+  // recompute this segment
+  seg.depUTC = newDepUTC;
+  seg.arrUTC = ((newDepUTC + seg.block)%1440+1440)%1440;
+  seg.utcDayCross = Math.floor((newDepUTC + seg.block)/1440);
+  seg.absDep = ((absDep%10080)+10080)%10080;
+  seg.absArr = ((absDep + seg.block)%10080+10080)%10080;
+
+  // re-chain following segments: each departs at previous arrival + ground (point 4)
+  let prevAbsArr = absDep + seg.block, prevGround = seg.ground;
+  for(let k=segIdx+1; k<asg.segs.length; k++){
+    const s = asg.segs[k];
+    const earliest = prevAbsArr + prevGround - 4;
+    let cand = Math.floor(prevAbsArr/1440)*1440 + s.depUTC;
+    while(cand < earliest) cand += 1440;
+    s.absDep = ((cand%10080)+10080)%10080;
+    s.absArr = ((cand + s.block)%10080+10080)%10080;
+    prevAbsArr = cand + s.block; prevGround = s.ground;
+  }
+
+  // redraw, preserving scroll position (point 5)
+  const grid = document.getElementById('rot-lanes-scroll') || document.querySelector('#rot-lanes-container');
+  const sx = grid ? grid.scrollLeft : 0, sy = grid ? grid.scrollTop : 0;
+  renderRotationLanes();
+  const g2 = document.getElementById('rot-lanes-scroll') || document.querySelector('#rot-lanes-container');
+  if(g2){ g2.scrollLeft=sx; g2.scrollTop=sy; }
 }
 
 // Drop a pair OR a single direction onto an aircraft at an absolute week-minute position
