@@ -6380,6 +6380,30 @@ function renderAiGenAlLegs() {
         retArr: { ap:null,  fixed:'rArrFixed', dayOff:'rArrDayOff', w1:'raa1', w2:'raa2', editable:false, mirror:'hub', showArr:true, arrFrom:()=>leg.arr, arrTo:()=>(leg.dep||aiGenAlHub), dFix:'rDepFixed', blk:'rBlockTime', real:'rBlockTimeReal' },
       }[role];
 
+      // DEP time field for the outbound departure. On blur, if a departure time is set
+      // but no block time exists yet (and no manual arrival), estimate the block so the
+      // ARR field fills in immediately. The → arrow can still look up the real block.
+      function depTimeWithAutoArr() {
+        const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+        const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='DEP';
+        const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.placeholder='--:--'; I.value=leg.depFixed||'';
+        I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
+        I.oninput=()=>{ leg.depFixed=I.value; };
+        I.onblur=()=>{
+          leg.depFixed=formatTimeStr(I.value)||I.value;
+          // Stage 1: ensure a block time so the arrival can be shown
+          const hasBlk = /^\d{1,2}:\d{2}$/.test(String(leg.blockTime||''));
+          const hasManualArr = /^\d{1,2}:\d{2}$/.test(String(leg.arrFixed||''));
+          if (leg.depFixed && !hasBlk && !hasManualArr && leg.dep && leg.arr) {
+            const eff = alEstimateEffectiveBlock(leg.dep, leg.arr);
+            if (eff!=null){ leg.blockTime=Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'); leg.blockTimeReal=false; }
+          }
+          renderAiGenAlLegs();
+        };
+        wrap.appendChild(L); wrap.appendChild(I);
+        return wrap;
+      }
+
       // Which airport this column's box represents
       let boxAp = null;
       if (role==='outDep') boxAp = leg.dep;
@@ -6453,8 +6477,14 @@ function renderAiGenAlLegs() {
         if (!(leg.rDepFixed && leg._custom_rDepFixed)) leg.rDepFixed = retDep; // keep auto value in model unless overridden
         timeRow.appendChild(fixedTimeInput('DEP', 'rDepFixed', retDep, true));
       } else {
-        // departure side: editable fixed DEP time
-        timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed));
+        // departure side: editable fixed DEP time.
+        // For the OUTBOUND departure, entering a time should give an arrival straight away:
+        // ensure a block time exists (estimate if missing), then the ARR field auto-fills.
+        if (role==='outDep') {
+          timeRow.appendChild(depTimeWithAutoArr());
+        } else {
+          timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed));
+        }
       }
       // windows are always shown and editable (used by the random-time feature later)
       timeRow.appendChild(winPair(cfg.w1, cfg.w2));
