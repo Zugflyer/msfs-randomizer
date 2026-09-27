@@ -9141,6 +9141,32 @@ function buildSceneryRow(row, ri) {
   return tr;
 }
 
+// ── Select-all-on-click for input fields in the AI Generator pages ──────────────
+// When clicking (or tab-focusing) a text field on the AI Generator route pages or the
+// rotation-assignment page, select the whole field so typing overwrites it immediately.
+(function(){
+  const inScope = el => {
+    if (!el || !el.tagName) return false;
+    const tag = el.tagName.toLowerCase();
+    if (tag!=='input' && tag!=='textarea') return false;
+    if (el.type && ['checkbox','radio','button','range','color','file'].includes(el.type)) return false;
+    return !!(el.closest && (el.closest('#view-aigen') || el.closest('#view-rotations')));
+  };
+  // focusin fires for both mouse and keyboard focus and bubbles to document
+  document.addEventListener('focusin', e=>{
+    const el = e.target;
+    if (inScope(el)) { setTimeout(()=>{ try{ el.select(); }catch(_){} }, 0); }
+  });
+  // a mouse click places the caret after focus; re-select on mouseup the first time
+  document.addEventListener('mouseup', e=>{
+    const el = e.target;
+    if (inScope(el) && el.selectionStart===el.selectionEnd) {
+      // only auto-select if the user hasn't already made a manual selection
+      setTimeout(()=>{ try{ if(el.selectionStart===el.selectionEnd) el.select(); }catch(_){} }, 0);
+    }
+  });
+})();
+
 </script>
 </body>
 </html>
