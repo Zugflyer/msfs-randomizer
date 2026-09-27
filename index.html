@@ -6372,7 +6372,7 @@ function renderAiGenAlLegs() {
         renderAiGenAlLegs();
       };
       I.onblur=commit;
-      I.onkeydown=e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); I.blur(); } };
+      I.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); I.blur(); } };
       wrap.appendChild(L); wrap.appendChild(I);
       return wrap;
     }
