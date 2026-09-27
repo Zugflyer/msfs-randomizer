@@ -330,6 +330,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 #ops-tables-list.ops-collapsed .ops-parking-body { display:none; }
 #ops-tables-list.ops-collapsed .ops-parking { padding:4px 8px;border:1px dashed var(--bdr2);border-radius:6px;background:rgba(255,255,255,.03); }
 .ops-parking.ops-drag-src { opacity:.5; }
+/* Violet focus ring on any AI-Generator field that's being edited */
+[data-tabseq]:focus { outline:none; box-shadow:0 0 0 2px var(--acc); border-radius:4px; }
 </style>
 </head>
 <body>
@@ -9229,6 +9231,9 @@ function buildSceneryRow(row, ri) {
       if (pos>MAXPOS){ pos=0; row++; }
       const next = cont.querySelector('[data-tabseq="'+row+'.'+pos+'"]');
       if (next){
+        // remember the target so that if leaving the current field triggers a
+        // re-render (e.g. DEP time estimating a block), focus is restored to it.
+        if (typeof aiGenAlFocusAfter!=='undefined') aiGenAlFocusAfter = row+'.'+pos;
         next.focus();
         if (next.select) { try{ next.select(); }catch(_){} }
         return;
