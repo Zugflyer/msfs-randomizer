@@ -332,6 +332,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .ops-parking.ops-drag-src { opacity:.5; }
 /* Violet focus ring on any AI-Generator field that's being edited */
 [data-tabseq]:focus { outline:none; box-shadow:0 0 0 2px var(--acc); border-radius:4px; }
+/* Fleet tab: big, bold, dark text for aircraft type and source (not form-like) */
+.fleet-big { width:100%; box-sizing:border-box; background:transparent; border:none; outline:none; resize:none; overflow:hidden; display:block;
+  color:#1a2233; font-family:var(--ff); font-size:30px; font-weight:800; line-height:1.2; letter-spacing:-.01em; padding:6px 8px; border-radius:6px; }
+.fleet-big::placeholder { color:#c3cbd8; font-weight:700; }
+.fleet-big:focus { background:rgba(123,97,255,.07); }
 </style>
 </head>
 <body>
@@ -614,15 +619,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
     <!-- FLEET (installed aircraft type repository) -->
     <div id="view-fleet" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
-      <div style="padding:12px 20px 6px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:15px;font-weight:700;color:#fff;">My Installed Aircraft</div>
-        <div style="display:flex;align-items:center;gap:12px;">
+      <div style="flex:1;overflow-y:auto;padding:24px 20px 30px;">
+        <div id="fleet-list" style="max-width:1100px;margin:0 auto;"></div>
+        <div style="max-width:1100px;margin:14px auto 0;display:flex;align-items:center;gap:14px;">
+          <button id="fleet-add" style="font-size:13px;font-weight:600;padding:9px 18px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">+ Add aircraft</button>
           <span id="fleet-status" style="font-size:11px;color:#3fb950;"></span>
-          <button id="fleet-add" style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">+ Add aircraft</button>
         </div>
-      </div>
-      <div style="flex:1;overflow-y:auto;padding:6px 20px 20px;">
-        <div id="fleet-list" style="max-width:1000px;margin:0 auto;display:flex;flex-direction:column;gap:12px;"></div>
       </div>
     </div>
 
@@ -9301,7 +9303,7 @@ async function initFleet() {
   if (!fleetData.length) fleetData.push({ id:_fleetId(), reg:'', photo:'', type:'', source:'' });
   renderFleet();
   const addBtn=document.getElementById('fleet-add');
-  if (addBtn) addBtn.onclick=()=>{ fleetData.push({ id:_fleetId(), reg:'', photo:'', type:'', source:'' }); saveFleet(); renderFleet(); };
+  if (addBtn) addBtn.onclick=fleetAddRow;
 }
 
 // Shrink an uploaded image to a reasonable size (max 640px wide) and return a JPEG dataURL
@@ -9328,30 +9330,15 @@ function fleetShrinkImage(file, cb) {
 function renderFleet() {
   const host = document.getElementById('fleet-list'); if (!host) return;
   host.innerHTML='';
-
   const table=document.createElement('table');
-  table.style.cssText='width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
-
-  const thead=document.createElement('thead');
-  const htr=document.createElement('tr');
-  [['Photo / Registration',230],['Aircraft type',null],['Source',null]].forEach(([label,w])=>{
-    const th=document.createElement('th');
-    th.textContent=label;
-    th.style.cssText='text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#33415c;background:#dde3ec;padding:9px 12px;border-bottom:2px solid #c2cad8;'+(w?('width:'+w+'px;'):'');
-    htr.appendChild(th);
-  });
-  const thDel=document.createElement('th'); thDel.style.cssText='width:32px;background:#dde3ec;border-bottom:2px solid #c2cad8;'; htr.appendChild(thDel);
-  thead.appendChild(htr); table.appendChild(thead);
-
+  table.style.cssText='width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:10px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.35);table-layout:fixed;';
+  const cg=document.createElement('colgroup');
+  ['310px','auto','36%','44px'].forEach(w=>{ const c=document.createElement('col'); if(w!=='auto') c.style.width=w; cg.appendChild(c); });
+  table.appendChild(cg);
   const tbody=document.createElement('tbody');
   fleetData.forEach((ac,ri)=> tbody.appendChild(buildFleetRow(ac,ri)));
   table.appendChild(tbody);
   host.appendChild(table);
-
-  const hint=document.createElement('div');
-  hint.textContent='Type a registration in the photo cell and press 🔍 to search JetPhotos · click 📷 to upload a photo · press Tab in the last Source cell to add a row.';
-  hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
-  host.appendChild(hint);
 }
 
 function _fleetJetUrl(reg){ return 'https://www.jetphotos.com/photo/keyword/'+encodeURIComponent(reg); }
@@ -9359,73 +9346,57 @@ function _fleetJetUrl(reg){ return 'https://www.jetphotos.com/photo/keyword/'+en
 function buildFleetRow(ac, ri) {
   const tr=document.createElement('tr');
   tr.style.cssText='background:'+(ri%2?'#eef1f6':'#f9fafc')+';';
+  const cellBorder='border-bottom:1px solid #dfe4ec;';
 
-  // ── PHOTO / REGISTRATION cell ──────────────────────────────────────────────
+  // ── PHOTO cell ─────────────────────────────────────────────────────────────
   const tdPh=document.createElement('td');
-  tdPh.style.cssText='padding:8px 10px;border-bottom:1px solid #dfe4ec;vertical-align:top;width:230px;';
+  tdPh.style.cssText='padding:12px 14px;vertical-align:middle;'+cellBorder;
   const box=document.createElement('div');
-  box.style.cssText='width:210px;height:128px;border-radius:6px;overflow:hidden;position:relative;background:#e3e8f0;border:1px dashed #b9c3d3;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;';
+  box.style.cssText='width:280px;height:172px;border-radius:8px;overflow:hidden;position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;';
 
-  // hidden file input for uploads
   const fileInp=document.createElement('input'); fileInp.type='file'; fileInp.accept='image/*'; fileInp.style.display='none';
   fileInp.onchange=()=>{ const f=fileInp.files&&fileInp.files[0]; if(!f) return; fleetShrinkImage(f, dataUrl=>{ ac.photo=dataUrl; saveFleet(); tr.replaceWith(buildFleetRow(ac, ri)); }); };
 
-  // registration input + search button (used in both states)
-  const regInp=document.createElement('input');
-  regInp.type='text'; regInp.value=ac.reg||''; regInp.placeholder='Registration'; regInp.maxLength=10;
-  regInp.title='Registration of a real aircraft — press Enter or 🔍 to search JetPhotos';
-  const searchBtn=document.createElement('button');
-  searchBtn.textContent='🔍'; searchBtn.title='Search this registration on JetPhotos (opens a new tab)';
-  const doSearch=()=>{ const r=(ac.reg||'').trim(); if(r) window.open(_fleetJetUrl(r),'_blank','noopener'); else regInp.focus(); };
-  searchBtn.onclick=e=>{ e.stopPropagation(); doSearch(); };
-  regInp.oninput=()=>{ const p=regInp.selectionStart; regInp.value=regInp.value.toUpperCase(); regInp.setSelectionRange(p,p); ac.reg=regInp.value; };
-  regInp.onblur=()=>{ ac.reg=regInp.value.trim(); saveFleet(); };
-  regInp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); ac.reg=regInp.value.trim(); saveFleet(); doSearch(); } };
-  regInp.onclick=e=>e.stopPropagation();
-
-  const uploadBtn=document.createElement('button');
-  uploadBtn.title='Upload a photo from your computer';
-  uploadBtn.onclick=e=>{ e.stopPropagation(); fileInp.click(); };
-
   if (ac.photo) {
-    // photo fills the box; a slim bar at the bottom keeps reg + search + replace
-    box.style.border='1px solid #b9c3d3'; box.style.justifyContent='flex-end'; box.style.gap='0';
+    // just the photo — click to replace, right-click to remove
     const img=document.createElement('img'); img.src=ac.photo;
-    img.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;cursor:pointer;';
-    img.title='Click to replace the photo';
+    img.style.cssText='width:100%;height:100%;object-fit:cover;cursor:pointer;display:block;';
+    img.title='Click to replace the photo · right-click to remove it';
     img.onclick=()=>fileInp.click();
+    img.oncontextmenu=e=>{ e.preventDefault(); if(confirm('Remove this photo?')){ ac.photo=''; saveFleet(); tr.replaceWith(buildFleetRow(ac, ri)); } };
     box.appendChild(img);
-    const bar=document.createElement('div');
-    bar.style.cssText='position:relative;z-index:1;width:100%;display:flex;align-items:center;gap:4px;padding:3px 4px;box-sizing:border-box;background:rgba(0,0,0,.6);';
-    regInp.style.cssText='flex:1;min-width:0;background:transparent;border:none;outline:none;color:#fff;font-size:11px;font-weight:700;font-family:monospace;letter-spacing:.04em;padding:1px 2px;';
-    searchBtn.style.cssText='background:transparent;border:none;cursor:pointer;font-size:12px;padding:0 2px;';
-    uploadBtn.textContent='📷'; uploadBtn.style.cssText='background:transparent;border:none;cursor:pointer;font-size:12px;padding:0 2px;';
-    const rm=document.createElement('button'); rm.textContent='✕'; rm.title='Remove photo';
-    rm.style.cssText='background:transparent;border:none;cursor:pointer;font-size:11px;color:#ff9b93;padding:0 2px;';
-    rm.onclick=e=>{ e.stopPropagation(); ac.photo=''; saveFleet(); tr.replaceWith(buildFleetRow(ac, ri)); };
-    bar.appendChild(regInp); bar.appendChild(searchBtn); bar.appendChild(uploadBtn); bar.appendChild(rm);
-    box.appendChild(bar);
   } else {
-    // placeholder: registration + search, and upload
-    const icon=document.createElement('div'); icon.textContent='✈'; icon.style.cssText='font-size:22px;color:#98a4b8;line-height:1;';
-    const line=document.createElement('div'); line.style.cssText='display:flex;align-items:center;gap:4px;width:180px;';
-    regInp.style.cssText='flex:1;min-width:0;background:#fff;border:1px solid #c2cad8;border-radius:4px;outline:none;color:#1d2433;font-size:12px;font-weight:700;font-family:monospace;letter-spacing:.04em;text-align:center;padding:4px 5px;';
-    searchBtn.style.cssText='background:#fff;border:1px solid #c2cad8;border-radius:4px;cursor:pointer;font-size:12px;padding:3px 7px;';
+    // placeholder: registration → JetPhotos search, or upload
+    box.style.background='#e3e8f0'; box.style.border='2px dashed #b9c3d3';
+    const icon=document.createElement('div'); icon.textContent='✈'; icon.style.cssText='font-size:26px;color:#98a4b8;line-height:1;';
+    const line=document.createElement('div'); line.style.cssText='display:flex;align-items:center;gap:5px;width:200px;';
+    const regInp=document.createElement('input');
+    regInp.type='text'; regInp.value=ac.reg||''; regInp.placeholder='Registration'; regInp.maxLength=10;
+    regInp.title='Registration of a real aircraft — press Enter or 🔍 to search JetPhotos';
+    regInp.style.cssText='flex:1;min-width:0;background:#fff;border:1px solid #c2cad8;border-radius:5px;outline:none;color:#1d2433;font-size:13px;font-weight:700;font-family:monospace;letter-spacing:.05em;text-align:center;padding:5px 6px;';
+    const doSearch=()=>{ const r=(ac.reg||'').trim(); if(r) window.open(_fleetJetUrl(r),'_blank','noopener'); else regInp.focus(); };
+    regInp.oninput=()=>{ const p=regInp.selectionStart; regInp.value=regInp.value.toUpperCase(); regInp.setSelectionRange(p,p); ac.reg=regInp.value; };
+    regInp.onblur=()=>{ ac.reg=regInp.value.trim(); saveFleet(); };
+    regInp.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); ac.reg=regInp.value.trim(); saveFleet(); doSearch(); } };
+    const searchBtn=document.createElement('button'); searchBtn.textContent='🔍'; searchBtn.title='Search this registration on JetPhotos (new tab)';
+    searchBtn.style.cssText='background:#fff;border:1px solid #c2cad8;border-radius:5px;cursor:pointer;font-size:13px;padding:4px 8px;';
+    searchBtn.onclick=doSearch;
     line.appendChild(regInp); line.appendChild(searchBtn);
-    uploadBtn.textContent='📷 Upload photo';
-    uploadBtn.style.cssText='background:transparent;border:none;cursor:pointer;font-size:11px;color:#3b5b8c;text-decoration:underline;padding:0;';
-    box.appendChild(icon); box.appendChild(line); box.appendChild(uploadBtn);
+    const upl=document.createElement('button'); upl.textContent='📷 Upload photo';
+    upl.style.cssText='background:transparent;border:none;cursor:pointer;font-size:12px;color:#3b5b8c;text-decoration:underline;padding:0;';
+    upl.onclick=()=>fileInp.click();
+    box.appendChild(icon); box.appendChild(line); box.appendChild(upl);
   }
   box.appendChild(fileInp);
   tdPh.appendChild(box);
   tr.appendChild(tdPh);
 
-  // ── text cells (auto-growing) ───────────────────────────────────────────────
+  // ── big bold text cells: Aircraft type, Source ─────────────────────────────
   const textCell=(field, ph)=>{
     const td=document.createElement('td');
-    td.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;vertical-align:top;';
+    td.style.cssText='padding:0 18px;vertical-align:middle;'+cellBorder;
     const ta=document.createElement('textarea'); ta.rows=1; ta.value=ac[field]||''; ta.placeholder=ph;
-    ta.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:14px;line-height:1.4;padding:10px 12px;font-family:var(--ff);resize:none;overflow:hidden;display:block;';
+    ta.className='fleet-big';
     const autosize=()=>{ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; };
     ta.oninput=()=>{ ac[field]=ta.value; autosize(); };
     ta.onblur=()=>{ ac[field]=ta.value; saveFleet(); };
@@ -9433,28 +9404,26 @@ function buildFleetRow(ac, ri) {
     td.appendChild(ta);
     return {td, ta};
   };
-  const typeC=textCell('type','e.g. Boeing 787-10');
-  const srcC=textCell('source','e.g. Aerosoft, freeware, …');
+  const typeC=textCell('type','Aircraft type');
+  const srcC=textCell('source','Source');
   tr.appendChild(typeC.td); tr.appendChild(srcC.td);
 
-  // Tab in the Source cell of the LAST row adds a new row (like the other tables)
+  // Tab in the Source cell of the LAST row adds a new row
   srcC.ta.addEventListener('keydown', e=>{
     if (e.key==='Tab' && !e.shiftKey && fleetData[fleetData.length-1]===ac) {
       e.preventDefault();
       ac.source=srcC.ta.value;
-      const nr={ id:_fleetId(), reg:'', photo:'', type:'', source:'' };
-      fleetData.push(nr); saveFleet();
-      const newTr=buildFleetRow(nr, fleetData.length-1);
-      tr.parentNode.appendChild(newTr);
-      const inp=newTr.querySelector('input[type="text"]'); if(inp) inp.focus();
+      fleetAddRow();
     }
   });
 
-  // ── delete ────────────────────────────────────────────────────────────────
+  // ── delete (subtle, stronger on hover) ─────────────────────────────────────
   const tdDel=document.createElement('td');
-  tdDel.style.cssText='text-align:center;border-bottom:1px solid #dfe4ec;border-left:1px solid #dfe4ec;width:32px;vertical-align:top;';
+  tdDel.style.cssText='text-align:center;vertical-align:middle;'+cellBorder;
   const x=document.createElement('span'); x.textContent='✕'; x.title='Delete this aircraft';
-  x.style.cssText='cursor:pointer;color:#c0392b;font-size:13px;font-weight:700;padding:10px 6px;display:inline-block;';
+  x.style.cssText='cursor:pointer;color:#c0392b;font-size:15px;font-weight:700;padding:8px;opacity:.25;transition:opacity .15s;';
+  tr.onmouseenter=()=>{ x.style.opacity='1'; };
+  tr.onmouseleave=()=>{ x.style.opacity='.25'; };
   x.onclick=()=>{
     if ((ac.reg||ac.type||ac.source||ac.photo) && !confirm('Delete this aircraft entry?')) return;
     const i=fleetData.indexOf(ac); if(i>-1) fleetData.splice(i,1);
@@ -9464,6 +9433,18 @@ function buildFleetRow(ac, ri) {
   tdDel.appendChild(x); tr.appendChild(tdDel);
 
   return tr;
+}
+
+// Append a new empty row at the bottom and put the cursor into its registration field
+function fleetAddRow() {
+  fleetData.push({ id:_fleetId(), reg:'', photo:'', type:'', source:'' });
+  saveFleet(); renderFleet();
+  const rows=document.querySelectorAll('#fleet-list tbody tr');
+  const last=rows[rows.length-1];
+  if (last) {
+    last.scrollIntoView({block:'nearest', behavior:'smooth'});
+    const inp=last.querySelector('input[type="text"]'); if(inp) inp.focus();
+  }
 }
 
 </script>
