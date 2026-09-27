@@ -5955,6 +5955,7 @@ function aiGenAlEmptyLeg() {
            arrFixed:'', aa1:'', aa2:'',
            blockTime:'', blockTimeReal:false,
            flightNum:'', rFlightNum:'',
+           arrDayOff:0, rArrDayOff:0,
            // return leg (arr → hub)
            rDepFixed:'', rdd1:'', rdd2:'',
            rArrFixed:'', raa1:'', raa2:'',
@@ -6299,35 +6300,71 @@ function renderAiGenAlLegs() {
     // Editable ARRIVAL time field. Typing an arrival derives the BLOCK time
     // (block = arr - dep - tz), so a real schedule can be entered directly.
     // cfg.fixed = leg field holding the manual arrival; cfg.blk/real = block fields.
-    function makeArrEditable(cfg, fromAp, toAp, depFixedVal, shownArr, isManual) {
+    // Arrival time field. Two modes:
+    //  • AUTO (green): no manual arrival set → shows DEP + block time, with a computed +N
+    //    day-cross suffix. Block is estimated/looked up as before.
+    //  • MANUAL (orange): user typed an arrival (optionally with a day offset like "06:30 +1").
+    //    The BLOCK time is derived from DEP→ARR and the field stays as entered.
+    // Editing the field sets manual mode; clearing it returns to AUTO.
+    function makeArrEditable(cfg, fromAp, toAp, depFixedVal) {
+      const hm = s => { const m=String(s||'').match(/^\s*(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; };
+      const depMin = hm(depFixedVal);
+      const tz = (fromAp&&toAp) ? (getUtcOffset(toAp)-getUtcOffset(fromAp))*60 : 0;
+      const manual = leg[cfg.fixed] && /^\d{1,2}:\d{2}$/.test(leg[cfg.fixed]);
+
+      // Build the displayed value and day-offset
+      let shown='', dayOff=0, mode='empty';
+      if (manual) {
+        mode='manual';
+        dayOff = leg[cfg.dayOff]||0;
+        shown = leg[cfg.fixed] + (dayOff>0?' +'+dayOff:(dayOff<0?' '+dayOff:''));
+      } else {
+        // AUTO: compute from dep + block
+        const blkStr = leg[cfg.blk];
+        const blk = hm(blkStr);
+        if (depMin!=null && blk!=null) {
+          const total = depMin + blk + tz;
+          const d = Math.floor(total/1440);
+          const mm = ((total%1440)+1440)%1440;
+          shown = String(Math.floor(mm/60)).padStart(2,'0')+':'+String(mm%60).padStart(2,'0') + (d>0?' +'+d:(d<0?' '+d:''));
+          dayOff = d;
+          mode='auto';
+        }
+      }
+
       const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='ARR';
-      const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.placeholder='--:--';
-      I.value = shownArr || '';
-      const hasBlock = !!leg[cfg.blk];
-      I.title = 'Type an arrival time to set the block time from DEP→ARR. Leave empty to auto-compute from block.';
-      I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(isManual?'rgba(240,136,62,.6)':(shownArr?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)'))+';background:'+(isManual?'rgba(240,136,62,.08)':'rgba(63,185,80,.07)')+';color:'+(isManual?'#f0883e':(shownArr?'#3fb950':'var(--txt3)'))+';font-weight:'+(shownArr?700:400)+';text-align:center;outline:none;';
-      const hm = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1])*60+(+m[2]):null; };
+      const I=document.createElement('input'); I.type='text'; I.maxLength=8; I.placeholder='--:--';
+      I.value = shown;
+      const col = mode==='manual' ? '#f0883e' : (mode==='auto' ? '#3fb950' : 'var(--txt3)');
+      const bd  = mode==='manual' ? 'rgba(240,136,62,.6)' : (mode==='auto' ? 'rgba(63,185,80,.4)' : 'rgba(255,255,255,.12)');
+      const bgc = mode==='manual' ? 'rgba(240,136,62,.08)' : 'rgba(63,185,80,.07)';
+      I.title = 'Arrival (local). Leave empty to auto-compute from block. Type a time to set it manually — add a day offset like "06:30 +1" (next day), "+2", or "-1" (previous day). The block time is then derived.';
+      I.style.cssText='width:66px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+bd+';background:'+bgc+';color:'+col+';font-weight:'+(mode!=='empty'?700:400)+';text-align:center;outline:none;';
+
       const commit=()=>{
-        const norm=formatTimeStr(I.value);
-        const arrMin=hm(norm);
-        const depMin=hm(depFixedVal);
-        if(arrMin==null){ // cleared → back to auto-compute from block
-          leg[cfg.fixed]='';
-          renderAiGenAlLegs(); return;
+        const raw = I.value.trim();
+        if (raw===''){ // cleared → back to auto
+          leg[cfg.fixed]=''; leg[cfg.dayOff]=0; renderAiGenAlLegs(); return;
         }
-        leg[cfg.fixed]=norm;
-        // derive block if we have a departure time and both airports
+        // parse "HH:MM", "HHMM", optionally followed by +N / -N
+        const m = raw.match(/^(\d{1,2}:?\d{2})\s*([+-]\s*\d+)?$/);
+        if(!m){ renderAiGenAlLegs(); return; } // invalid → revert
+        const timePart = formatTimeStr(m[1]);
+        const tm = hm(timePart);
+        if(tm==null){ renderAiGenAlLegs(); return; }
+        const off = m[2] ? parseInt(m[2].replace(/\s/g,'')) : 0;
+        leg[cfg.fixed]=timePart; leg[cfg.dayOff]=off;
+        // derive block: (arr + off*1440) - dep - tz
         if(depMin!=null && fromAp && toAp){
-          const tz=(getUtcOffset(toAp)-getUtcOffset(fromAp))*60;
-          let blk=arrMin-depMin-tz;
-          blk=((blk%1440)+1440)%1440;           // wrap past midnight
-          const bs=Math.floor(blk/60)+':'+String(blk%60).padStart(2,'0');
-          leg[cfg.blk]=bs; leg[cfg.real]=true;    // treat as a real (known) block
+          let blk = (tm + off*1440) - depMin - tz;
+          // keep block positive and sensible; wrap only if it came out negative
+          while(blk < 0) blk += 1440;
+          const bs = Math.floor(blk/60)+':'+String(blk%60).padStart(2,'0');
+          leg[cfg.blk]=bs; leg[cfg.real]=true;
         }
         renderAiGenAlLegs();
       };
-      I.oninput=()=>{ leg[cfg.fixed]=I.value; };
       I.onblur=commit;
       I.onkeydown=e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); I.blur(); } };
       wrap.appendChild(L); wrap.appendChild(I);
@@ -6338,9 +6375,9 @@ function renderAiGenAlLegs() {
       // Field mapping per role
       const cfg = {
         outDep: { ap:'dep', fixed:'depFixed', w1:'dd1', w2:'dd2', editable:true,  mirror:null,  showArr:false },
-        outArr: { ap:'arr', fixed:'arrFixed', w1:'aa1', w2:'aa2', editable:true,  mirror:null,  showArr:true, arrFrom:()=>leg.dep, arrTo:()=>leg.arr, dFix:'depFixed', blk:'blockTime', real:'blockTimeReal' },
+        outArr: { ap:'arr', fixed:'arrFixed', dayOff:'arrDayOff', w1:'aa1', w2:'aa2', editable:true,  mirror:null,  showArr:true, arrFrom:()=>leg.dep, arrTo:()=>leg.arr, dFix:'depFixed', blk:'blockTime', real:'blockTimeReal' },
         retDep: { ap:'arr', fixed:'rDepFixed', w1:'rdd1', w2:'rdd2', editable:false, mirror:'arr', showArr:false },
-        retArr: { ap:null,  fixed:'rArrFixed', w1:'raa1', w2:'raa2', editable:false, mirror:'hub', showArr:true, arrFrom:()=>leg.arr, arrTo:()=>(leg.dep||aiGenAlHub), dFix:'rDepFixed', blk:'rBlockTime', real:'rBlockTimeReal' },
+        retArr: { ap:null,  fixed:'rArrFixed', dayOff:'rArrDayOff', w1:'raa1', w2:'raa2', editable:false, mirror:'hub', showArr:true, arrFrom:()=>leg.arr, arrTo:()=>(leg.dep||aiGenAlHub), dFix:'rDepFixed', blk:'rBlockTime', real:'rBlockTimeReal' },
       }[role];
 
       // Which airport this column's box represents
@@ -6400,14 +6437,10 @@ function renderAiGenAlLegs() {
       const isArrCol = (role==='outArr'||role==='retArr');
       if (isArrCol) {
         // Arrival time: shows the computed arrival by default, BUT is editable.
-        // If the user types an arrival time, the BLOCK time is derived from DEP→ARR
-        // (arr - dep - tz), so real-world schedules can be entered directly.
+        // If the user types an arrival time, the BLOCK time is derived from DEP→ARR.
         const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
         const depFixedVal = leg[cfg.dFix];
-        const computed = alComputeArr(fromAp, toAp, depFixedVal, leg[cfg.blk], leg[cfg.real]);
-        const arrManual = leg[cfg.fixed]; // user-entered arrival (if any)
-        const shownArr = arrManual || computed;
-        timeRow.appendChild(makeArrEditable(cfg, fromAp, toAp, depFixedVal, shownArr, !!arrManual));
+        timeRow.appendChild(makeArrEditable(cfg, fromAp, toAp, depFixedVal));
       } else if (role==='retDep') {
         // return departure default = outbound arrival (local at leg.arr) + ground time,
         // but the field is editable (override wins).
@@ -6830,8 +6863,8 @@ async function aiGenAlFetchBlockTime(i, dir) {
   if (!dep || !arr) return;
   const elId = isOut ? ('aigen-al-bt-'+i) : ('aigen-al-rbt-'+i);
   const setVal = (v, real) => {
-    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; }
-    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; }
+    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; leg.arrFixed=''; leg.arrDayOff=0; }
+    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; leg.rArrFixed=''; leg.rArrDayOff=0; }
   };
   const btEl = document.getElementById(elId);
   if (btEl) { btEl.value='🔍'; btEl.style.color='#777'; }
