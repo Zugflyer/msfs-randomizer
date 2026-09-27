@@ -5947,6 +5947,7 @@ let aiGenTarget = null;
 let aiGenLegs = [];
 let aiGenAirline = '';   // selected airline ICAO (airline mode)
 let aiGenAlHub = null;   // selected hub airport array (airline mode)
+let aiGenAlFocusAfter = null;  // "row.pos" to focus after the next render (tab continuity)
 let aiGenAlLegs = [];    // route rows (airline mode)
 
 function aiGenAlEmptyLeg() {
@@ -6459,7 +6460,7 @@ function renderAiGenAlLegs() {
             leg['_focusSeq']=null; leg['_seedChar']='';
           }
           if (role==='outDep') {
-            buildSuggestBox(inp, ap=>{ leg.dep=ap; leg._editingDep=false; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
+            buildSuggestBox(inp, ap=>{ leg.dep=ap; leg._editingDep=false; aiGenAlFocusAfter=i+'.'+(apSeq+1); renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
           } else { // outArr
             buildSuggestBox(inp, ap=>{ leg.arr=ap;
               // pre-seed estimated return block (no API) so return ARR shows right away
@@ -6467,6 +6468,7 @@ function renderAiGenAlLegs() {
                 const eff = alEstimateEffectiveBlock(leg.arr, leg.dep || aiGenAlHub);
                 if (eff != null) { leg.rBlockTime = Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'); leg.rBlockTimeReal=false; }
               }
+              aiGenAlFocusAfter=i+'.'+(apSeq+1);
               renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out');
             });
           }
@@ -6626,6 +6628,14 @@ function renderAiGenAlLegs() {
 
     container.appendChild(wrapper);
   });
+
+  // Restore focus to a specific field after re-render (keeps Tab flowing across
+  // airport selections that trigger a full re-render).
+  if (aiGenAlFocusAfter) {
+    const seq = aiGenAlFocusAfter; aiGenAlFocusAfter = null;
+    const target = container.querySelector('[data-tabseq="'+seq+'"]');
+    if (target) setTimeout(()=>{ try{ target.focus(); if(target.select) target.select(); }catch(_){} }, 0);
+  }
 }
 
 // ── Render a SPLIT (multi-stop chain) leg as two rows: outbound chain + return chain ──
