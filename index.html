@@ -5954,6 +5954,7 @@ function aiGenAlEmptyLeg() {
            depFixed:'', dd1:'', dd2:'',
            arrFixed:'', aa1:'', aa2:'',
            blockTime:'', blockTimeReal:false,
+           flightNum:'', rFlightNum:'',
            // return leg (arr → hub)
            rDepFixed:'', rdd1:'', rdd2:'',
            rArrFixed:'', raa1:'', raa2:'',
@@ -6191,7 +6192,7 @@ function renderAiGenAlLegs() {
   const utcStr = ap => { if(!ap) return ''; const o=getUtcOffset(ap); return 'UTC'+(o>=0?'+':'')+o; };
 
   aiGenAlLegs.forEach((leg, i) => {
-    if (!leg.dep) leg.dep = aiGenAlHub;
+    if (!leg.dep && !leg._editingDep) leg.dep = aiGenAlHub;
     if (!leg.dd1) leg.dd1 = mDepFrom;
     if (!leg.dd2) leg.dd2 = mDepUntil;
     if (!leg.aa1) leg.aa1 = mArrFrom;
@@ -6295,6 +6296,44 @@ function renderAiGenAlLegs() {
 
     // Build one AIRPORT column: airport box + (fixed time · from/until window · UTC).
     // role: 'outDep' | 'outArr' | 'retDep' | 'retArr'
+    // Editable ARRIVAL time field. Typing an arrival derives the BLOCK time
+    // (block = arr - dep - tz), so a real schedule can be entered directly.
+    // cfg.fixed = leg field holding the manual arrival; cfg.blk/real = block fields.
+    function makeArrEditable(cfg, fromAp, toAp, depFixedVal, shownArr, isManual) {
+      const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='ARR';
+      const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.placeholder='--:--';
+      I.value = shownArr || '';
+      const hasBlock = !!leg[cfg.blk];
+      I.title = 'Type an arrival time to set the block time from DEP→ARR. Leave empty to auto-compute from block.';
+      I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(isManual?'rgba(240,136,62,.6)':(shownArr?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)'))+';background:'+(isManual?'rgba(240,136,62,.08)':'rgba(63,185,80,.07)')+';color:'+(isManual?'#f0883e':(shownArr?'#3fb950':'var(--txt3)'))+';font-weight:'+(shownArr?700:400)+';text-align:center;outline:none;';
+      const hm = s => { const m=String(s||'').match(/^(\d{1,2}):(\d{2})$/); return m?(+m[1])*60+(+m[2]):null; };
+      const commit=()=>{
+        const norm=formatTimeStr(I.value);
+        const arrMin=hm(norm);
+        const depMin=hm(depFixedVal);
+        if(arrMin==null){ // cleared → back to auto-compute from block
+          leg[cfg.fixed]='';
+          renderAiGenAlLegs(); return;
+        }
+        leg[cfg.fixed]=norm;
+        // derive block if we have a departure time and both airports
+        if(depMin!=null && fromAp && toAp){
+          const tz=(getUtcOffset(toAp)-getUtcOffset(fromAp))*60;
+          let blk=arrMin-depMin-tz;
+          blk=((blk%1440)+1440)%1440;           // wrap past midnight
+          const bs=Math.floor(blk/60)+':'+String(blk%60).padStart(2,'0');
+          leg[cfg.blk]=bs; leg[cfg.real]=true;    // treat as a real (known) block
+        }
+        renderAiGenAlLegs();
+      };
+      I.oninput=()=>{ leg[cfg.fixed]=I.value; };
+      I.onblur=commit;
+      I.onkeydown=e=>{ if(e.key==='Enter'||e.key==='Tab'){ e.preventDefault(); I.blur(); } };
+      wrap.appendChild(L); wrap.appendChild(I);
+      return wrap;
+    }
+
     function buildAirportCol(role) {
       // Field mapping per role
       const cfg = {
@@ -6321,7 +6360,7 @@ function renderAiGenAlLegs() {
         if (boxAp) {
           apWrap.innerHTML=alApBox(boxAp); apWrap.style.cursor='pointer'; apWrap.title='Click to change';
           apWrap.onclick=()=>{
-            if (role==='outDep'){ leg.dep=null; }
+            if (role==='outDep'){ leg.dep=null; leg._editingDep=true; }
             else { leg.arr=null; leg.rBlockTime=''; leg.rBlockTimeReal=false; }
             leg.blockTime=''; leg.blockTimeReal=false; renderAiGenAlLegs();
           };
@@ -6331,7 +6370,7 @@ function renderAiGenAlLegs() {
           inp.style.cssText='width:100%;background:transparent;border:1px solid rgba(255,255,255,.3);border-radius:5px;color:#fff;font-size:13px;outline:none;padding:12px 7px;box-sizing:border-box;text-align:center;';
           w.appendChild(inp); apWrap.appendChild(w);
           if (role==='outDep') {
-            buildSuggestBox(inp, ap=>{ leg.dep=ap; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
+            buildSuggestBox(inp, ap=>{ leg.dep=ap; leg._editingDep=false; renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
           } else { // outArr
             buildSuggestBox(inp, ap=>{ leg.arr=ap;
               // pre-seed estimated return block (no API) so return ARR shows right away
@@ -6360,10 +6399,15 @@ function renderAiGenAlLegs() {
       timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
       const isArrCol = (role==='outArr'||role==='retArr');
       if (isArrCol) {
-        // arrival side: the fixed field shows the COMPUTED arrival time (read-only)
+        // Arrival time: shows the computed arrival by default, BUT is editable.
+        // If the user types an arrival time, the BLOCK time is derived from DEP→ARR
+        // (arr - dep - tz), so real-world schedules can be entered directly.
         const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
-        const computed = alComputeArr(fromAp, toAp, leg[cfg.dFix], leg[cfg.blk], leg[cfg.real]);
-        timeRow.appendChild(fixedTimeInput('ARR', cfg.fixed, computed));
+        const depFixedVal = leg[cfg.dFix];
+        const computed = alComputeArr(fromAp, toAp, depFixedVal, leg[cfg.blk], leg[cfg.real]);
+        const arrManual = leg[cfg.fixed]; // user-entered arrival (if any)
+        const shownArr = arrManual || computed;
+        timeRow.appendChild(makeArrEditable(cfg, fromAp, toAp, depFixedVal, shownArr, !!arrManual));
       } else if (role==='retDep') {
         // return departure default = outbound arrival (local at leg.arr) + ground time,
         // but the field is editable (override wins).
@@ -6399,6 +6443,14 @@ function renderAiGenAlLegs() {
       const real = isOut ? leg.blockTimeReal : leg.rBlockTimeReal;
       const cell = document.createElement('div');
       cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
+      // ── Flight number (optional, for real-world flights) — above the arrow ──
+      const fnInp=document.createElement('input');
+      fnInp.type='text'; fnInp.maxLength=8; fnInp.placeholder='flt#';
+      fnInp.value = (isOut ? leg.flightNum : leg.rFlightNum) || '';
+      fnInp.title='Optional flight number for this segment. Used when generating rotations.';
+      fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
+      fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
+      cell.appendChild(fnInp);
       const arrow=document.createElement('div');
       arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
       arrow.onclick=()=>aiGenAlFetchBlockTime(i, dir);
@@ -7232,6 +7284,8 @@ async function createRotationsAirline() {
       blockTime: l.blockTime, rBlockTime: l.rBlockTime,
       groundTime: String(alGroundTime(l.eqp, l)),
       dnOut: 'any', dnRet: 'any',
+      // manual flight numbers (optional, for real-world flights)
+      flightNum: (l.flightNum||'').trim(), rFlightNum: (l.rFlightNum||'').trim(),
       // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
       dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
       aa1: outFixed ? '00:00' : l.aa1, aa2: outFixed ? '23:59' : l.aa2,
@@ -7319,11 +7373,19 @@ Output exactly this shape (one line is fine):
   if(_aborted)return;
 
   // Merge UI-derived data (utc + block times) with API data (fnums + regs).
+  // A manually entered flight number always wins over the API-suggested one.
   const fnumByR = {}; ((apiPart&&apiPart.routes)||[]).forEach(rr=>{ fnumByR[rr.r]=rr; });
-  const mergedRoutes = routes.map(rt => ({
-    r: rt.r, block_out: rt.block_out, block_in: rt.block_in,
-    fnum_out: (fnumByR[rt.r]||{}).fnum_out, fnum_in: (fnumByR[rt.r]||{}).fnum_in,
-  }));
+  const digitsOnly = v => String(v||'').replace(/\D/g,'');
+  const mergedRoutes = routes.map((rt,idx) => {
+    const vl = validLegs[idx] || {};
+    const manOut = digitsOnly(vl.flightNum);
+    const manIn  = digitsOnly(vl.rFlightNum);
+    return {
+      r: rt.r, block_out: rt.block_out, block_in: rt.block_in,
+      fnum_out: manOut || (fnumByR[rt.r]||{}).fnum_out,
+      fnum_in:  manIn  || (fnumByR[rt.r]||{}).fnum_in,
+    };
+  });
   const research = { utc, routes: mergedRoutes, registrations: (apiPart&&apiPart.registrations)||{}, _sig: sig };
   rotResearch = research;
 
