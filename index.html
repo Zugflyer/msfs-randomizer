@@ -9335,6 +9335,28 @@ function renderFleet() {
   const cg=document.createElement('colgroup');
   ['310px','auto','36%','44px'].forEach(w=>{ const c=document.createElement('col'); if(w!=='auto') c.style.width=w; cg.appendChild(c); });
   table.appendChild(cg);
+
+  // slim header: only two small grey sort arrows above "type" and "source"
+  const thead=document.createElement('thead');
+  const htr=document.createElement('tr');
+  const mkTh=(field)=>{
+    const th=document.createElement('th');
+    th.style.cssText='padding:4px 18px 0;text-align:left;font-weight:400;background:#f4f6fa;';
+    if (field) {
+      const active = fleetSort.field===field;
+      const b=document.createElement('button');
+      b.textContent = active ? (fleetSort.dir>0 ? '▲' : '▼') : '⇅';
+      b.title = 'Sort by '+(field==='type'?'aircraft type':'source')+(active?' (click again to reverse)':'');
+      b.style.cssText='background:transparent;border:none;cursor:pointer;color:#9aa5b8;font-size:11px;padding:2px 8px;line-height:1;';
+      b.onmouseenter=()=>{ b.style.color='#5d6b82'; };
+      b.onmouseleave=()=>{ b.style.color='#9aa5b8'; };
+      b.onclick=()=>fleetSortBy(field);
+      th.appendChild(b);
+    }
+    return th;
+  };
+  htr.appendChild(mkTh(null)); htr.appendChild(mkTh('type')); htr.appendChild(mkTh('source')); htr.appendChild(mkTh(null));
+  thead.appendChild(htr); table.appendChild(thead);
   const tbody=document.createElement('tbody');
   fleetData.forEach((ac,ri)=> tbody.appendChild(buildFleetRow(ac,ri)));
   table.appendChild(tbody);
@@ -9342,6 +9364,21 @@ function renderFleet() {
 }
 
 function _fleetJetUrl(reg){ return 'https://www.jetphotos.com/photo/keyword/'+encodeURIComponent(reg); }
+
+// Sort state for the fleet table; clicking the same arrow again reverses the order
+let fleetSort = { field:null, dir:1 };
+function fleetSortBy(field) {
+  fleetSort = (fleetSort.field===field) ? { field, dir:-fleetSort.dir } : { field, dir:1 };
+  const dir = fleetSort.dir;
+  fleetData.sort((a,b)=>{
+    const x=(a[field]||'').trim(), y=(b[field]||'').trim();
+    if (!x && !y) return 0;
+    if (!x) return 1;          // empty entries always at the bottom
+    if (!y) return -1;
+    return dir * x.localeCompare(y, undefined, { numeric:true, sensitivity:'base' });
+  });
+  saveFleet(); renderFleet();
+}
 
 function buildFleetRow(ac, ri) {
   const tr=document.createElement('tr');
