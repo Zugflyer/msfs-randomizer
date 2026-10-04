@@ -6010,6 +6010,42 @@ function applyAiGenAlSchedModeUI() {
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
 // time-zone difference (summer offsets) and an ARR day offset (+1, +2, -1 …).
 // dir 'out' or 'ret'. Returns "H:MM" or '' if not computable.
+// Known schedule: group route rows into multi-stop flights. Row B continues row A when
+// B's outbound flight number equals A's and B departs where A arrives
+// (e.g. 708 SBGL→LPPT + 708 LPPT→LPPR). Returns an array of row arrays in flown order.
+function alGroupKnownChains(rows) {
+  const fd = v => String(v||'').replace(/\D/g,'');
+  const next = new Map(), hasPrev = new Set();
+  rows.forEach(a=>{
+    const fa = fd(a.flightNum); if (!fa || !a.arr) return;
+    const b = rows.find(b => b!==a && !hasPrev.has(b) && b.dep && fd(b.flightNum)===fa && b.dep[0]===a.arr[0]);
+    if (b) { next.set(a,b); hasPrev.add(b); }
+  });
+  const used = new Set(), chains = [];
+  rows.forEach(a=>{
+    if (hasPrev.has(a) || used.has(a)) return;
+    const c=[a]; used.add(a); let x=a;
+    while (next.has(x) && !used.has(next.get(x))) { x=next.get(x); c.push(x); used.add(x); }
+    chains.push(c);
+  });
+  rows.forEach(a=>{ if (!used.has(a)) chains.push([a]); });   // safety (circular links)
+  return chains;
+}
+// One rotation from a chain of rows: outbound legs in row order, then the return legs
+// in reverse row order (708 SBGL→LPPT→LPPR, then 709 LPPR→LPPT→SBGL).
+function alKnownChainLeg(rows) {
+  const first=rows[0], last=rows[rows.length-1];
+  const segs=[];
+  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum }));
+  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum }));
+  return {
+    dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
+    groundTime:String(alGroundTime(first.eqp, first)), dnOut:'any', dnRet:'any',
+    exact:true, knownSegs:segs,
+    blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block,
+  };
+}
+
 function alKnownBlock(leg, dir) {
   const out = dir!=='ret';
   const fromAp = out ? leg.dep : leg.arr;
@@ -7454,6 +7490,7 @@ const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','S
 const ROT_WEEKS = 2;
 const ROT_NDAYS = 7*ROT_WEEKS;          // 14
 const ROT_SPAN  = 1440*ROT_NDAYS;       // 20160 minutes
+const KNOWN_MIN_TURN = 20;   // min. minutes between two typed (known-schedule) segments when placing them on days
 function rotEmptyAssignments(){ const a={}; for(let d=0; d<ROT_NDAYS; d++) a[d]=[]; return a; }
 function rotDayList(ac, day){ if(!ac.assignments[day]) ac.assignments[day]=[]; return ac.assignments[day]; }
 
@@ -7524,7 +7561,12 @@ async function createRotationsAirline() {
   // time by collapsing its departure window to a single minute and opening the arrival
   // window wide (so findTime returns precisely the entered time). Legs without a fixed
   // time keep their from/until windows and let findTime search as usual.
-  const validLegs = src.map(l => {
+  // KNOWN schedule: rows sharing flight numbers along a route form ONE multi-stop rotation.
+  let units = src.map(l=>[l]);
+  if (knownMode) units = alGroupKnownChains(src.filter(l=>!isChain(l))).concat(src.filter(isChain).map(l=>[l]));
+  const validLegs = units.map(rows => {
+    if (rows.length > 1) return alKnownChainLeg(rows);
+    const l = rows[0];
     if (isChain(l)) {
       // A split chain → one rotation. hops = outbound hops then return hops, in order.
       // Only the first outbound hop has a start time (l.startFixed); the rest chain via
@@ -7574,12 +7616,13 @@ async function createRotationsAirline() {
   // Pre-build research from UI data (UTC offsets + block times come straight from the inputs)
   const utc = {};
   validLegs.forEach(l => {
+    if (l.knownSegs) { l.knownSegs.forEach(h=>{ if(h.dep) utc[h.dep[0]]=getUtcOffset(h.dep); if(h.arr) utc[h.arr[0]]=getUtcOffset(h.arr); }); return; }
     if (l.hops) { l.hops.forEach(h=>{ if(h.dep) utc[h.dep[0]]=getUtcOffset(h.dep); if(h.arr) utc[h.arr[0]]=getUtcOffset(h.arr); }); }
     else { utc[l.dep[0]] = getUtcOffset(l.dep); utc[l.arr[0]] = getUtcOffset(l.arr); }
   });
   const hm = s => { const m=String(s||'').match(/(\d{1,2}):(\d{2})/); return m?(+m[1])*60+(+m[2]):null; };
   const fmt = m => String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
-  const routes = validLegs.map((l,idx) => l.hops
+  const routes = validLegs.map((l,idx) => (l.hops || l.knownSegs)
     ? { r: idx+1 } // chain flight numbers are assigned per-hop at build time
     : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
 
@@ -7766,6 +7809,32 @@ function buildRotationBars(validLegs, research) {
 
   validLegs.forEach((l,idx)=>{
     // ── Split chain leg → one chained rotation (multiple hops, same legIdx) ──
+    if (l.knownSegs && l.knownSegs.length) {
+      // Multi-stop flight entered as several rows with the same flight numbers:
+      // one rotation, every segment at its exact typed time. The week plan places each
+      // segment on the first day after the previous arrival, so e.g. the KLAX→SBGL leg
+      // of SBGL-KLAX-RJTT-KLAX-SBGL lands after the Tokyo round trip.
+      const ground = parseInt(l.groundTime||'90')||90;
+      let hOut=0, hRet=0;
+      l.knownSegs.forEach(sg=>{
+        const dOff = utc[sg.dep[0]] ?? getUtcOffset(sg.dep), aOff = utc[sg.arr[0]] ?? getUtcOffset(sg.arr);
+        const blockMin = hm(sg.block)||0;
+        const depLocal = ((hm(sg.depFixed)%1440)+1440)%1440;
+        const arrRaw = depLocal + blockMin + (aOff-dOff)*60;
+        const fn = String(sg.fnum||'').replace(/\D/g,'') || String(1000+idx*11).padStart(4,'0');
+        rotBars.push({
+          legIdx:idx, dir:sg.half, hop:(sg.half==='out' ? hOut++ : hRet++), chain:true,
+          airline:l.airline, eqp:l.aircraft,
+          depIcao:sg.dep[0], arrIcao:sg.arr[0],
+          depLocal, arrLocal:((arrRaw%1440)+1440)%1440, dayCross:Math.floor(arrRaw/1440),
+          depOff:dOff, arrOff:aOff,
+          block:blockMin, ground, minTurn:KNOWN_MIN_TURN, fnum:fn,
+          ok:true, reason:'', assigned:0
+        });
+      });
+      return;
+    }
+
     if (l.hops && l.hops.length) {
       const ground = parseInt(l.groundTime||'90')||90;
       const cleanFnum=(v,fb)=>{ const d=String(v||'').replace(/\D/g,''); return d||fb; };
@@ -7870,7 +7939,7 @@ function buildRotationBars(validLegs, research) {
       depIcao:l.dep[0], arrIcao:l.arr[0],
       depLocal:out.depLocal, arrLocal:out.arrLocal, dayCross:out.dayCross,
       depOff:depUtc, arrOff:arrUtc,
-      block:blockOut, ground, fnum:fnumOut,
+      block:blockOut, ground, fnum:fnumOut, minTurn: l.exact ? KNOWN_MIN_TURN : undefined,
       ok: out.ok, reason: out.reason||'', assigned:0
     });
 
@@ -7881,7 +7950,7 @@ function buildRotationBars(validLegs, research) {
       depIcao:l.arr[0], arrIcao:l.dep[0],
       depLocal:ret.depLocal, arrLocal:ret.arrLocal, dayCross:ret.dayCross,
       depOff:arrUtc, arrOff:depUtc,
-      block:blockIn, ground, fnum:fnumIn,
+      block:blockIn, ground, fnum:fnumIn, minTurn: l.exact ? KNOWN_MIN_TURN : undefined,
       ok: ret.ok, reason: ret.reason||'', assigned:0
     });
   });
@@ -8348,7 +8417,7 @@ function barToUTCSeg(bar) {
   const arrUTCraw = depUTCraw + bar.block;
   const arrUTC = ((arrUTCraw%1440)+1440)%1440;
   const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor(depUTCraw/1440);
-  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground, depOff:bar.depOff, arrOff:bar.arrOff };
+  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground, minTurn:bar.minTurn, depOff:bar.depOff, arrOff:bar.arrOff };
 }
 
 // Compute ALL segments of a leg (2 for a simple out/return, N for a split chain),
@@ -8374,7 +8443,8 @@ function computePairSegs(legIdx, dropDay) {
     }
     const absArr = absDep + s.block;
     segs.push({ ...s, absDep: ((absDep%ROT_SPAN)+ROT_SPAN)%ROT_SPAN, absArr: ((absArr%ROT_SPAN)+ROT_SPAN)%ROT_SPAN });
-    prevAbsArr = absArr; prevGround = s.ground;
+    // typed (known) schedules only need a short minimum gap; estimated ones use the ground time
+    prevAbsArr = absArr; prevGround = (s.minTurn!=null ? s.minTurn : s.ground);
   });
   return { pair: bars, segs };
 }
@@ -9687,6 +9757,26 @@ function fleetAddRow() {
     const inp=last.querySelector('input[type="text"]'); if(inp) inp.focus();
   }
 }
+
+
+// ── Keep the scroll position of the rotation planner when it is redrawn ──────────
+// (assigning, moving or deleting a rotation rebuilds both panes; without this the
+// view jumped back to the first rotation)
+(function(){
+  const keepScroll = (name, ids) => {
+    const orig = window[name];
+    if (typeof orig !== 'function') return;
+    window[name] = function(){
+      const saved = ids.map(id=>{ const el=document.getElementById(id); return el ? [el.scrollTop, el.scrollLeft] : null; });
+      const res = orig.apply(this, arguments);
+      const restore = () => ids.forEach((id,k)=>{ const el=document.getElementById(id); if (el && saved[k]) { el.scrollTop=saved[k][0]; el.scrollLeft=saved[k][1]; } });
+      restore(); requestAnimationFrame(restore);
+      return res;
+    };
+  };
+  keepScroll('renderRotationBars',  ['rot-bars-container']);
+  keepScroll('renderRotationLanes', ['rot-lanes-container']);
+})();
 
 </script>
 </body>
