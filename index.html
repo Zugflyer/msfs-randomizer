@@ -8541,6 +8541,28 @@ function renderRotationLanes() {
             makePiece(0, tailW, false, true);          // wrapped remainder at week start
           }
         });
+
+        // ── blue frame around the whole rotation (all its segments incl. final ground time) ──
+        if (asg.segs.length) {
+          let prev = asg.segs[0].absDep, startF = prev, endF = prev;
+          asg.segs.forEach((sg,k)=>{
+            let t = sg.absDep;
+            if (k>0) { while (t < prev) t += ROT_SPAN; }   // unwrap segments past the timeline end
+            prev = t; endF = t + sg.block + sg.ground;
+          });
+          const frame = (fromMin, toMin, openLeft, openRight) => {
+            const f=document.createElement('div');
+            f.className='rot-frame';
+            f.style.cssText='position:absolute;top:3px;height:'+(ROW_H-6)+'px;left:'+(fromMin*pxPerMin-3)+'px;width:'+((toMin-fromMin)*pxPerMin+6)+'px;'
+              +'border:3px solid #2f6bff;'+(openLeft?'border-left:none;':'')+(openRight?'border-right:none;':'')
+              +'border-radius:'+(openLeft?'0':'7px')+' '+(openRight?'0':'7px')+' '+(openRight?'0':'7px')+' '+(openLeft?'0':'7px')+';'
+              +'box-sizing:border-box;pointer-events:none;z-index:2;';
+            f.title='Rotation';
+            track.appendChild(f);
+          };
+          if (endF <= ROT_SPAN) frame(startF, endF, false, false);
+          else { frame(startF, ROT_SPAN, false, true); frame(0, endF-ROT_SPAN, true, false); }
+        }
       });
     });
 
