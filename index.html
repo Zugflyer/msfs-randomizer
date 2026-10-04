@@ -1041,6 +1041,20 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
+          <!-- Min ground time: applies to all route rows (empty = default by aircraft type) -->
+          <div style="display:flex;flex-direction:column;gap:3px;align-items:center;">
+            <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">Min ground time</div>
+            <div style="display:flex;align-items:center;gap:4px;">
+              <input id="aigen-al-min-ground" type="number" min="0" max="999" placeholder="auto"
+                title="Ground time in minutes for all flights. Empty = default by aircraft type (heavy 100 · narrowbody 45 · commuter 25)"
+                style="width:58px;font-size:12px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
+                oninput="setAiGenAlMinGround(this.value)">
+              <span style="font-size:10px;color:var(--txt3);">min</span>
+            </div>
+          </div>
+
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
           <!-- Generate rotations -->
           <button onclick="createRotationsAirline()"
             style="font-size:13px;font-weight:700;padding:0 18px;height:60px;border-radius:6px;border:none;background:linear-gradient(135deg,#7b61ff,#5b8cff);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;">
@@ -6018,6 +6032,7 @@ function applyAiGenAlSchedModeUI() {
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
   const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
   const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = known ? 'flex' : 'none';
+  const mg=document.getElementById('aigen-al-min-ground'); if (mg && document.activeElement!==mg) mg.value = aiGenAlMinGround;
 }
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
 // time-zone difference (summer offsets) and an ARR day offset (+1, +2, -1 …).
@@ -6056,7 +6071,8 @@ function alSheetToSegments(rows) {
   const col=names=>head.findIndex(h=>names.includes(h));
   const C={ al:col(['AIRLINE','AL']), fln:col(['FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO']), from:col(['FROM','DEPARTURE','ORIGIN']),
             dep:col(['DEP','STD']), arr:col(['ARR','STA']), off:col(['NIGHTFLIGHT','NIGHT','DAY','+1']),
-            to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']) };
+            to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']),
+            grd:col(['GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT']) };
   ['fln','from','dep','arr','to'].forEach(k=>{ if(C[k]<0) out.problems.push('Column missing: '+k.toUpperCase()); });
   if (out.problems.length) return out;
   let prevTo='';
@@ -6075,7 +6091,8 @@ function alSheetToSegments(rows) {
     const line='row '+(r+1);
     if (!from || !to) { out.problems.push(line+': unknown airport '+(!from?fromCode:toCode)); continue; }
     if (!dep || !arr) { out.problems.push(line+': invalid DEP/ARR time'); continue; }
-    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), row:r });
+    const grdRaw=get('grd'); const grd=(grdRaw===null||grdRaw===undefined||String(grdRaw).trim()==='') ? null : (parseInt(String(grdRaw).replace(/\D/g,''),10));
+    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r });
   }
   return out;
 }
@@ -6120,8 +6137,16 @@ async function aiGenAlImportXls(file) {
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
     const pairs=alSegmentsToRows(parsed.segs, aiGenAlHub ? aiGenAlHub[0] : '');
+    // GRD → header MIN GROUND TIME (most frequent value); rows keep their own value
+    const grds=parsed.segs.map(x=>x.grd).filter(v=>v!=null);
+    if (grds.length) {
+      const freq={}; grds.forEach(v=>{ freq[v]=(freq[v]||0)+1; });
+      aiGenAlMinGround = String(Object.keys(freq).sort((a,b)=>freq[b]-freq[a])[0]);
+    }
     const legs=pairs.map(p=>{
       const L=aiGenAlEmptyLeg();
+      const g = (p.out.grd!=null) ? p.out.grd : (p.ret && p.ret.grd!=null ? p.ret.grd : null);
+      if (g!=null) L.groundOverride=String(g);
       L.eqp=p.out.eqp || (p.ret&&p.ret.eqp) || '';
       L.dep=p.out.from; L.arr=p.out.to; L._editingDep=false;
       L.flightNum=p.out.fln; L.depFixed=p.out.dep; L.arrFixed=p.out.arr; L.arrDayOff=p.out.off;
@@ -6205,8 +6230,18 @@ function alKnownBlock(leg, dir) {
 }
 let aiGenAlLegs = [];    // route rows (airline mode)
 
+// Header "MIN GROUND TIME" (minutes as string; '' = default by aircraft type)
+let aiGenAlMinGround = '';
+function setAiGenAlMinGround(v) {
+  const d = String(v==null?'':v).replace(/\D/g,'').slice(0,3);
+  aiGenAlMinGround = d;
+  aiGenAlLegs.forEach(l=>{ l.groundOverride = d; });   // applies to every route row
+  renderAiGenAlLegs();
+}
+
 function aiGenAlEmptyLeg() {
   return { eqp:'', dep: aiGenAlHub || null, arr:null,
+           groundOverride: aiGenAlMinGround || '',
            depFixed:'', dd1:'', dd2:'',
            arrFixed:'', aa1:'', aa2:'',
            blockTime:'', blockTimeReal:false,
