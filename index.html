@@ -986,6 +986,17 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <span id="aigen-al-sm-random" onclick="setAiGenAlSchedMode('random')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Random schedule</span>
           </div>
 
+          <!-- Import a known schedule from Excel (known schedule mode only) -->
+          <div id="aigen-al-import" style="display:none;flex-direction:column;align-items:center;gap:3px;">
+            <label title="Import flights from an Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP)"
+              style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;">
+              ⬆ Import XLS
+              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xls,.csv" style="display:none;"
+                onchange="if(this.files&&this.files[0]){ aiGenAlImportXls(this.files[0]); } this.value='';">
+            </label>
+            <span id="aigen-al-import-status" style="font-size:10px;color:var(--txt3);max-width:260px;text-align:center;"></span>
+          </div>
+
           <!-- Time windows (only used by Random schedule) -->
           <div id="aigen-al-windows" style="display:flex;align-items:center;gap:14px;">
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
@@ -6006,10 +6017,141 @@ function applyAiGenAlSchedModeUI() {
   if (lk) lk.style.color = known ? '#fff' : 'var(--txt3)';
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
   const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
+  const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = known ? 'flex' : 'none';
 }
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
 // time-zone difference (summer offsets) and an ARR day offset (+1, +2, -1 …).
 // dir 'out' or 'ret'. Returns "H:MM" or '' if not computable.
+// ── Known schedule: import from Excel ─────────────────────────────────────────────
+// Expected columns (header row, any order, case-insensitive):
+//   AIRLINE · FLN · FROM · DEP · ARR · NIGHTFLIGHT · TO · EQP
+// One row = one flight SEGMENT with local times. DEP/ARR may be 2235, "0010", "22:35"
+// or an Excel time; NIGHTFLIGHT is the arrival day offset (+1, -1, empty = same day).
+// FROM may be empty → taken from the previous row's TO (like the "=G2" formula).
+function alParseClock(v) {
+  if (v===null || v===undefined || v==='') return '';
+  if (typeof v === 'number') {
+    if (v>0 && v<1) { const m=Math.round(v*1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+    const n=Math.round(v); const h=Math.floor(n/100), m=n%100;
+    if (h>23 || m>59) return '';
+    return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+  }
+  const t=String(v).trim();
+  const m=t.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return (+m[1]<24 && +m[2]<60) ? m[1].padStart(2,'0')+':'+m[2] : '';
+  const d=t.replace(/\D/g,'');
+  return d ? alParseClock(parseInt(d,10)) : '';
+}
+function alFindAirport(code) {
+  const c=String(code||'').trim().toUpperCase();
+  if (!c) return null;
+  return schedByCode[c] || (c.length===3 ? schedByIata[c] : null) || null;
+}
+// Read the sheet rows (array of arrays) into flight segments.
+function alSheetToSegments(rows) {
+  const out={ segs:[], problems:[], airlines:new Set() };
+  const hIdx=rows.findIndex(r=>Array.isArray(r) && r.some(c=>/^(FLN|FROM|DEP)$/i.test(String(c||'').trim())));
+  if (hIdx<0) { out.problems.push('No header row found (expected FLN, FROM, DEP, ARR, TO …)'); return out; }
+  const head=rows[hIdx].map(c=>String(c||'').trim().toUpperCase());
+  const col=names=>head.findIndex(h=>names.includes(h));
+  const C={ al:col(['AIRLINE','AL']), fln:col(['FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO']), from:col(['FROM','DEPARTURE','ORIGIN']),
+            dep:col(['DEP','STD']), arr:col(['ARR','STA']), off:col(['NIGHTFLIGHT','NIGHT','DAY','+1']),
+            to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']) };
+  ['fln','from','dep','arr','to'].forEach(k=>{ if(C[k]<0) out.problems.push('Column missing: '+k.toUpperCase()); });
+  if (out.problems.length) return out;
+  let prevTo='';
+  for (let r=hIdx+1; r<rows.length; r++) {
+    const row=rows[r]||[];
+    const get=k=> C[k]>=0 ? row[C[k]] : null;
+    if (row.every(c=>c===null||c===undefined||String(c).trim()==='')) continue;
+    const fromCode=String(get('from')||'').trim() || prevTo;
+    const toCode=String(get('to')||'').trim();
+    prevTo=toCode;
+    const from=alFindAirport(fromCode), to=alFindAirport(toCode);
+    const dep=alParseClock(get('dep')), arr=alParseClock(get('arr'));
+    const fln=String(get('fln')||'').replace(/\D/g,'');
+    const offRaw=get('off'); const off=(offRaw===null||offRaw===undefined||String(offRaw).trim()==='') ? 0 : (parseInt(String(offRaw).replace(/\s/g,''),10)||0);
+    if (get('al')) out.airlines.add(String(get('al')).trim().toUpperCase());
+    const line='row '+(r+1);
+    if (!from || !to) { out.problems.push(line+': unknown airport '+(!from?fromCode:toCode)); continue; }
+    if (!dep || !arr) { out.problems.push(line+': invalid DEP/ARR time'); continue; }
+    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), row:r });
+  }
+  return out;
+}
+// Pair outbound and return segments into route rows (A→B with B→A). A flight that departs
+// the hub counts as outbound; the return partner preferably carries the next flight number.
+function alSegmentsToRows(segs, hubIcao) {
+  const fl=new Map();                          // flight number → segments (sheet order)
+  segs.forEach(sg=>{ const k=sg.fln||('#'+sg.row); if(!fl.has(k)) fl.set(k,[]); fl.get(k).push(sg); });
+  const dirOf=new Map();
+  fl.forEach((list,k)=>{
+    const starts=list.some(x=>x.from[0]===hubIcao), ends=list.some(x=>x.to[0]===hubIcao);
+    dirOf.set(k, (starts && !ends) ? 'out' : (ends && !starts) ? 'ret' : '');
+  });
+  const keyOf=sg=>sg.fln||('#'+sg.row);
+  const rank=sg=>({out:0,'':1,ret:2})[dirOf.get(keyOf(sg))];
+  const order=segs.slice().sort((a,b)=> rank(a)-rank(b) || a.row-b.row);
+  const used=new Set(), rows=[];
+  order.forEach(x=>{
+    if (used.has(x)) return;
+    const cands=segs.filter(y=>!used.has(y) && y!==x && y.from[0]===x.to[0] && y.to[0]===x.from[0]);
+    cands.sort((a,b)=>{
+      const sa=(a.fln&&a.fln===x.fln)?1:0, sb=(b.fln&&b.fln===x.fln)?1:0;       // different flight number first
+      if (sa!==sb) return sa-sb;
+      const da=Math.abs((+a.fln||0)-(+x.fln||0)), db=Math.abs((+b.fln||0)-(+x.fln||0));
+      return da-db || a.row-b.row;
+    });
+    const y=cands[0]||null;
+    used.add(x); if (y) used.add(y);
+    rows.push({ out:x, ret:y });
+  });
+  return rows;
+}
+async function aiGenAlImportXls(file) {
+  const st=document.getElementById('aigen-al-import-status');
+  const say=(t,col)=>{ if(st){ st.textContent=t; st.style.color=col||'var(--txt3)'; } };
+  if (typeof XLSX==='undefined') { say('Excel reader not loaded — check your connection','#f85149'); return; }
+  try {
+    const buf=await file.arrayBuffer();
+    const wb=XLSX.read(new Uint8Array(buf), { type:'array' });
+    const ws=wb.Sheets[wb.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+    const parsed=alSheetToSegments(rows);
+    if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
+    const pairs=alSegmentsToRows(parsed.segs, aiGenAlHub ? aiGenAlHub[0] : '');
+    const legs=pairs.map(p=>{
+      const L=aiGenAlEmptyLeg();
+      L.eqp=p.out.eqp || (p.ret&&p.ret.eqp) || '';
+      L.dep=p.out.from; L.arr=p.out.to; L._editingDep=false;
+      L.flightNum=p.out.fln; L.depFixed=p.out.dep; L.arrFixed=p.out.arr; L.arrDayOff=p.out.off;
+      if (p.ret) {
+        L.rFlightNum=p.ret.fln; L.rDepFixed=p.ret.dep; L._custom_rDepFixed=true;
+        L.rArrFixed=p.ret.arr; L.rArrDayOff=p.ret.off;
+      }
+      return L;
+    });
+    const hasContent=aiGenAlLegs.some(l=>l.arr || l.depFixed || l.flightNum);
+    if (hasContent && !confirm('Replace the current routes with the '+legs.length+' imported ones?\n\nOK = replace · Cancel = add them below')) {
+      aiGenAlLegs = aiGenAlLegs.filter(l=>l.arr || l.depFixed || l.flightNum).concat(legs);
+    } else {
+      aiGenAlLegs = legs;
+    }
+    if (aiGenAlSchedMode!=='known') aiGenAlSchedMode='known';
+    renderAiGenAlLegs();
+    const oneWay=pairs.filter(p=>!p.ret).length;
+    let msg='✓ '+parsed.segs.length+' segments → '+legs.length+' routes';
+    if (oneWay) msg+=' · '+oneWay+' without return (please complete)';
+    if (parsed.problems.length) msg+=' · skipped: '+parsed.problems.join('; ');
+    if (!aiGenAirline) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
+    else if (!aiGenAlHub) msg+=' · select the hub above';
+    say(msg, (oneWay||parsed.problems.length) ? '#e0b341' : '#3fb950');
+  } catch(e) {
+    console.error('XLS import failed', e);
+    say('Import failed: '+(e && e.message || e), '#f85149');
+  }
+}
+
 // Known schedule: group route rows into multi-stop flights. Row B continues row A when
 // B's outbound flight number equals A's and B departs where A arrives
 // (e.g. 708 SBGL→LPPT + 708 LPPT→LPPR). Returns an array of row arrays in flown order.
