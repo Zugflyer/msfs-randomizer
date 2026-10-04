@@ -976,6 +976,20 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
+          <!-- Schedule mode switch: Known schedule (left) / Random schedule (right) -->
+          <div id="aigen-al-schedmode" style="display:flex;align-items:center;gap:9px;user-select:none;">
+            <span id="aigen-al-sm-known" onclick="setAiGenAlSchedMode('known')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Known schedule</span>
+            <div onclick="setAiGenAlSchedMode(aiGenAlSchedMode==='known'?'random':'known')" title="Switch between known schedule and random schedule"
+              style="width:46px;height:24px;border-radius:12px;background:var(--acc);position:relative;cursor:pointer;flex-shrink:0;">
+              <div id="aigen-al-sm-knob" style="position:absolute;top:3px;left:25px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;"></div>
+            </div>
+            <span id="aigen-al-sm-random" onclick="setAiGenAlSchedMode('random')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Random schedule</span>
+          </div>
+
+          <!-- Time windows (only used by Random schedule) -->
+          <div id="aigen-al-windows" style="display:flex;align-items:center;gap:14px;">
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
           <!-- DEP window -->
           <div style="display:flex;flex-direction:column;gap:3px;">
             <div style="font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;text-align:center;">DEP window</div>
@@ -1010,6 +1024,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
                 style="width:48px;font-size:11px;font-family:monospace;padding:3px 5px;border-radius:4px;border:1px solid var(--bdr);background:var(--bg);color:#fff;text-align:center;outline:none;"
                 onblur="this.value=formatTimeStr(this.value)||this.value; syncAiGenAlDefaults('arrUntil',this.value);">
             </div>
+          </div>
+
           </div>
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
@@ -5972,6 +5988,43 @@ let aiGenLegs = [];
 let aiGenAirline = '';   // selected airline ICAO (airline mode)
 let aiGenAlHub = null;   // selected hub airport array (airline mode)
 let aiGenAlFocusAfter = null;  // "row.pos" to focus after the next render (tab continuity)
+
+// ── Schedule mode (airline mode) ────────────────────────────────────────────────
+// 'known'  : real flights — DEP and ARR times are typed, block = ARR − DEP (time zones
+//            considered), flight numbers used; no time windows.
+// 'random' : times are generated inside the DEP/ARR windows; block looked up/estimated.
+let aiGenAlSchedMode = (function(){ try{ return localStorage.getItem('aigen_al_schedmode')==='known' ? 'known' : 'random'; }catch(e){ return 'random'; } })();
+function setAiGenAlSchedMode(m) {
+  aiGenAlSchedMode = (m==='known') ? 'known' : 'random';
+  try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
+  renderAiGenAlLegs();
+}
+function applyAiGenAlSchedModeUI() {
+  const known = aiGenAlSchedMode==='known';
+  const knob=document.getElementById('aigen-al-sm-knob'); if (knob) knob.style.left = known ? '3px' : '25px';
+  const lk=document.getElementById('aigen-al-sm-known'), lr=document.getElementById('aigen-al-sm-random');
+  if (lk) lk.style.color = known ? '#fff' : 'var(--txt3)';
+  if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
+  const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
+}
+// Known schedule: block time from typed DEP and ARR (local times), honouring the
+// time-zone difference (summer offsets) and an ARR day offset (+1, +2, -1 …).
+// dir 'out' or 'ret'. Returns "H:MM" or '' if not computable.
+function alKnownBlock(leg, dir) {
+  const out = dir!=='ret';
+  const fromAp = out ? leg.dep : leg.arr;
+  const toAp   = out ? leg.arr : (leg.dep || aiGenAlHub);
+  const dep = out ? leg.depFixed : leg.rDepFixed;
+  const arr = out ? leg.arrFixed : leg.rArrFixed;
+  const off = (out ? leg.arrDayOff : leg.rArrDayOff) || 0;
+  const hm = s => { const m=String(s||'').match(/^\s*(\d{1,2}):(\d{2})\s*$/); return m ? (+m[1])*60+(+m[2]) : null; };
+  const d=hm(dep), a=hm(arr);
+  if (d==null || a==null || !fromAp || !toAp) return '';
+  let blk = (a + off*1440) - d - (getUtcOffset(toAp)-getUtcOffset(fromAp))*60;
+  while (blk < 0) blk += 1440;
+  if (blk === 0) return '';
+  return Math.floor(blk/60)+':'+String(blk%60).padStart(2,'0');
+}
 let aiGenAlLegs = [];    // route rows (airline mode)
 
 function aiGenAlEmptyLeg() {
@@ -6246,6 +6299,7 @@ function renderAiGenAlLegs() {
 }
 
 function _renderAiGenAlLegsNow() {
+  applyAiGenAlSchedModeUI();
   const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
   container.innerHTML = '';
 
@@ -6395,7 +6449,7 @@ function _renderAiGenAlLegsNow() {
         mode='manual';
         dayOff = leg[cfg.dayOff]||0;
         shown = leg[cfg.fixed] + (dayOff>0?' +'+dayOff:(dayOff<0?' '+dayOff:''));
-      } else {
+      } else if (aiGenAlSchedMode!=='known') {
         // AUTO: compute from dep + block
         const blkStr = leg[cfg.blk];
         const blk = hm(blkStr);
@@ -6564,7 +6618,10 @@ function _renderAiGenAlLegsNow() {
       const timeRow = document.createElement('div');
       timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
       const isArrCol = (role==='outArr'||role==='retArr');
-      if (isArrCol) {
+      const knownMode = aiGenAlSchedMode==='known';
+      if (!knownMode) {
+        // RANDOM schedule: no fixed times — only the from/until windows (+ offset below)
+      } else if (isArrCol) {
         // Arrival time: shows the computed arrival by default, BUT is editable.
         // If the user types an arrival time, the BLOCK time is derived from DEP→ARR.
         const fromAp = cfg.arrFrom(), toAp = cfg.arrTo();
@@ -6573,7 +6630,7 @@ function _renderAiGenAlLegsNow() {
       } else if (role==='retDep') {
         // return departure default = outbound arrival (local at leg.arr) + ground time,
         // but the field is editable (override wins).
-        const outArr = alComputeArr(leg.dep, leg.arr, leg.depFixed, leg.blockTime, leg.blockTimeReal);
+        const outArr = /^\d{1,2}:\d{2}$/.test(String(leg.arrFixed||'')) ? leg.arrFixed : '';
         let retDep = '';
         if (outArr) {
           const m = (s=>{const x=String(s).match(/(\d{1,2}):(\d{2})/);return x?(+x[1])*60+(+x[2]):null;})(outArr);
@@ -6591,8 +6648,8 @@ function _renderAiGenAlLegsNow() {
           timeRow.appendChild(fixedTimeInput('DEP', cfg.fixed));
         }
       }
-      // windows are always shown and editable (used by the random-time feature later)
-      timeRow.appendChild(winPair(cfg.w1, cfg.w2));
+      // windows only in RANDOM schedule mode
+      if (!knownMode) timeRow.appendChild(winPair(cfg.w1, cfg.w2));
       const utc=document.createElement('div'); utc.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
       const utcL=document.createElement('div'); utcL.style.cssText='font-size:9px;color:var(--txt3);'; utcL.textContent='offset';
       const utcV=document.createElement('div'); utcV.style.cssText='font-size:11px;font-family:monospace;color:#9fc7ff;padding-top:2px;'; utcV.textContent=utcStr(boxAp);
@@ -6611,7 +6668,23 @@ function _renderAiGenAlLegsNow() {
       const real = isOut ? leg.blockTimeReal : leg.rBlockTimeReal;
       const cell = document.createElement('div');
       cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
-      // ── Flight number (optional, for real-world flights) — above the arrow ──
+      const knownMode = aiGenAlSchedMode==='known';
+      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
+      if (!knownMode) {
+        // RANDOM schedule: block time looked up (→) or estimated, editable; no flight number
+        const arrow=document.createElement('div');
+        arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
+        arrow.onclick=()=>aiGenAlFetchBlockTime(i, dir);
+        const inp=document.createElement('input');
+        inp.type='text'; inp.id=id; inp.value=val||''; inp.placeholder='H:MM';
+        inp.dataset.tabseq=i+'.'+(isOut?6:9);
+        inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(real?'#3fb950':'#777')+';font-weight:'+(real?700:400)+';'+(real?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
+        inp.oninput=()=>{ if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;} };
+        inp.onblur=()=>{ const f=fmtDuration(inp.value); if(isOut){leg.blockTime=f;} else {leg.rBlockTime=f;} renderAiGenAlLegs(); };
+        cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
+        return cell;
+      }
+      // KNOWN schedule: flight number + block computed from DEP/ARR (read-only)
       const fnInp=document.createElement('input');
       fnInp.type='text'; fnInp.maxLength=8; fnInp.placeholder='flt#';
       fnInp.dataset.tabseq=i+'.'+(isOut?2:4);
@@ -6620,22 +6693,13 @@ function _renderAiGenAlLegsNow() {
       fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
       fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
       cell.appendChild(fnInp);
-      const arrow=document.createElement('div');
-      arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
-      arrow.onclick=()=>aiGenAlFetchBlockTime(i, dir);
-      const inp=document.createElement('input');
-      inp.type='text'; inp.id=id; inp.value=val||''; inp.placeholder='H:MM';
-      inp.dataset.tabseq=i+'.'+(isOut?6:9);
-      inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(real?'#3fb950':'#777')+';font-weight:'+(real?700:400)+';'+(real?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
-      inp.oninput=()=>{ if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;} };
-      inp.onblur=()=>{
-        // reformat a 3-4 digit duration (e.g. 0825 -> 8:25) into H:MM
-        const f=fmtDuration(inp.value);
-        if(isOut){leg.blockTime=f;} else {leg.rBlockTime=f;}
-        renderAiGenAlLegs();
-      };
-      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
-      cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
+      const kb = alKnownBlock(leg, dir);
+      const sp=document.createElement('div'); sp.style.cssText='font-size:13px;color:#555;line-height:1;'; sp.textContent='→';
+      const bd=document.createElement('div');
+      bd.id=id; bd.textContent = kb || '--:--';
+      bd.title='Block time computed from DEP and ARR (time zones and day offset considered)';
+      bd.style.cssText='width:46px;box-sizing:border-box;font-size:11px;font-family:monospace;color:'+(kb?'#3fb950':'var(--txt3)')+';font-weight:'+(kb?700:400)+';border:1px solid '+(kb?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);border-radius:4px;text-align:center;padding:2px 3px;';
+      cell.appendChild(sp); cell.appendChild(bd); cell.appendChild(L);
       return cell;
     }
 
@@ -7005,6 +7069,8 @@ async function aiGenAlFetchHopBlock(i, side, k) {
 
 // Block time lookup for an airline-mode (simple) leg, outbound or return.
 async function aiGenAlFetchBlockTime(i, dir) {
+  // Known schedule derives block times from the typed times — no lookup (saves API calls)
+  if (aiGenAlSchedMode==='known') return;
   dir = dir || 'out';
   const isOut = dir === 'out';
   const leg = aiGenAlLegs[i]; if (!leg) return;
@@ -7014,8 +7080,8 @@ async function aiGenAlFetchBlockTime(i, dir) {
   if (!dep || !arr) return;
   const elId = isOut ? ('aigen-al-bt-'+i) : ('aigen-al-rbt-'+i);
   const setVal = (v, real) => {
-    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; leg.arrFixed=''; leg.arrDayOff=0; }
-    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; leg.rArrFixed=''; leg.rArrDayOff=0; }
+    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; }
+    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; }
   };
   const btEl = document.getElementById(elId);
   if (btEl) { btEl.value='🔍'; btEl.style.color='#777'; }
@@ -7441,10 +7507,17 @@ async function createRotationsAirline() {
   const isChain = l => Array.isArray(l.stops) && l.stops.length;
   const chainComplete = l => l.outHops && l.outHops.every(h=>h.dep&&h.arr&&h.blockTime)
                           && l.retHops && l.retHops.every(h=>h.dep&&h.arr&&h.blockTime);
+  const knownMode = aiGenAlSchedMode==='known';
   const src = aiGenAlLegs.filter(l => l.eqp && (
-    isChain(l) ? chainComplete(l) : (l.dep && l.arr && l.blockTime && l.rBlockTime)
+    isChain(l) ? chainComplete(l)
+    : (l.dep && l.arr && (knownMode ? (alKnownBlock(l,'out') && alKnownBlock(l,'ret')) : (l.blockTime && l.rBlockTime)))
   ));
-  if (!src.length) { alert('Please complete at least one route (all airports, EQP, and block times).'); return; }
+  if (!src.length) {
+    alert(knownMode
+      ? 'Please complete at least one route: airports, EQP, and DEP + ARR times for outbound and return.'
+      : 'Please complete at least one route (all airports, EQP, and block times).');
+    return;
+  }
 
   // Convert to the shape buildRotationBars expects.
   // If the user entered a FIXED departure time for a leg, pin that leg to exactly that
@@ -7469,15 +7542,21 @@ async function createRotationsAirline() {
         hops, // <-- presence of hops triggers chain bar building
       };
     }
-    const outFixed = (l.depFixed && /^\d{1,2}:\d{2}$/.test(l.depFixed)) ? l.depFixed : null;
-    const retFixed = (l.rDepFixed && /^\d{1,2}:\d{2}$/.test(l.rDepFixed)) ? l.rDepFixed : null;
+    // KNOWN schedule: departures pinned to the typed times, block = ARR − DEP (exact, no
+    // rounding), own flight numbers. RANDOM schedule: times drawn inside the windows.
+    const okT = v => !!(v && /^\d{1,2}:\d{2}$/.test(v));
+    const outFixed = (knownMode && okT(l.depFixed))  ? l.depFixed  : null;
+    const retFixed = (knownMode && okT(l.rDepFixed)) ? l.rDepFixed : null;
     return {
       dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
-      blockTime: l.blockTime, rBlockTime: l.rBlockTime,
+      blockTime:  knownMode ? alKnownBlock(l,'out') : l.blockTime,
+      rBlockTime: knownMode ? alKnownBlock(l,'ret') : l.rBlockTime,
       groundTime: String(alGroundTime(l.eqp, l)),
       dnOut: 'any', dnRet: 'any',
-      // manual flight numbers (optional, for real-world flights)
-      flightNum: (l.flightNum||'').trim(), rFlightNum: (l.rFlightNum||'').trim(),
+      exact: knownMode,
+      // manual flight numbers (known schedule only)
+      flightNum:  knownMode ? (l.flightNum||'').trim()  : '',
+      rFlightNum: knownMode ? (l.rFlightNum||'').trim() : '',
       // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
       dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
       aa1: outFixed ? '00:00' : l.aa1, aa2: outFixed ? '23:59' : l.aa2,
@@ -7742,7 +7821,8 @@ function buildRotationBars(validLegs, research) {
     if(!hm(ri.block_out) && !hm(ri.block_in)){
       if(outIsEastWest) blockOut = baseBlock + 40; else blockIn = baseBlock + 40;
     }
-    blockOut = round5(blockOut); blockIn = round5(blockIn); // snap all block times to 5-minute steps
+    if (!l.exact) { blockOut = round5(blockOut); blockIn = round5(blockIn); } // snap estimates to 5-minute steps (known schedules stay exact)
+    const r5 = l.exact ? (x=>x) : round5;
 
     // Windows (local minutes)
     const depWin=[hm(l.dd1)??360, hm(l.dd2)??1350];
@@ -7759,10 +7839,10 @@ function buildRotationBars(validLegs, research) {
       const valid=[];
       let arrWinMiss=0, dnMiss=0, earlyMiss=0;
       for(let step=0; step<=span; step+=5){
-        const depLocal=round5(((lo+step)%1440+1440)%1440)%1440;
+        const depLocal=r5(((lo+step)%1440+1440)%1440)%1440;
         const depUTCm=depLocal-depOff*60;
         const arrUTCm=depUTCm+blockMin;
-        const arrLocal=round5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
+        const arrLocal=r5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
         const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
         const isNight=dayCross>=1;
         if(!inWin(arrLocal,arrWinL[0],arrWinL[1])){ arrWinMiss++; continue; }
@@ -7771,10 +7851,10 @@ function buildRotationBars(validLegs, research) {
         valid.push({depLocal,arrLocal,dayCross,ok:true,depUTCm:((depUTCm%1440)+1440)%1440});
       }
       if(valid.length){ return valid[Math.floor(Math.random()*valid.length)]; }
-      const depLocal=round5(lo)%1440;
+      const depLocal=r5(lo)%1440;
       const depUTCm=depLocal-depOff*60;
       const arrUTCm=depUTCm+blockMin;
-      const arrLocal=round5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
+      const arrLocal=r5(((arrUTCm+arrOff*60)%1440+1440)%1440)%1440;
       const dayCross=Math.floor((depLocal+blockMin+(arrOff-depOff)*60)/1440);
       let reason='';
       if(dnMiss>0 && arrWinMiss===0) reason='day/night requirement cannot be met within the departure window';
