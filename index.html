@@ -3105,7 +3105,7 @@ function buildSuggestBox(inputEl, onSelect) {
   let currentHits = [];
 
   inputEl.addEventListener('keydown', e => {
-    if (e.key === 'Tab' && currentHits.length > 0 && box.style.display !== 'none') {
+    if (e.key === 'Tab' && !e.shiftKey && currentHits.length > 0 && box.style.display !== 'none') {
       e.preventDefault();
       // Auto-select first (or only) result
       onSelect(currentHits[0]);
@@ -6195,7 +6195,57 @@ function alGroundTime(eqp, leg) {
 }
 
 // ── Render airline-mode route rows ────────────────────────────────────────────
+// ── Focus-preserving re-render for the airline route rows ───────────────────────
+// Every re-render of the rows rebuilds the DOM. To keep keyboard flow intact, this
+// wrapper remembers the focused field (by its data-tabseq), any text typed into it
+// and the caret, and restores them afterwards. Re-renders requested while a field is
+// being left (blur) are deferred one tick, so the field the user moved to is the one
+// that gets restored (works for Tab, Shift+Tab and mouse clicks).
+let _alInBlur = false, _alRenderPending = false, _alRendering = false;
+// capture-phase 'blur' runs BEFORE the field's own onblur handler (focusout would be too late)
+document.addEventListener('blur', e=>{
+  if (_alRendering) return;   // blur caused by our own DOM rebuild — ignore
+  const t = e.target;
+  if (t && t.closest && t.closest('#aigen-al-legs-container')) {
+    _alInBlur = true; setTimeout(()=>{ _alInBlur = false; }, 0);
+  }
+}, true);
+document.addEventListener('input', e=>{
+  const t=e.target; if (t && t.dataset && t.dataset.tabseq) t._dirty = true;
+}, true);
 function renderAiGenAlLegs() {
+  if (_alRendering) return;   // nested call from a handler fired during our own rebuild
+  if (_alInBlur) {
+    if (!_alRenderPending) { _alRenderPending = true; setTimeout(()=>{ _alRenderPending = false; renderAiGenAlLegs(); }, 0); }
+    return;
+  }
+  const cont = document.getElementById('aigen-al-legs-container');
+  const body = document.getElementById('aigen-al-body');
+  const scrollTop = body ? body.scrollTop : 0;
+  const ae = document.activeElement;
+  let keep = null;
+  if (cont && ae && cont.contains(ae) && ae.dataset && ae.dataset.tabseq) {
+    keep = { seq: ae.dataset.tabseq, dirty: !!ae._dirty, value: ae.value,
+             s: ae.selectionStart, e: ae.selectionEnd };
+  }
+  const explicitTarget = aiGenAlFocusAfter;   // set e.g. after picking an airport
+  // the focused field is about to be destroyed: detach its blur handler so removing it
+  // doesn't commit/re-render (its typed text is carried over to the new field instead)
+  if (keep && ae) ae.onblur = null;
+  _alRendering = true;
+  try { _renderAiGenAlLegsNow(); } finally { _alRendering = false; }
+  if (body) body.scrollTop = scrollTop;
+  if (explicitTarget || !keep || !cont) return;
+  const el = cont.querySelector('[data-tabseq="'+keep.seq+'"]');
+  if (!el) return;
+  try { el.focus({ preventScroll:true }); } catch(_) { el.focus(); }
+  if (keep.dirty && typeof el.value === 'string' && typeof keep.value === 'string') {
+    el.value = keep.value; el._dirty = true;
+    setTimeout(()=>{ try { el.setSelectionRange(keep.s, keep.e); } catch(_){} }, 0);
+  }
+}
+
+function _renderAiGenAlLegsNow() {
   const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
   container.innerHTML = '';
 
@@ -6280,7 +6330,7 @@ function renderAiGenAlLegs() {
         const overridden = !!(leg[field] && leg['_custom_'+field]);
         I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid '+(overridden?'rgba(255,255,255,.35)':'rgba(63,185,80,.4)')+';background:'+(overridden?'var(--bg)':'rgba(63,185,80,.07)')+';color:'+(overridden?'#fff':'#3fb950')+';font-weight:'+(overridden?400:700)+';text-align:center;outline:none;';
         I.oninput=()=>{ leg[field]=I.value; leg['_custom_'+field]=true; };
-        I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; leg['_custom_'+field]=true; renderAiGenAlLegs(); };
+        I.onblur=()=>{ if (I.value===shown) return; I.value=formatTimeStr(I.value)||I.value; leg[field]=I.value; leg['_custom_'+field]=true; renderAiGenAlLegs(); };
       } else if (computed !== undefined) {
         // read-only computed value (e.g. arrival time)
         I.value = computed || '';
@@ -6372,6 +6422,7 @@ function renderAiGenAlLegs() {
 
       const commit=()=>{
         const raw = I.value.trim();
+        if (raw === String(shown).trim()) return;   // unchanged → keep auto/manual state as is
         if (raw===''){ // cleared → back to auto
           leg[cfg.fixed]=''; leg[cfg.dayOff]=0; renderAiGenAlLegs(); return;
         }
@@ -6657,8 +6708,11 @@ function renderAiGenAlLegs() {
   // airport selections that trigger a full re-render).
   if (aiGenAlFocusAfter) {
     const seq = aiGenAlFocusAfter; aiGenAlFocusAfter = null;
-    const target = container.querySelector('[data-tabseq="'+seq+'"]');
-    if (target) setTimeout(()=>{ try{ target.focus(); if(target.select) target.select(); }catch(_){} }, 0);
+    // look the field up when focusing (a second re-render may have happened meanwhile)
+    setTimeout(()=>{
+      const target = document.querySelector('#aigen-al-legs-container [data-tabseq="'+seq+'"]');
+      if (target) { try{ target.focus(); if(target.select) target.select(); }catch(_){} }
+    }, 0);
   }
 }
 
@@ -7324,10 +7378,18 @@ function formatTimeStr(t) {
 // ── Generate TTools flightplans ───────────────────────────────────────────────
 let rotBars = [];        // built time bars
 let rotResearch = null;  // cached research so we don't re-call API
-let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...6:[]}}] day 0=Sun..6=Sat
+let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...13:[]}}] day 0=Sun wk1 .. 13=Sat wk2
 let rotSplitLegs = new Set(); // legIdx values whose outbound/return are split into independent bars
-let rotDailyLegs = new Set(); // legIdx values marked "Daily" — dropping replicates to all 7 days
+let rotDailyLegs = new Set(); // legIdx values marked "Daily" — dropping replicates to the 7 days of week 1
 const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+// The rotation planner timeline spans TWO weeks (day 0..13, minute 0..20159).
+// Export: an aircraft whose plan repeats identically every week (or uses only week 1)
+// is written with cycle "Week"; otherwise with cycle "2Weeks" (week-2 times as 1/D/HH:MM).
+const ROT_WEEKS = 2;
+const ROT_NDAYS = 7*ROT_WEEKS;          // 14
+const ROT_SPAN  = 1440*ROT_NDAYS;       // 20160 minutes
+function rotEmptyAssignments(){ const a={}; for(let d=0; d<ROT_NDAYS; d++) a[d]=[]; return a; }
+function rotDayList(ac, day){ if(!ac.assignments[day]) ac.assignments[day]=[]; return ac.assignments[day]; }
 
 // Robustly pull a JSON object out of an LLM response (handles fences, prose, mild truncation)
 function extractRotJSON(txt) {
@@ -7754,7 +7816,7 @@ function buildRotationBars(validLegs, research) {
     rotAircraft.push({
       key:c.key, airline:c.airline, eqp:c.eqp, reg:regs[0],
       regPool: regs.slice(), regIdx:0,
-      assignments:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]}
+      assignments:rotEmptyAssignments()
     });
   });
 
@@ -7767,7 +7829,7 @@ function buildRotationBars(validLegs, research) {
 function legDepartureDays(legIdx, which) {
   which = which || 'out';
   const counts=new Map();
-  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);
+  const dayOf = absMin => Math.floor((((absMin%ROT_SPAN)+ROT_SPAN)%ROT_SPAN)/1440);
   rotAircraft.forEach(ac=>{
     Object.keys(ac.assignments).forEach(di=>{
       ac.assignments[di].forEach(asg=>{
@@ -7914,21 +7976,22 @@ function renderRotationBars() {
     const depCounts = legDepartureDays(parseInt(legIdx), which);
     const counter = document.createElement('div');
     let coveredDays=0, hasDouble=false;
-    for(let d=0; d<7; d++){ const c=depCounts.get(d)||0; if(c>=1)coveredDays++; if(c>=2)hasDouble=true; }
-    const allCovered = coveredDays>=7;
+    for(let d=0; d<ROT_NDAYS; d++){ const c=depCounts.get(d)||0; if(c>=1 && d<7)coveredDays++; if(c>=2)hasDouble=true; }
+    const allCovered = coveredDays>=7;   // full week 1 = complete weekly plan
     const borderCol = hasDouble ? '#f85149' : (allCovered ? '#3fb950' : 'var(--bdr2)');
     const bgCol = hasDouble ? 'rgba(248,81,73,.08)' : (allCovered ? 'rgba(63,185,80,.1)' : 'transparent');
     counter.style.cssText='display:flex;align-items:center;gap:1px;padding:3px 5px;border:1.5px solid '+borderCol+';border-radius:6px;background:'+bgCol+';flex-shrink:0;';
-    for(let d=0; d<7; d++){
+    for(let d=0; d<ROT_NDAYS; d++){
+      if (d>0 && d%7===0) { const sep=document.createElement('div'); sep.style.cssText='width:1px;align-self:stretch;background:var(--bdr2);margin:0 3px;'; counter.appendChild(sep); }
       const c=depCounts.get(d)||0;
       const cellEl=document.createElement('div');
       let glyph, col;
-      if(c===0){ glyph=DOW[d]; col='var(--txt3)'; }
+      if(c===0){ glyph=DOW[d%7]; col='var(--txt3)'; }
       else if(c===1){ glyph='✓'; col='#3fb950'; }
       else { glyph='⚡'; col='#f85149'; }
       cellEl.style.cssText='width:13px;text-align:center;font-size:11px;font-weight:700;font-family:monospace;line-height:1;color:'+col+';';
       cellEl.textContent=glyph;
-      cellEl.title = dayName[d] + (c===0?' — no departure yet' : c===1?' — departure assigned' : ' — ⚡ '+c+' departures (double-booked!)');
+      cellEl.title = dayName[d%7] + ' (week '+(Math.floor(d/7)+1)+')' + (c===0?' — no departure yet' : c===1?' — departure assigned' : ' — ⚡ '+c+' departures (double-booked!)');
       counter.appendChild(cellEl);
     }
     return counter;
@@ -7973,12 +8036,12 @@ function renderRotationBars() {
     ctrlBtn.style.cssText+=';font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--bdr2);background:transparent;color:var(--txt3);cursor:pointer;white-space:nowrap;';
     trackCol.appendChild(ctrlBtn);
 
-    // "Daily" toggle — when on, dropping this leg replicates it across all 7 days
+    // "Daily" toggle — when on, dropping this leg replicates it across the 7 days of week 1
     if(!isSplit || which==='out'){
       const isDaily = rotDailyLegs.has(parseInt(legIdx));
       const dailyBtn=document.createElement('button');
       dailyBtn.textContent = (isDaily?'✓ ':'')+'Daily';
-      dailyBtn.title='When on, dragging this rotation onto an aircraft fills all 7 days at once';
+      dailyBtn.title='When on, dragging this rotation onto an aircraft fills all 7 days of the week at once';
       dailyBtn.style.cssText='font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid '+(isDaily?'var(--acc)':'var(--bdr2)')+';background:'+(isDaily?'var(--acc)':'transparent')+';color:'+(isDaily?'#fff':'var(--txt3)')+';cursor:pointer;white-space:nowrap;';
       dailyBtn.onclick=()=>{
         const li=parseInt(legIdx);
@@ -8025,7 +8088,7 @@ function renderRotationLanes() {
 
   const ACW = 150;          // aircraft id column width
   const DAYW = 260;         // width of one day on the timeline (px) — wide, scrollable
-  const TRACK_W = DAYW*7;   // full week width
+  const TRACK_W = DAYW*ROT_NDAYS;   // full timeline width (two weeks)
   const pxPerMin = DAYW/1440;
   const ROW_H = 58;
 
@@ -8038,13 +8101,19 @@ function renderRotationLanes() {
   const corner=document.createElement('div'); corner.style.cssText='width:'+ACW+'px;flex-shrink:0;';
   head.appendChild(corner);
   const headTrack=document.createElement('div');
-  headTrack.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:22px;';
-  ROT_DAYS.forEach((d,i)=>{
+  headTrack.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:36px;';
+  for (let wk=0; wk<ROT_WEEKS; wk++){
+    const wl=document.createElement('div');
+    wl.style.cssText='position:absolute;top:0;left:'+(wk*7*DAYW)+'px;width:'+(7*DAYW)+'px;text-align:center;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--acc);border-left:'+(wk?'2px solid var(--acc)':'1px solid var(--bdr2)')+';';
+    wl.textContent='WEEK '+(wk+1);
+    headTrack.appendChild(wl);
+  }
+  for (let i=0; i<ROT_NDAYS; i++){
     const lbl=document.createElement('div');
-    lbl.style.cssText='position:absolute;left:'+(i*DAYW)+'px;width:'+DAYW+'px;text-align:center;font-size:11px;font-weight:700;color:var(--txt2);border-left:1px solid var(--bdr2);';
-    lbl.textContent=d;
+    lbl.style.cssText='position:absolute;top:16px;left:'+(i*DAYW)+'px;width:'+DAYW+'px;text-align:center;font-size:11px;font-weight:700;color:var(--txt2);border-left:'+(i===7?'2px solid var(--acc)':'1px solid var(--bdr2)')+';';
+    lbl.textContent=ROT_DAYS[i%7];
     headTrack.appendChild(lbl);
-  });
+  }
   head.appendChild(headTrack);
   grid.appendChild(head);
 
@@ -8067,24 +8136,32 @@ function renderRotationLanes() {
     const idInfo=document.createElement('div');
     idInfo.style.cssText='display:flex;align-items:center;gap:5px;overflow:hidden;';
     idInfo.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
-      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div></div>';
+      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div>'
+      +(function(){ const c=rotAircraftCycle(ac); return c ? '<div style="font-size:9px;color:'+(c==='2Weeks'?'#e0b341':'var(--txt3)')+';" title="Cycle written to the TTools flight plan">'+(c==='2Weeks'?'2-weekly':'weekly')+'</div>' : ''; })()
+      +'</div>';
     idc.appendChild(idInfo);
     row.appendChild(idc);
 
     // timeline track
     const track=document.createElement('div');
-    track.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:'+ROW_H+'px;background:repeating-linear-gradient(90deg,transparent,transparent '+(DAYW-1)+'px,var(--bdr2) '+(DAYW-1)+'px,var(--bdr2) '+DAYW+'px);';
+    const trackBg='repeating-linear-gradient(90deg,transparent,transparent '+(DAYW-1)+'px,var(--bdr2) '+(DAYW-1)+'px,var(--bdr2) '+DAYW+'px)';
+    track.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:'+ROW_H+'px;background:'+trackBg+';';
     track.dataset.ac=acIdx;
+    for (let wk=1; wk<ROT_WEEKS; wk++){
+      const wsep=document.createElement('div');
+      wsep.style.cssText='position:absolute;top:0;bottom:0;left:'+(wk*7*DAYW-1)+'px;width:2px;background:var(--acc);opacity:.55;pointer-events:none;';
+      track.appendChild(wsep);
+    }
 
     // drop handler — new bar from top OR move of existing assignment
-    track.addEventListener('dragover', e=>{ e.preventDefault(); track.style.background='rgba(88,166,255,.06)'; });
-    track.addEventListener('dragleave', e=>{ track.style.background=''; });
+    track.addEventListener('dragover', e=>{ e.preventDefault(); track.style.background='linear-gradient(rgba(88,166,255,.06),rgba(88,166,255,.06)),'+trackBg; });
+    track.addEventListener('dragleave', e=>{ track.style.background=trackBg; });
     track.addEventListener('drop', e=>{
-      e.preventDefault(); track.style.background='';
+      e.preventDefault(); track.style.background=trackBg;
       const data=e.dataTransfer.getData('text/plain');
       const rect=track.getBoundingClientRect();
       const x=e.clientX-rect.left + track.scrollLeft;
-      const dropMinAbs = Math.max(0, Math.min(10079, Math.round(x/pxPerMin)));
+      const dropMinAbs = Math.max(0, Math.min(ROT_SPAN-1, Math.round(x/pxPerMin)));
       if(data.startsWith('move|')){
         const [,fromAcIdx,uid]=data.split('|');
         moveAssignment(parseInt(fromAcIdx), uid, acIdx, dropMinAbs);
@@ -8118,7 +8195,7 @@ function renderRotationLanes() {
             const wPx=Math.max(6, pieceWidthMin*pxPerMin);
             const radius=(isHead?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isHead?'4px':'0');
             el.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:'+radius+';background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);'+(isHead?'':'border-left:none;')+(isTail?'':'border-right:none;')+'overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
-            el.title='Drag to move · right-click to remove'+(!isHead?' (continues from week start)':'');
+            el.title='Drag to move · right-click to remove'+(!isHead?' (continues from the start of week 1)':'');
             el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
             el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
             el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
@@ -8127,13 +8204,13 @@ function renderRotationLanes() {
           };
 
           const endAbs = startAbs + durMin;
-          if(endAbs <= 10080){
+          if(endAbs <= ROT_SPAN){
             // fits within the week — single piece
             makePiece(startAbs, durMin, true, true);
           } else {
-            // overflow: head from startAbs..10080, tail wraps to 0..(endAbs-10080)
-            const headW = 10080 - startAbs;
-            const tailW = endAbs - 10080;
+            // overflow: head from startAbs..ROT_SPAN, tail wraps to 0..(endAbs-ROT_SPAN)
+            const headW = ROT_SPAN - startAbs;
+            const tailW = endAbs - ROT_SPAN;
             makePiece(startAbs, headW, true, false);   // main part at week end
             makePiece(0, tailW, false, true);          // wrapped remainder at week start
           }
@@ -8216,7 +8293,7 @@ function computePairSegs(legIdx, dropDay) {
       absDep = cand;
     }
     const absArr = absDep + s.block;
-    segs.push({ ...s, absDep: absDep%10080, absArr: absArr%10080 });
+    segs.push({ ...s, absDep: ((absDep%ROT_SPAN)+ROT_SPAN)%ROT_SPAN, absArr: ((absArr%ROT_SPAN)+ROT_SPAN)%ROT_SPAN });
     prevAbsArr = absArr; prevGround = s.ground;
   });
   return { pair: bars, segs };
@@ -8230,7 +8307,7 @@ function computeSingleSeg(legIdx, dropDay, kind) {
   const seg = barToUTCSeg(bar);
   const absDep = dropDay*1440 + seg.depUTC;
   const absArr = absDep + seg.block;
-  return { bar, seg: {...seg, absDep:absDep%10080, absArr:absArr%10080} };
+  return { bar, seg: {...seg, absDep:((absDep%ROT_SPAN)+ROT_SPAN)%ROT_SPAN, absArr:((absArr%ROT_SPAN)+ROT_SPAN)%ROT_SPAN} };
 }
 
 // Edit a segment's LOCAL departure time in the weekly plan.
@@ -8259,8 +8336,8 @@ function applySegDepEdit(acIdx, uid, segIdx, newLocalStr) {
   seg.depUTC = newDepUTC;
   seg.arrUTC = ((newDepUTC + seg.block)%1440+1440)%1440;
   seg.utcDayCross = Math.floor((newDepUTC + seg.block)/1440);
-  seg.absDep = ((absDep%10080)+10080)%10080;
-  seg.absArr = ((absDep + seg.block)%10080+10080)%10080;
+  seg.absDep = ((absDep%ROT_SPAN)+ROT_SPAN)%ROT_SPAN;
+  seg.absArr = ((absDep + seg.block)%ROT_SPAN+ROT_SPAN)%ROT_SPAN;
 
   // re-chain following segments: each departs at previous arrival + ground (point 4)
   let prevAbsArr = absDep + seg.block, prevGround = seg.ground;
@@ -8269,8 +8346,8 @@ function applySegDepEdit(acIdx, uid, segIdx, newLocalStr) {
     const earliest = prevAbsArr + prevGround - 4;
     let cand = Math.floor(prevAbsArr/1440)*1440 + s.depUTC;
     while(cand < earliest) cand += 1440;
-    s.absDep = ((cand%10080)+10080)%10080;
-    s.absArr = ((cand + s.block)%10080+10080)%10080;
+    s.absDep = ((cand%ROT_SPAN)+ROT_SPAN)%ROT_SPAN;
+    s.absArr = ((cand + s.block)%ROT_SPAN+ROT_SPAN)%ROT_SPAN;
     prevAbsArr = cand + s.block; prevGround = s.ground;
   }
 
@@ -8292,21 +8369,21 @@ function dropPairOnAircraft(legIdx, acIdx, dropMinAbs, kind) {
     alert('This aircraft type ('+ac.eqp+') does not match the flight ('+refBar.eqp+').');
     return;
   }
-  const dropDay = Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
+  const dropDay = Math.max(0,Math.min(ROT_NDAYS-1,Math.floor(dropMinAbs/1440)));
   const daily = rotDailyLegs.has(legIdx);
-  // Which days to place on: just the drop day, or all 7 when "Daily" is on.
-  const days = daily ? [0,1,2,3,4,5,6] : [dropDay];
+  // Which days to place on: just the drop day, or the 7 days of week 1 when "Daily" is on.
+  const days = daily ? [0,1,2,3,4,5,6] : [dropDay];   // Daily = one week (week 1); week 2 only by manual placement
 
   days.forEach(day=>{
     const uid = 'asg-'+Date.now()+'-'+Math.random().toString(36).slice(2,6)+'-'+day;
     if(kind==='pair'){
       const res = computePairSegs(legIdx, day);
       if(!res) return;
-      ac.assignments[day].push({ uid, legIdx, dropDay:day, kind:'pair', segs: res.segs });
+      rotDayList(ac,day).push({ uid, legIdx, dropDay:day, kind:'pair', segs: res.segs });
     } else {
       const res = computeSingleSeg(legIdx, day, kind);
       if(!res) return;
-      ac.assignments[day].push({ uid, legIdx, dropDay:day, kind, segs:[res.seg] });
+      rotDayList(ac,day).push({ uid, legIdx, dropDay:day, kind, segs:[res.seg] });
     }
   });
   renderRotationBars();
@@ -8330,14 +8407,14 @@ function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
   }
   const oldArr=fromAc.assignments[fromDay];
   oldArr.splice(oldArr.findIndex(a=>a.uid===uid),1);
-  const dropDay=Math.max(0,Math.min(6,Math.floor(dropMinAbs/1440)));
+  const dropDay=Math.max(0,Math.min(ROT_NDAYS-1,Math.floor(dropMinAbs/1440)));
   let segs;
   if(asg.kind==='out' || asg.kind==='ret'){
     const res=computeSingleSeg(asg.legIdx, dropDay, asg.kind); segs=[res.seg];
   } else {
     const res=computePairSegs(asg.legIdx, dropDay); segs=res.segs;
   }
-  toAc.assignments[dropDay].push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, kind:asg.kind||'pair', segs });
+  rotDayList(toAc,dropDay).push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, kind:asg.kind||'pair', segs });
   renderRotationBars();
   renderRotationLanes();
 }
@@ -8458,7 +8535,7 @@ function addAircraftOfType(key) {
   rotAircraft.splice(insertAt,0,{
     key, airline:proto.airline, eqp:proto.eqp, reg,
     regPool:proto.regPool, regIdx:used,
-    assignments:{0:[],1:[],2:[],3:[],4:[],5:[],6:[]}
+    assignments:rotEmptyAssignments()
   });
   renderRotationLanes();
 }
@@ -8496,10 +8573,55 @@ function showBarPopup(bar) {
 
 // Build TTools data from current rotations. acNumStart = first AC# to assign (default 1).
 // Returns {types, aircraftLines:[...], fpLines:[...]} or null if nothing assigned.
+// ── 2-week timeline helpers for export ──────────────────────────────────────────
+function rotNorm(m){ return ((m%ROT_SPAN)+ROT_SPAN)%ROT_SPAN; }
+function rotWeekOf(m){ return Math.floor(rotNorm(m)/10080); }           // 0 = week 1, 1 = week 2
+function rotCollectSegs(ac){
+  const segs=[];
+  Object.keys(ac.assignments).forEach(di=>{ (ac.assignments[di]||[]).forEach(asg=>{ asg.segs.forEach(s=>segs.push(s)); }); });
+  return segs;
+}
+// All assignments of an aircraft with the day they were dropped on (0..13).
+function rotAsgList(ac){
+  const L=[];
+  Object.keys(ac.assignments).forEach(di=>{ (ac.assignments[di]||[]).forEach(a=>{
+    L.push({ a, day: (a.dropDay!=null ? a.dropDay : parseInt(di)) });
+  }); });
+  return L;
+}
+// Cycle to write for an aircraft. What counts is the day a rotation was PLACED on, not
+// when its flights land: rotations started in week 1 (incl. "Daily") form a weekly plan,
+// even if their last leg spills past Saturday. Only rotations the user placed into week 2
+// make it a 2-week cycle — unless week 2 is an exact repeat of week 1.
+function rotAircraftCycle(ac){
+  const L=rotAsgList(ac).filter(x=>x.a.segs && x.a.segs.length);
+  if(!L.length) return null;
+  const w1=L.filter(x=>x.day<7), w2=L.filter(x=>x.day>=7);
+  if(!w2.length) return 'Week';
+  const key=x=>[x.a.legIdx, x.a.kind, x.day%7,
+    x.a.segs.map(s=>[rotNorm(s.absDep)%10080, s.block, s.depIcao, s.arrIcao, String(s.fnum||'')].join('/')).join('+')].join('|');
+  if(w1.map(key).sort().join(';') === w2.map(key).sort().join(';')) return 'Week';
+  return '2Weeks';
+}
+// Segments to export: for a weekly plan only the week-1 rotations (week 2 is empty or a
+// repeat); for a 2-week plan everything.
+function rotExportSegs(ac, cycle){
+  let L=rotAsgList(ac);
+  if (cycle==='Week' && L.some(x=>x.day>=7)) L=L.filter(x=>x.day<7);
+  const segs=[]; L.forEach(x=>x.a.segs.forEach(s=>segs.push(s)));
+  return segs;
+}
+// TTools time stamp: weekly → "D/HH:MM" (D 0..6); 2-weekly → week 1 "D/HH:MM", week 2 "1/D/HH:MM"
+function rotTToolsStamp(absMin, cycle){
+  const hhmm = m => String(Math.floor((m%1440)/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');
+  if (cycle==='Week'){ const m=((absMin%10080)+10080)%10080; return Math.floor(m/1440)+'/'+hhmm(m); }
+  const m=rotNorm(absMin), d=Math.floor(m/1440);
+  return (d>=7 ? '1/'+(d-7) : String(d))+'/'+hhmm(m);
+}
+
 function buildTToolsData(acNumStart) {
   acNumStart = acNumStart || 1;
   const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
-  const dayOf = absMin => Math.floor((((absMin%10080)+10080)%10080)/1440);
 
   const types=[];
   rotAircraft.forEach(ac=>{ if(!types.find(t=>t.key===ac.key)) types.push({key:ac.key, airline:ac.airline, eqp:ac.eqp}); });
@@ -8516,17 +8638,18 @@ function buildTToolsData(acNumStart) {
 
   const fpLines=[];
   rotAircraft.forEach(ac=>{
-    const segs=[];
-    Object.keys(ac.assignments).forEach(di=>{ ac.assignments[di].forEach(asg=>{ asg.segs.forEach(s=> segs.push(s)); }); });
-    if(!segs.length) return;
-    segs.sort((a,b)=> a.absDep - b.absDep);
+    const cycle = rotAircraftCycle(ac);
+    if(!cycle) return;
+    const segs = rotExportSegs(ac, cycle);
+    const sortKey = m => cycle==='Week' ? (((m%10080)+10080)%10080) : rotNorm(m);
+    segs.sort((a,b)=> sortKey(a.absDep) - sortKey(b.absDep));
     const acNum = acNumOf[ac.key];
     const segStr = segs.map(s=>{
-      const dDay=dayOf(s.absDep), aDay=dayOf(s.absArr);
       const alt = 320 + Math.floor(Math.random()*9)*10;
-      return `${dDay}/${fmtU(s.absDep)},${aDay}/${fmtU(s.absArr)},${alt},F,${String(s.fnum||'').replace(/\D/g,'')||'1000'},${s.arrIcao}`;
+      const dep = rotTToolsStamp(s.absDep, cycle), arr = rotTToolsStamp(s.absDep + s.block, cycle);
+      return `${dep},${arr},${alt},F,${String(s.fnum||'').replace(/\D/g,'')||'1000'},${s.arrIcao}`;
     }).join(',');
-    fpLines.push(`AC#${acNum},${ac.reg},1%,Week,IFR,${segStr}`);
+    fpLines.push(`AC#${acNum},${ac.reg},1%,${cycle},IFR,${segStr}`);
   });
 
   if(!fpLines.length) return null;
@@ -9235,32 +9358,33 @@ function buildSceneryRow(row, ri) {
 })();
 
 // ── Custom Tab order across the Airline route-row fields ────────────────────────
-// Fields carry data-tabseq="<rowIndex>.<pos>"; Tab moves to the next position, and
-// after the last field (Split, pos 13) jumps to EQP (pos 0) of the next row.
+// Fields carry data-tabseq="<rowIndex>.<pos>". Tab moves forward, Shift+Tab backward.
+// After the last field of a row (pos 13) Tab continues at pos 0 of the next row;
+// Shift+Tab at pos 0 goes to the last field of the previous row. Before the first
+// field of the first row, Shift+Tab falls back to normal browser behaviour.
 (function(){
   const MAXPOS = 13;
   document.addEventListener('keydown', e=>{
-    if (e.key!=='Tab' || e.shiftKey) return;
+    if (e.key!=='Tab') return;
     const el = e.target;
     if (!el || !el.dataset || !el.dataset.tabseq) return;
     const cont = el.closest && el.closest('#aigen-al-legs-container');
     if (!cont) return;
+    const back = e.shiftKey;
     const [rowS, posS] = el.dataset.tabseq.split('.');
     let row = parseInt(rowS), pos = parseInt(posS);
-    e.preventDefault();
+    const nRows = (typeof aiGenAlLegs!=='undefined') ? aiGenAlLegs.length : 50;
     for (let steps=0; steps<40; steps++){
-      pos++;
-      if (pos>MAXPOS){ pos=0; row++; }
+      if (back) { pos--; if (pos<0){ pos=MAXPOS; row--; } }
+      else      { pos++; if (pos>MAXPOS){ pos=0; row++; } }
+      if (row<0 || row>=nRows) return;            // let the browser handle it
       const next = cont.querySelector('[data-tabseq="'+row+'.'+pos+'"]');
       if (next){
-        // remember the target so that if leaving the current field triggers a
-        // re-render (e.g. DEP time estimating a block), focus is restored to it.
-        if (typeof aiGenAlFocusAfter!=='undefined') aiGenAlFocusAfter = row+'.'+pos;
+        e.preventDefault();
         next.focus();
         if (next.select) { try{ next.select(); }catch(_){} }
         return;
       }
-      if (typeof aiGenAlLegs!=='undefined' && row > aiGenAlLegs.length) return;
     }
   });
 })();
