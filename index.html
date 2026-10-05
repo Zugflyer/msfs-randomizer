@@ -976,14 +976,19 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
 
-          <!-- Schedule mode switch: Known schedule (left) / Random schedule (right) -->
-          <div id="aigen-al-schedmode" style="display:flex;align-items:center;gap:9px;user-select:none;">
-            <span id="aigen-al-sm-known" onclick="setAiGenAlSchedMode('known')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Known schedule</span>
-            <div onclick="setAiGenAlSchedMode(aiGenAlSchedMode==='known'?'random':'known')" title="Switch between known schedule and random schedule"
-              style="width:46px;height:24px;border-radius:12px;background:var(--acc);position:relative;cursor:pointer;flex-shrink:0;">
-              <div id="aigen-al-sm-knob" style="position:absolute;top:3px;left:25px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s;"></div>
+          <!-- Switches: Known/Random schedule, and 1-/2-week cycle for the rotation planner -->
+          <div id="aigen-al-schedmode" style="display:grid;grid-template-columns:auto auto auto;align-items:center;column-gap:9px;row-gap:8px;user-select:none;">
+            <span id="aigen-al-sm-known" onclick="setAiGenAlSchedMode('known')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:right;">Known schedule</span>
+            <div onclick="setAiGenAlSchedMode(aiGenAlSchedMode==='known'?'random':'known')" title="Switch between known schedule and random schedule" style="width:40px;height:20px;border-radius:10px;background:var(--acc);position:relative;cursor:pointer;">
+              <div id="aigen-al-sm-knob" style="position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;left:23px;"></div>
             </div>
             <span id="aigen-al-sm-random" onclick="setAiGenAlSchedMode('random')" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">Random schedule</span>
+
+            <span id="aigen-al-cy-1" onclick="setRotCycleWeeks(1)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:right;">1 week cycle</span>
+            <div onclick="setRotCycleWeeks(ROT_WEEKS===1?2:1)" title="Rotation planner timeline: one week, or two weeks (2Weeks flight plans)" style="width:40px;height:20px;border-radius:10px;background:var(--acc);position:relative;cursor:pointer;">
+              <div id="aigen-al-cy-knob" style="position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;left:3px;"></div>
+            </div>
+            <span id="aigen-al-cy-2" onclick="setRotCycleWeeks(2)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">2 week cycle</span>
           </div>
 
           <!-- Import a known schedule from Excel (known schedule mode only) -->
@@ -6026,7 +6031,8 @@ function setAiGenAlSchedMode(m) {
 }
 function applyAiGenAlSchedModeUI() {
   const known = aiGenAlSchedMode==='known';
-  const knob=document.getElementById('aigen-al-sm-knob'); if (knob) knob.style.left = known ? '3px' : '25px';
+  const knob=document.getElementById('aigen-al-sm-knob'); if (knob) knob.style.left = known ? '3px' : '23px';
+  try { applyRotCycleUI(); } catch(e) {}
   const lk=document.getElementById('aigen-al-sm-known'), lr=document.getElementById('aigen-al-sm-random');
   if (lk) lk.style.color = known ? '#fff' : 'var(--txt3)';
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
@@ -7661,12 +7667,50 @@ let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...13:[
 let rotSplitLegs = new Set(); // legIdx values whose outbound/return are split into independent bars
 let rotDailyLegs = new Set(); // legIdx values marked "Daily" — dropping replicates to the 7 days of week 1
 const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-// The rotation planner timeline spans TWO weeks (day 0..13, minute 0..20159).
-// Export: an aircraft whose plan repeats identically every week (or uses only week 1)
-// is written with cycle "Week"; otherwise with cycle "2Weeks" (week-2 times as 1/D/HH:MM).
-const ROT_WEEKS = 2;
-const ROT_NDAYS = 7*ROT_WEEKS;          // 14
-const ROT_SPAN  = 1440*ROT_NDAYS;       // 20160 minutes
+// Rotation planner cycle, chosen with the "1 week cycle / 2 week cycle" switch:
+//  1 week : timeline day 0..6; a rotation crossing Saturday→Sunday continues at the start
+//           of the SAME week; export always "Week".
+//  2 weeks: timeline day 0..13; export "Week" if week 2 is empty or a repeat of week 1,
+//           otherwise "2Weeks" (week-2 times written as 1/D/HH:MM).
+let ROT_WEEKS = (function(){ try { return localStorage.getItem('rot_cycle_weeks')==='2' ? 2 : 1; } catch(e) { return 1; } })();
+let ROT_NDAYS = 7*ROT_WEEKS;
+let ROT_SPAN  = 1440*ROT_NDAYS;
+function applyRotCycleUI() {
+  const two = ROT_WEEKS===2;
+  const k=document.getElementById('aigen-al-cy-knob'); if (k) k.style.left = two ? '23px' : '3px';
+  const a=document.getElementById('aigen-al-cy-1'), b=document.getElementById('aigen-al-cy-2');
+  if (a) a.style.color = two ? 'var(--txt3)' : '#fff';
+  if (b) b.style.color = two ? '#fff' : 'var(--txt3)';
+}
+function setRotCycleWeeks(n) {
+  n = (n===2) ? 2 : 1;
+  if (n===ROT_WEEKS) { applyRotCycleUI(); return; }
+  if (n===1) {
+    let inW2=0;
+    rotAircraft.forEach(ac=>Object.keys(ac.assignments).forEach(d=>{ if (+d>=7) inW2+=(ac.assignments[d]||[]).length; }));
+    if (inW2 && !confirm(inW2+' rotation(s) are placed in week 2. With a 1-week cycle they move to the same weekday of week 1. Continue?')) { applyRotCycleUI(); return; }
+  }
+  const oldSpan = ROT_SPAN;
+  ROT_WEEKS=n; ROT_NDAYS=7*n; ROT_SPAN=1440*ROT_NDAYS;
+  try { localStorage.setItem('rot_cycle_weeks', String(n)); } catch(e) {}
+  // re-place existing assignments on the new timeline (keeps manually edited times)
+  rotAircraft.forEach(ac=>{
+    const all=[]; Object.keys(ac.assignments).forEach(d=>(ac.assignments[d]||[]).forEach(x=>all.push(x)));
+    ac.assignments = rotEmptyAssignments();
+    all.forEach(x=>{
+      let prev=null;
+      x.segs.forEach(sg=>{
+        let t=sg.absDep; if (prev!=null) { while (t<prev) t+=oldSpan; } prev=t;     // unwrap the old timeline
+        sg.absDep=((t%ROT_SPAN)+ROT_SPAN)%ROT_SPAN;
+        sg.absArr=(((t+sg.block)%ROT_SPAN)+ROT_SPAN)%ROT_SPAN;
+      });
+      x.dropDay = (((x.dropDay!=null ? x.dropDay : 0)%ROT_NDAYS)+ROT_NDAYS)%ROT_NDAYS;
+      rotDayList(ac, x.dropDay).push(x);
+    });
+  });
+  applyRotCycleUI();
+  if (rotAircraft.length || rotBars.length) { try { renderRotationBars(); renderRotationLanes(); } catch(e) {} }
+}
 const KNOWN_MIN_TURN = 20;   // min. minutes between two typed (known-schedule) segments when placing them on days
 function rotEmptyAssignments(){ const a={}; for(let d=0; d<ROT_NDAYS; d++) a[d]=[]; return a; }
 function rotDayList(ac, day){ if(!ac.assignments[day]) ac.assignments[day]=[]; return ac.assignments[day]; }
@@ -8427,8 +8471,9 @@ function renderRotationLanes() {
   const corner=document.createElement('div'); corner.style.cssText='width:'+ACW+'px;flex-shrink:0;';
   head.appendChild(corner);
   const headTrack=document.createElement('div');
-  headTrack.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:36px;';
-  for (let wk=0; wk<ROT_WEEKS; wk++){
+  const twoWk = ROT_WEEKS>1;
+  headTrack.style.cssText='position:relative;width:'+TRACK_W+'px;flex-shrink:0;height:'+(twoWk?36:22)+'px;';
+  for (let wk=0; twoWk && wk<ROT_WEEKS; wk++){
     const wl=document.createElement('div');
     wl.style.cssText='position:absolute;top:0;left:'+(wk*7*DAYW)+'px;width:'+(7*DAYW)+'px;text-align:center;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--acc);border-left:'+(wk?'2px solid var(--acc)':'1px solid var(--bdr2)')+';';
     wl.textContent='WEEK '+(wk+1);
@@ -8436,7 +8481,7 @@ function renderRotationLanes() {
   }
   for (let i=0; i<ROT_NDAYS; i++){
     const lbl=document.createElement('div');
-    lbl.style.cssText='position:absolute;top:16px;left:'+(i*DAYW)+'px;width:'+DAYW+'px;text-align:center;font-size:11px;font-weight:700;color:var(--txt2);border-left:'+(i===7?'2px solid var(--acc)':'1px solid var(--bdr2)')+';';
+    lbl.style.cssText='position:absolute;top:'+(twoWk?16:0)+'px;left:'+(i*DAYW)+'px;width:'+DAYW+'px;text-align:center;font-size:11px;font-weight:700;color:var(--txt2);border-left:'+(i===7?'2px solid var(--acc)':'1px solid var(--bdr2)')+';';
     lbl.textContent=ROT_DAYS[i%7];
     headTrack.appendChild(lbl);
   }
@@ -8463,7 +8508,7 @@ function renderRotationLanes() {
     idInfo.style.cssText='display:flex;align-items:center;gap:5px;overflow:hidden;';
     idInfo.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
       +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div>'
-      +(function(){ const c=rotAircraftCycle(ac); return c ? '<div style="font-size:9px;color:'+(c==='2Weeks'?'#e0b341':'var(--txt3)')+';" title="Cycle written to the TTools flight plan">'+(c==='2Weeks'?'2-weekly':'weekly')+'</div>' : ''; })()
+      +(function(){ const c=ROT_WEEKS>1 ? rotAircraftCycle(ac) : null; return c ? '<div style="font-size:9px;color:'+(c==='2Weeks'?'#e0b341':'var(--txt3)')+';" title="Cycle written to the TTools flight plan">'+(c==='2Weeks'?'2-weekly':'weekly')+'</div>' : ''; })()
       +'</div>';
     idc.appendChild(idInfo);
     row.appendChild(idc);
