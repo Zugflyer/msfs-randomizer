@@ -991,9 +991,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <span id="aigen-al-cy-2" onclick="setRotCycleWeeks(2)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">2 week cycle</span>
           </div>
 
-          <!-- Import a known schedule from Excel (known schedule mode only) -->
-          <div id="aigen-al-import" style="display:none;flex-direction:column;align-items:center;gap:3px;">
-            <label title="Import flights from an Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP)"
+          <!-- Import routes from Excel: with times → Known schedule, without times → Random schedule -->
+          <div id="aigen-al-import" style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <label title="Import flights from an Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD). DEP/ARR empty = Random schedule; FLN empty = flight numbers are generated."
               style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;">
               ⬆ Import XLS
               <input id="aigen-al-import-file" type="file" accept=".xlsx,.xls,.csv" style="display:none;"
@@ -6037,15 +6037,18 @@ function applyAiGenAlSchedModeUI() {
   if (lk) lk.style.color = known ? '#fff' : 'var(--txt3)';
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
   const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
-  const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = known ? 'flex' : 'none';
+  const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = 'flex';   // import works in both modes
   const mg=document.getElementById('aigen-al-min-ground'); if (mg && document.activeElement!==mg) mg.value = aiGenAlMinGround;
 }
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
 // time-zone difference (summer offsets) and an ARR day offset (+1, +2, -1 …).
 // dir 'out' or 'ret'. Returns "H:MM" or '' if not computable.
-// ── Known schedule: import from Excel ─────────────────────────────────────────────
+// ── Import routes from Excel ──────────────────────────────────────────────────────
 // Expected columns (header row, any order, case-insensitive):
-//   AIRLINE · FLN · FROM · DEP · ARR · NIGHTFLIGHT · TO · EQP
+//   AIRLINE · FLN · FROM · DEP · ARR · NIGHTFLIGHT · TO · EQP · GRD
+// Only FROM and TO are mandatory. DEP/ARR empty in the whole file → the rows are filled
+// for the Random schedule (block times estimated). FLN empty → flight numbers are
+// generated as usual when the rotations are created.
 // One row = one flight SEGMENT with local times. DEP/ARR may be 2235, "0010", "22:35"
 // or an Excel time; NIGHTFLIGHT is the arrival day offset (+1, -1, empty = same day).
 // FROM may be empty → taken from the previous row's TO (like the "=G2" formula).
@@ -6079,7 +6082,8 @@ function alSheetToSegments(rows) {
             dep:col(['DEP','STD']), arr:col(['ARR','STA']), off:col(['NIGHTFLIGHT','NIGHT','DAY','+1']),
             to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']),
             grd:col(['GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT']) };
-  ['fln','from','dep','arr','to'].forEach(k=>{ if(C[k]<0) out.problems.push('Column missing: '+k.toUpperCase()); });
+  // only the airports are mandatory — FLN, DEP and ARR may be missing or empty
+  ['from','to'].forEach(k=>{ if(C[k]<0) out.problems.push('Column missing: '+k.toUpperCase()); });
   if (out.problems.length) return out;
   let prevTo='';
   for (let r=hIdx+1; r<rows.length; r++) {
@@ -6090,13 +6094,17 @@ function alSheetToSegments(rows) {
     const toCode=String(get('to')||'').trim();
     prevTo=toCode;
     const from=alFindAirport(fromCode), to=alFindAirport(toCode);
-    const dep=alParseClock(get('dep')), arr=alParseClock(get('arr'));
+    const blank=v=>(v===null||v===undefined||String(v).trim()==='');
+    const depRaw=get('dep'), arrRaw=get('arr');
+    const dep=alParseClock(depRaw), arr=alParseClock(arrRaw);
     const fln=String(get('fln')||'').replace(/\D/g,'');
     const offRaw=get('off'); const off=(offRaw===null||offRaw===undefined||String(offRaw).trim()==='') ? 0 : (parseInt(String(offRaw).replace(/\s/g,''),10)||0);
     if (get('al')) out.airlines.add(String(get('al')).trim().toUpperCase());
     const line='row '+(r+1);
     if (!from || !to) { out.problems.push(line+': unknown airport '+(!from?fromCode:toCode)); continue; }
-    if (!dep || !arr) { out.problems.push(line+': invalid DEP/ARR time'); continue; }
+    // empty times are fine (schedule not known); only a value that cannot be read is reported
+    if (!dep && !blank(depRaw)) out.problems.push(line+': DEP time not readable');
+    if (!arr && !blank(arrRaw)) out.problems.push(line+': ARR time not readable');
     const grdRaw=get('grd'); const grd=(grdRaw===null||grdRaw===undefined||String(grdRaw).trim()==='') ? null : (parseInt(String(grdRaw).replace(/\D/g,''),10));
     out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r });
   }
@@ -6142,7 +6150,11 @@ async function aiGenAlImportXls(file) {
     const rows=XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
-    const pairs=alSegmentsToRows(parsed.segs, aiGenAlHub ? aiGenAlHub[0] : '');
+    const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
+    const pairs=alSegmentsToRows(parsed.segs, hubIcao);
+    // Does the file contain any times? yes → Known schedule · no → Random schedule
+    const timed=parsed.segs.some(x=>x.dep || x.arr);
+    const est=(a,b)=>{ const e=(a&&b) ? alEstimateEffectiveBlock(a,b) : null; return e!=null ? Math.floor(e/60)+':'+String(e%60).padStart(2,'0') : ''; };
     // GRD → header MIN GROUND TIME (most frequent value); rows keep their own value
     const grds=parsed.segs.map(x=>x.grd).filter(v=>v!=null);
     if (grds.length) {
@@ -6154,12 +6166,22 @@ async function aiGenAlImportXls(file) {
       const g = (p.out.grd!=null) ? p.out.grd : (p.ret && p.ret.grd!=null ? p.ret.grd : null);
       if (g!=null) L.groundOverride=String(g);
       L.eqp=p.out.eqp || (p.ret&&p.ret.eqp) || '';
-      L.dep=p.out.from; L.arr=p.out.to; L._editingDep=false;
-      L.flightNum=p.out.fln; L.depFixed=p.out.dep; L.arrFixed=p.out.arr; L.arrDayOff=p.out.off;
+      L._editingDep=false;
+      // no times: a single flight INTO the hub is the return half of the route hub → X
+      const flip = !timed && !p.ret && hubIcao && p.out.to[0]===hubIcao && p.out.from[0]!==hubIcao;
+      if (flip) {
+        L.dep=p.out.to; L.arr=p.out.from; L.rFlightNum=p.out.fln;
+      } else {
+        L.dep=p.out.from; L.arr=p.out.to;
+        L.flightNum=p.out.fln; L.depFixed=p.out.dep; L.arrFixed=p.out.arr; L.arrDayOff=p.out.off;
+      }
       if (p.ret) {
-        L.rFlightNum=p.ret.fln; L.rDepFixed=p.ret.dep; L._custom_rDepFixed=true;
+        L.rFlightNum=p.ret.fln; L.rDepFixed=p.ret.dep; L._custom_rDepFixed=!!p.ret.dep;
         L.rArrFixed=p.ret.arr; L.rArrDayOff=p.ret.off;
       }
+      // estimated block times (no API call) — used by Random schedule, → looks up the real one
+      L.blockTime=est(L.dep, L.arr);  L.blockTimeReal=false;
+      L.rBlockTime=est(L.arr, L.dep); L.rBlockTimeReal=false;
       return L;
     });
     const hasContent=aiGenAlLegs.some(l=>l.arr || l.depFixed || l.flightNum);
@@ -6168,15 +6190,20 @@ async function aiGenAlImportXls(file) {
     } else {
       aiGenAlLegs = legs;
     }
-    if (aiGenAlSchedMode!=='known') aiGenAlSchedMode='known';
+    aiGenAlSchedMode = timed ? 'known' : 'random';
+    try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
     renderAiGenAlLegs();
-    const oneWay=pairs.filter(p=>!p.ret).length;
-    let msg='✓ '+parsed.segs.length+' segments → '+legs.length+' routes';
+    // a route without return only needs completing when times are typed (Known schedule)
+    const oneWay=timed ? pairs.filter(p=>!p.ret).length : 0;
+    const noTimes=timed ? parsed.segs.filter(x=>!x.dep || !x.arr).length : 0;
+    let msg='✓ '+parsed.segs.length+' flights → '+legs.length+' routes';
+    if (!timed) msg+=' · no times in the file → Random schedule, block times estimated';
     if (oneWay) msg+=' · '+oneWay+' without return (please complete)';
-    if (parsed.problems.length) msg+=' · skipped: '+parsed.problems.join('; ');
+    if (noTimes) msg+=' · '+noTimes+' without times (please complete)';
+    if (parsed.problems.length) msg+=' · check: '+parsed.problems.join('; ');
     if (!aiGenAirline) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
     else if (!aiGenAlHub) msg+=' · select the hub above';
-    say(msg, (oneWay||parsed.problems.length) ? '#e0b341' : '#3fb950');
+    say(msg, (oneWay||noTimes||parsed.problems.length) ? '#e0b341' : '#3fb950');
   } catch(e) {
     console.error('XLS import failed', e);
     say('Import failed: '+(e && e.message || e), '#f85149');
@@ -6889,8 +6916,17 @@ function _renderAiGenAlLegsNow() {
       cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
       const knownMode = aiGenAlSchedMode==='known';
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
+      // optional flight number (both modes) — empty = generated when the rotations are created
+      const fnInp=document.createElement('input');
+      fnInp.type='text'; fnInp.maxLength=8; fnInp.placeholder='flt#';
+      fnInp.dataset.tabseq=i+'.'+(isOut?2:4);
+      fnInp.value = (isOut ? leg.flightNum : leg.rFlightNum) || '';
+      fnInp.title='Optional flight number. Empty = generated when the rotations are created.';
+      fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
+      fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
+      cell.appendChild(fnInp);
       if (!knownMode) {
-        // RANDOM schedule: block time looked up (→) or estimated, editable; no flight number
+        // RANDOM schedule: block time looked up (→) or estimated, editable
         const arrow=document.createElement('div');
         arrow.style.cssText='font-size:15px;color:#555;cursor:pointer;line-height:1;'; arrow.textContent='→'; arrow.title='Search block time';
         arrow.onclick=()=>aiGenAlFetchBlockTime(i, dir);
@@ -6903,15 +6939,7 @@ function _renderAiGenAlLegsNow() {
         cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
         return cell;
       }
-      // KNOWN schedule: flight number + block computed from DEP/ARR (read-only)
-      const fnInp=document.createElement('input');
-      fnInp.type='text'; fnInp.maxLength=8; fnInp.placeholder='flt#';
-      fnInp.dataset.tabseq=i+'.'+(isOut?2:4);
-      fnInp.value = (isOut ? leg.flightNum : leg.rFlightNum) || '';
-      fnInp.title='Optional flight number for this segment. Used when generating rotations.';
-      fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
-      fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
-      cell.appendChild(fnInp);
+      // KNOWN schedule: block computed from DEP/ARR (read-only)
       const kb = alKnownBlock(leg, dir);
       const sp=document.createElement('div'); sp.style.cssText='font-size:13px;color:#555;line-height:1;'; sp.textContent='→';
       const bd=document.createElement('div');
@@ -7817,9 +7845,9 @@ async function createRotationsAirline() {
       groundTime: String(alGroundTime(l.eqp, l)),
       dnOut: 'any', dnRet: 'any',
       exact: knownMode,
-      // manual flight numbers (known schedule only)
-      flightNum:  knownMode ? (l.flightNum||'').trim()  : '',
-      rFlightNum: knownMode ? (l.rFlightNum||'').trim() : '',
+      // typed or imported flight numbers (empty = generated)
+      flightNum:  (l.flightNum||'').trim(),
+      rFlightNum: (l.rFlightNum||'').trim(),
       // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
       dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
       aa1: outFixed ? '00:00' : l.aa1, aa2: outFixed ? '23:59' : l.aa2,
@@ -7848,7 +7876,7 @@ async function createRotationsAirline() {
     : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
 
   // Cache check (signature over the converted legs)
-  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime]));
+  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime,l.flightNum||'',l.rFlightNum||'']));
   if (rotResearch && rotResearch._sig === sig) {
     setStatus('✓ Reusing cached research — rebuilding bars…');
     buildRotationBars(validLegs, rotResearch);
