@@ -5086,47 +5086,70 @@ function closeApEditor() {
   if (modal) modal.style.display = 'none';
 }
 
+// Suggestions of the airport editor. The list is built from DOM elements with their own
+// click handlers (no inline onmousedown strings — the quoted ICAO used to break the
+// attribute, so a click on a suggestion did nothing). apEdMatches holds what is shown;
+// Enter / Tab take the top entry.
+var apEdMatches = [];
+function apEdFindMatches(val) {
+  var q = String(val||'').trim().toUpperCase();
+  if (q.length < 2) return [];
+  var scored = [];
+  DB_SCHED.forEach(function(r) {
+    var icao = r[0]||'', iata = r[1]||'', city = String(r[7]||r[2]||'').toUpperCase(), name = String(r[2]||'').toUpperCase();
+    var s = icao===q ? 0 : iata===q ? 1 : icao.startsWith(q) ? 2 : iata.startsWith(q) ? 3
+          : city.startsWith(q) ? 4 : name.startsWith(q) ? 5 : city.includes(q) ? 6 : name.includes(q) ? 7 : -1;
+    if (s >= 0) scored.push([s, r]);
+  });
+  scored.sort(function(a,b){ return a[0]-b[0]; });          // stable: same rank keeps database order
+  return scored.slice(0,8).map(function(x){ return x[1]; });
+}
 function apEdSearchInput(val) {
-  var q = val.trim().toUpperCase();
   var sug = document.getElementById('ap-ed-suggestions');
-  if (q.length < 2) { sug.style.display = 'none'; return; }
-  var matches = DB_SCHED.filter(function(r) {
-    return r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-           (r[7]||r[2]).toUpperCase().startsWith(q) || (r[7]||r[2]).toUpperCase().includes(q);
-  }).slice(0,8);
-  if (!matches.length) { sug.style.display = 'none'; return; }
-  sug.innerHTML = matches.map(function(ap) {
-    return '<div onmousedown="event.preventDefault();apEdSelectAp(' + JSON.stringify(ap[0]) + ')" style="padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:10px;align-items:center;">'
-      + '<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--acc2);min-width:52px;">' + ap[0] + '</span>'
-      + '<span style="font-size:11px;color:var(--blue);min-width:36px;">' + (ap[1]||'') + '</span>'
-      + '<span style="font-size:12px;color:var(--txt);">' + (ap[7]||ap[2]) + '</span>'
-      + '<span style="font-size:11px;color:var(--txt3);margin-left:8px;">' + (ap[6]||'') + '</span>'
-      + '</div>';
-  }).join('');
+  apEdMatches = apEdFindMatches(val);
+  if (!apEdMatches.length) { sug.style.display = 'none'; sug.innerHTML = ''; return; }
+  sug.innerHTML = '';
+  apEdMatches.forEach(function(ap, i) {
+    var row = document.createElement('div');
+    row.className = 'ap-ed-sug';
+    row.style.cssText = 'padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--bdr);display:flex;gap:10px;align-items:center;border-radius:4px;'
+      + (i===0 ? 'background:rgba(123,97,255,.14);' : '');
+    row.innerHTML = '<span style="font-family:monospace;font-size:12px;font-weight:700;color:var(--acc2);min-width:52px;"></span>'
+      + '<span style="font-size:11px;color:var(--blue);min-width:36px;"></span>'
+      + '<span style="font-size:12px;color:var(--txt);"></span>'
+      + '<span style="font-size:11px;color:var(--txt3);margin-left:8px;"></span>'
+      + (i===0 ? '<span style="margin-left:auto;font-size:10px;color:var(--txt3);" title="Enter opens this airport">↵</span>' : '');
+    var sp = row.querySelectorAll('span');
+    sp[0].textContent = ap[0]; sp[1].textContent = ap[1]||''; sp[2].textContent = ap[7]||ap[2]||''; sp[3].textContent = ap[6]||'';
+    row.title = (ap[2]||'') + (i===0 ? '  ·  Enter opens this airport' : '');
+    row.onmouseenter = function(){ if (i) row.style.background = 'rgba(255,255,255,.05)'; };
+    row.onmouseleave = function(){ if (i) row.style.background = ''; };
+    // mousedown (not click): keeps the focus in the search box, so its blur cannot hide
+    // the list before the selection happens
+    row.addEventListener('mousedown', function(e){ e.preventDefault(); apEdSelectAp(ap[0]); });
+    sug.appendChild(row);
+  });
   sug.style.display = 'block';
 }
 
 function apEdKeydown(e) {
+  if (e.key === 'Escape') { var s0=document.getElementById('ap-ed-suggestions'); if (s0) s0.style.display='none'; return; }
   if (e.key !== 'Tab' && e.key !== 'Enter') return;
-  var sug = document.getElementById('ap-ed-suggestions');
-  var items = sug ? Array.from(sug.querySelectorAll('[onmousedown]')) : [];
-  if (items.length > 0) {
-    e.preventDefault();
-    // Extract ICAO from onmousedown: apEdSelectAp("ICAO")
-    var attr = items[0].getAttribute('onmousedown') || '';
-    var m = attr.match(/apEdSelectAp\(["']?([A-Z0-9]{3,6})["']?\)/);
-    if (m) { apEdSelectAp(m[1]); return; }
-    // Fallback: try JSON.stringify format
-    var m2 = attr.match(/"([A-Z0-9]{3,6})"/);
-    if (m2) { apEdSelectAp(m2[1]); return; }
-  }
-  if (e.key === 'Enter') apEdDoSearch();
+  if (e.isComposing) return;
+  // Enter / Tab: take the top suggestion (recomputed from the typed text, so it also
+  // works if the list was hidden in the meantime)
+  var typed = e.target ? e.target.value : document.getElementById('ap-ed-search').value;
+  var list = apEdFindMatches(typed);
+  if (list.length) { e.preventDefault(); apEdSelectAp(list[0][0]); return; }
+  if (e.key === 'Enter') { e.preventDefault(); apEdDoSearch(); }
 }
 
 function apEdDoSearch() {
   var val = document.getElementById('ap-ed-search').value.trim().toUpperCase();
   var ap = schedByCode[val] || schedByIata[val];
   if (ap) { apEdSelectAp(ap[0]); return; }
+  var list = apEdFindMatches(val);
+  if (list.length) { apEdSelectAp(list[0][0]); return; }   // Search button = top suggestion
   apEdSearchInput(val);
 }
 
@@ -6151,7 +6174,49 @@ async function aiGenAlImportXls(file) {
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
     const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
-    const pairs=alSegmentsToRows(parsed.segs, hubIcao);
+    let pairs=alSegmentsToRows(parsed.segs, hubIcao);
+    // Multi-stop flights WITHOUT flight numbers: flights listed in flown order that lead
+    // from an airport over one or more stops back to it (A→B, B→C, C→B, B→A) are one tour.
+    // (With flight numbers the same number on both rows links them — nothing to do here.)
+    const tourOf=new Map();
+    { let cur=null, n=0;
+      parsed.segs.forEach(sg=>{
+        if (cur && sg.from[0]===cur.last && sg.row===cur.row+1) cur.list.push(sg); else cur={ start:sg.from[0], list:[sg] };
+        cur.last=sg.to[0]; cur.row=sg.row;
+        if (cur.last===cur.start) {
+          if (cur.list.length>2 && cur.list.every(x=>!x.fln)) { n++; cur.list.forEach(x=>tourOf.set(x,n)); }
+          cur=null;
+        }
+      });
+    }
+    // Keep the rows of a multi-stop flight together in flown order; each onward row is
+    // linked to the row above. Two ways to recognise an onward row q of row x:
+    //  • both belong to the same tour (see above), or
+    //  • only the outbound flights are listed: q stands directly below x in the sheet and
+    //    departs where x arrives (A→B, then B→C) — no flight numbers, no returns listed.
+    {
+      const inTour=p=> p.ret && tourOf.has(p.out) && tourOf.get(p.ret)===tourOf.get(p.out);
+      const follows=(x,q)=>{
+        if (q.out.from[0]!==x.out.to[0]) return false;
+        if (inTour(x) && inTour(q)) return tourOf.get(q.out)===tourOf.get(x.out) && q.out.row>x.out.row;
+        return !x.ret && !q.ret && !x.out.fln && !q.out.fln && q.out.row===x.out.row+1
+            && q.out.to[0]!==x.out.from[0] && x.out.to[0]!==hubIcao && q.out.to[0]!==hubIcao;
+      };
+      const isOnward=q=> pairs.some(x=>x!==q && follows(x,q));
+      const ordered=[], done=new Set();
+      pairs.forEach(p=>{
+        if (done.has(p) || isOnward(p)) return;          // onward rows are placed behind their row
+        ordered.push(p); done.add(p);
+        let x=p;
+        for (;;) {
+          const nx=pairs.find(q=>!done.has(q) && follows(x,q));
+          if (!nx) break;
+          nx.cont=true; ordered.push(nx); done.add(nx); x=nx;
+        }
+      });
+      pairs.forEach(p=>{ if (!done.has(p)) ordered.push(p); });   // safety
+      pairs=ordered;
+    }
     // Does the file contain any times? yes → Known schedule · no → Random schedule
     const timed=parsed.segs.some(x=>x.dep || x.arr);
     const est=(a,b)=>{ const e=(a&&b) ? alEstimateEffectiveBlock(a,b) : null; return e!=null ? Math.floor(e/60)+':'+String(e%60).padStart(2,'0') : ''; };
@@ -6167,6 +6232,7 @@ async function aiGenAlImportXls(file) {
       if (g!=null) L.groundOverride=String(g);
       L.eqp=p.out.eqp || (p.ret&&p.ret.eqp) || '';
       L._editingDep=false;
+      if (p.cont) L.cont=true;                    // onward flight of the row above (multi-stop)
       // no times: a single flight INTO the hub is the return half of the route hub → X
       const flip = !timed && !p.ret && hubIcao && p.out.to[0]===hubIcao && p.out.from[0]!==hubIcao;
       if (flip) {
@@ -6198,6 +6264,8 @@ async function aiGenAlImportXls(file) {
     const noTimes=timed ? parsed.segs.filter(x=>!x.dep || !x.arr).length : 0;
     let msg='✓ '+parsed.segs.length+' flights → '+legs.length+' routes';
     if (!timed) msg+=' · no times in the file → Random schedule, block times estimated';
+    const nLinked=pairs.filter(p=>p.cont).length;
+    if (nLinked) msg+=' · '+nLinked+' onward flight'+(nLinked>1?'s':'')+' linked (multi-stop)';
     if (oneWay) msg+=' · '+oneWay+' without return (please complete)';
     if (noTimes) msg+=' · '+noTimes+' without times (please complete)';
     if (parsed.problems.length) msg+=' · check: '+parsed.problems.join('; ');
@@ -6210,15 +6278,24 @@ async function aiGenAlImportXls(file) {
   }
 }
 
-// Known schedule: group route rows into multi-stop flights. Row B continues row A when
-// B's outbound flight number equals A's and B departs where A arrives
-// (e.g. 708 SBGL→LPPT + 708 LPPT→LPPR). Returns an array of row arrays in flown order.
-function alGroupKnownChains(rows) {
+// Multi-stop flights (both schedule modes). Row B continues the flight of row A when B
+// departs where A arrives AND either
+//   • both rows carry the same outbound flight number (708 SBGL→LPPT + 708 LPPT→LPPR), or
+//   • B is marked "linked to row above" (leg.cont) and stands directly below A.
+function alRowContinues(a, b) {
+  if (!a || !b || a===b || !a.arr || !b.dep || b.dep[0]!==a.arr[0]) return false;
+  const isSplit = l => Array.isArray(l.stops) && l.stops.length;
+  if (isSplit(a) || isSplit(b)) return false;
   const fd = v => String(v||'').replace(/\D/g,'');
+  if (fd(a.flightNum) && fd(a.flightNum)===fd(b.flightNum)) return true;
+  return !!b.cont && aiGenAlLegs[aiGenAlLegs.indexOf(b)-1]===a;
+}
+// Group route rows into multi-stop flights. Returns an array of row arrays in flown order.
+function alGroupKnownChains(rows) {
   const next = new Map(), hasPrev = new Set();
   rows.forEach(a=>{
-    const fa = fd(a.flightNum); if (!fa || !a.arr) return;
-    const b = rows.find(b => b!==a && !hasPrev.has(b) && b.dep && fd(b.flightNum)===fa && b.dep[0]===a.arr[0]);
+    if (!a.arr) return;
+    const b = rows.find(b => !hasPrev.has(b) && alRowContinues(a,b));
     if (b) { next.set(a,b); hasPrev.add(b); }
   });
   const used = new Set(), chains = [];
@@ -6231,6 +6308,15 @@ function alGroupKnownChains(rows) {
   rows.forEach(a=>{ if (!used.has(a)) chains.push([a]); });   // safety (circular links)
   return chains;
 }
+// Flight numbers of a chain: an empty field takes the number typed elsewhere in the same
+// half (outbound / return). All empty → filled from the research when the bars are built.
+function alChainFillFnums(segs) {
+  ['out','ret'].forEach(h=>{
+    const typed = segs.filter(x=>x.half===h).map(x=>String(x.fnum||'').trim()).find(v=>v) || '';
+    segs.forEach(x=>{ if (x.half===h && !String(x.fnum||'').trim()) x.fnum = typed; });
+  });
+  return segs;
+}
 // One rotation from a chain of rows: outbound legs in row order, then the return legs
 // in reverse row order (708 SBGL→LPPT→LPPR, then 709 LPPR→LPPT→SBGL).
 function alKnownChainLeg(rows) {
@@ -6238,10 +6324,60 @@ function alKnownChainLeg(rows) {
   const segs=[];
   rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum }));
   rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum }));
+  alChainFillFnums(segs);
   return {
     dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
     groundTime:String(alGroundTime(first.eqp, first)), dnOut:'any', dnRet:'any',
     exact:true, knownSegs:segs,
+    blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block,
+  };
+}
+// RANDOM schedule chain: the same rotation shape, but the times are generated. The first
+// outbound departure is drawn inside the first row's DEP window, every onward segment
+// leaves after arrival + ground time. The return starts inside the last row's return DEP
+// window and chains home the same way. Among all possible start times those that break
+// the fewest DEP/ARR windows along the way are preferred.
+function alRandomChainLeg(rows) {
+  const first=rows[0], last=rows[rows.length-1];
+  const hm = s => { const m=String(s||'').match(/^\s*(\d{1,2}):(\d{2})/); return m ? (+m[1])*60+(+m[2]) : null; };
+  const fmt = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+  const dur = m => Math.floor(m/60)+':'+String(m%60).padStart(2,'0');
+  const r5 = x => Math.round(x/5)*5;
+  const inWin = (m,a,b) => (a==null||b==null) ? true : (a<=b ? (m>=a&&m<=b) : (m>=a||m<=b));
+  const ground = alGroundTime(first.eqp, first);
+  const segs=[];
+  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, blk:Math.max(5, r5(hm(r.blockTime)||120)), fnum:r.flightNum,
+                               w:[hm(r.dd1),hm(r.dd2),hm(r.aa1),hm(r.aa2)] }));
+  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum,
+                               w:[hm(r.rdd1),hm(r.rdd2),hm(r.raa1),hm(r.raa2)] }));
+  const plan = list => {
+    const lo = list[0].w[0] ?? 360, hi = list[0].w[1] ?? 1350;
+    const span = (lo<=hi) ? (hi-lo) : (1440-lo+hi);
+    let best=[], bestPen=Infinity;
+    for (let st=0; st<=span; st+=5) {
+      let t = r5(lo+st), pen=0; const times=[];
+      list.forEach((sg,k)=>{
+        const depLocal = ((t%1440)+1440)%1440;
+        const arrLocal = (((depLocal + sg.blk + (getUtcOffset(sg.arr)-getUtcOffset(sg.dep))*60)%1440)+1440)%1440;
+        if (k>0 && !inWin(depLocal, sg.w[0], sg.w[1])) pen++;
+        if (!inWin(arrLocal, sg.w[2], sg.w[3])) pen++;
+        times.push(depLocal);
+        t = Math.ceil((arrLocal + ground)/5)*5;      // onward flight after the ground time
+      });
+      if (pen<bestPen) { bestPen=pen; best=[times]; } else if (pen===bestPen) best.push(times);
+    }
+    return best[Math.floor(Math.random()*best.length)];
+  };
+  ['out','ret'].forEach(h=>{
+    const list=segs.filter(x=>x.half===h);
+    const times=plan(list);
+    list.forEach((sg,k)=>{ sg.depFixed=fmt(times[k]); sg.block=dur(sg.blk); });
+  });
+  alChainFillFnums(segs);
+  return {
+    dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
+    groundTime:String(ground), dnOut:'any', dnRet:'any',
+    exact:false, knownSegs:segs,
     blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block,
   };
 }
@@ -6296,6 +6432,24 @@ function aiGenAlEmptyHop(dep, arr) {
 }
 
 // Split a leg: add one more intermediate stop (initially empty). Builds `stops` if absent.
+// Reverse a route row: the flight starts at the former destination and returns to the
+// former origin. Everything belonging to the outbound half swaps with the return half
+// (flight numbers, block times, typed times + day offsets, time windows).
+function aiGenAlReverseLeg(i) {
+  const l = aiGenAlLegs[i];
+  if (!l || !l.dep || !l.arr || (Array.isArray(l.stops) && l.stops.length)) return;
+  const sw = (a,b) => { const t=l[a]; l[a]=l[b]; l[b]=t; };
+  sw('dep','arr');
+  sw('flightNum','rFlightNum');
+  sw('blockTime','rBlockTime'); sw('blockTimeReal','rBlockTimeReal');
+  sw('depFixed','rDepFixed'); sw('arrFixed','rArrFixed'); sw('arrDayOff','rArrDayOff');
+  [['dd1','rdd1'],['dd2','rdd2'],['aa1','raa1'],['aa2','raa2']].forEach(([a,b])=>{ sw(a,b); sw('_custom_'+a,'_custom_'+b); });
+  // the new return departure is the former outbound departure → keep it as typed
+  l._custom_rDepFixed = !!(l.rDepFixed && /^\d{1,2}:\d{2}$/.test(String(l.rDepFixed)));
+  l._editingDep = false;
+  renderAiGenAlLegs();
+}
+
 function aiGenAlSplit(i) {
   const leg = aiGenAlLegs[i]; if (!leg) return;
   if (!Array.isArray(leg.stops)) leg.stops = [];
@@ -6916,6 +7070,17 @@ function _renderAiGenAlLegsNow() {
       cell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px;min-height:54px;gap:2px;';
       const knownMode = aiGenAlSchedMode==='known';
       const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
+      // ⇄ above the outbound block: reverse the route (A→B / B→A becomes B→A / A→B)
+      if (isOut && leg.dep && leg.arr) {
+        const sw=document.createElement('button'); sw.type='button'; sw.textContent='⇄'; sw.tabIndex=-1;
+        sw.title='Reverse route: start in '+leg.arr[0]+' → '+leg.dep[0]+', return '+leg.dep[0]+' → '+leg.arr[0];
+        sw.style.cssText='font-size:13px;line-height:1;padding:1px 6px;border-radius:4px;border:1px solid rgba(255,255,255,.18);background:transparent;color:var(--txt3);cursor:pointer;';
+        sw.onmouseenter=()=>{ sw.style.color='#fff'; sw.style.borderColor='var(--acc)'; };
+        sw.onmouseleave=()=>{ sw.style.color='var(--txt3)'; sw.style.borderColor='rgba(255,255,255,.18)'; };
+        sw.onmousedown=e=>e.preventDefault();          // keep the focus where it is
+        sw.onclick=()=>aiGenAlReverseLeg(i);
+        cell.appendChild(sw);
+      }
       // optional flight number (both modes) — empty = generated when the rotations are created
       const fnInp=document.createElement('input');
       fnInp.type='text'; fnInp.maxLength=8; fnInp.placeholder='flt#';
@@ -6993,7 +7158,7 @@ function _renderAiGenAlLegsNow() {
     const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
     dupBtn.dataset.tabseq=i+'.11';
     dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i]}); renderAiGenAlLegs(); };
+    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false}); renderAiGenAlLegs(); };
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
@@ -7004,6 +7169,28 @@ function _renderAiGenAlLegsNow() {
     splitBtn.title='Add an intermediate stop (e.g. BEY→SYD becomes BEY→■→SYD with a separate return row)';
     splitBtn.onclick=()=>aiGenAlSplit(i);
     leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn); leftCol.appendChild(splitBtn);
+
+    // Multi-stop: this row departs where the row above arrives → it can be linked to it,
+    // so both rows become ONE flight with a stop (A→B→C and back C→B→A).
+    const prevLeg = i>0 ? aiGenAlLegs[i-1] : null;
+    const prevSplit = prevLeg && Array.isArray(prevLeg.stops) && prevLeg.stops.length;
+    if (prevLeg && !prevSplit && prevLeg.arr && leg.dep && leg.dep[0]===prevLeg.arr[0]) {
+      const linked = alRowContinues(prevLeg, leg);
+      const byNumber = linked && !leg.cont;
+      const linkBtn=document.createElement('button');
+      linkBtn.dataset.tabseq=i+'.14';
+      linkBtn.textContent = linked ? '⛓ Linked to row above' : '⛓ Link to row above';
+      linkBtn.title = byNumber
+        ? 'Same flight number as the row above: both rows are one flight with a stop in '+leg.dep[0]+'.'
+        : (linked ? 'Both rows are ONE flight with a stop in '+leg.dep[0]+'. Click to separate them again.'
+                  : 'Make this row the onward flight of the row above (one flight with a stop in '+leg.dep[0]+').');
+      linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;'
+        + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
+                  : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
+      linkBtn.onclick=()=>{ if (byNumber) return; leg.cont = !leg.cont; renderAiGenAlLegs(); };
+      leftCol.appendChild(linkBtn);
+      if (linked) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
+    }
 
     row.appendChild(leftCol);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
@@ -7812,9 +7999,10 @@ async function createRotationsAirline() {
   // time keep their from/until windows and let findTime search as usual.
   // KNOWN schedule: rows sharing flight numbers along a route form ONE multi-stop rotation.
   let units = src.map(l=>[l]);
-  if (knownMode) units = alGroupKnownChains(src.filter(l=>!isChain(l))).concat(src.filter(isChain).map(l=>[l]));
+  // rows linked into a multi-stop flight (same flight number, or "linked to row above")
+  units = alGroupKnownChains(src.filter(l=>!isChain(l))).concat(src.filter(isChain).map(l=>[l]));
   const validLegs = units.map(rows => {
-    if (rows.length > 1) return alKnownChainLeg(rows);
+    if (rows.length > 1) return knownMode ? alKnownChainLeg(rows) : alRandomChainLeg(rows);
     const l = rows[0];
     if (isChain(l)) {
       // A split chain → one rotation. hops = outbound hops then return hops, in order.
@@ -7876,7 +8064,8 @@ async function createRotationsAirline() {
     : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
 
   // Cache check (signature over the converted legs)
-  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime,l.flightNum||'',l.rFlightNum||'']));
+  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime,l.flightNum||'',l.rFlightNum||'',
+    (l.knownSegs||[]).map(x=>x.dep[0]+':'+(x.fnum||'')).join('-')]));
   if (rotResearch && rotResearch._sig === sig) {
     setStatus('✓ Reusing cached research — rebuilding bars…');
     buildRotationBars(validLegs, rotResearch);
@@ -7893,7 +8082,10 @@ async function createRotationsAirline() {
   // Single API call: flight numbers per route + registrations per EQP type.
   const combos=[];
   validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
-  const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${l.dep[0]}->${l.arr[0]} (and return)`).join('\n');
+  const routePath = l => l.knownSegs
+    ? l.knownSegs.filter(x=>x.half==='out').map(x=>x.dep[0]).concat([l.arr[0]]).join('->')   // multi-stop: one number out, one back
+    : l.dep[0]+'->'+l.arr[0];
+  const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} (and return)`).join('\n');
   const researchPrompt = `Research real aviation data for one airline. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
 
 AIRLINE: ${aiGenAirline}
@@ -8064,20 +8256,22 @@ function buildRotationBars(validLegs, research) {
       // segment on the first day after the previous arrival, so e.g. the KLAX→SBGL leg
       // of SBGL-KLAX-RJTT-KLAX-SBGL lands after the Tokyo round trip.
       const ground = parseInt(l.groundTime||'90')||90;
+      const riC = rinfo[idx+1]||{};
+      const dg = v => String(v||'').replace(/\D/g,'');
       let hOut=0, hRet=0;
       l.knownSegs.forEach(sg=>{
         const dOff = utc[sg.dep[0]] ?? getUtcOffset(sg.dep), aOff = utc[sg.arr[0]] ?? getUtcOffset(sg.arr);
         const blockMin = hm(sg.block)||0;
         const depLocal = ((hm(sg.depFixed)%1440)+1440)%1440;
         const arrRaw = depLocal + blockMin + (aOff-dOff)*60;
-        const fn = String(sg.fnum||'').replace(/\D/g,'') || String(1000+idx*11).padStart(4,'0');
+        const fn = dg(sg.fnum) || dg(sg.half==='out' ? riC.fnum_out : riC.fnum_in) || String(1000+idx*11+(sg.half==='out'?0:1)).padStart(4,'0');
         rotBars.push({
           legIdx:idx, dir:sg.half, hop:(sg.half==='out' ? hOut++ : hRet++), chain:true,
           airline:l.airline, eqp:l.aircraft,
           depIcao:sg.dep[0], arrIcao:sg.arr[0],
           depLocal, arrLocal:((arrRaw%1440)+1440)%1440, dayCross:Math.floor(arrRaw/1440),
           depOff:dOff, arrOff:aOff,
-          block:blockMin, ground, minTurn:KNOWN_MIN_TURN, fnum:fn,
+          block:blockMin, ground, minTurn: (l.exact===false ? undefined : KNOWN_MIN_TURN), fnum:fn,
           ok:true, reason:'', assigned:0
         });
       });
@@ -9781,11 +9975,11 @@ function buildSceneryRow(row, ri) {
 
 // ── Custom Tab order across the Airline route-row fields ────────────────────────
 // Fields carry data-tabseq="<rowIndex>.<pos>". Tab moves forward, Shift+Tab backward.
-// After the last field of a row (pos 13) Tab continues at pos 0 of the next row;
+// After the last field of a row (pos 14) Tab continues at pos 0 of the next row;
 // Shift+Tab at pos 0 goes to the last field of the previous row. Before the first
 // field of the first row, Shift+Tab falls back to normal browser behaviour.
 (function(){
-  const MAXPOS = 13;
+  const MAXPOS = 14;
   document.addEventListener('keydown', e=>{
     if (e.key!=='Tab') return;
     const el = e.target;
