@@ -1065,6 +1065,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             style="font-size:13px;font-weight:700;padding:0 18px;height:60px;border-radius:6px;border:none;background:linear-gradient(135deg,#7b61ff,#5b8cff);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;">
             ⊞ Generate Rotations
           </button>
+          <!-- Update unassigned: shown once rotations are assigned on the planner page -->
+          <button id="aigen-al-update" onclick="createRotationsAirline('keep')" style="display:none;font-size:12px;font-weight:700;padding:0 14px;height:60px;border-radius:6px;border:1.5px solid #7b61ff;background:rgba(123,97,255,.12);color:#c9b8ff;cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.25;"
+            title="Recalculate only the routes that are not assigned to an aircraft yet. Assigned rotations, aircraft and registrations stay exactly as they are.">
+            ↻ Update unassigned<br><span style="font-size:10px;font-weight:500;color:var(--txt3);">keeps assigned rotations</span>
+          </button>
 
         </div>
 
@@ -6061,6 +6066,7 @@ function applyAiGenAlSchedModeUI() {
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
   const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
   const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = 'flex';   // import works in both modes
+  const upd=document.getElementById('aigen-al-update'); if (upd) upd.style.display = (typeof rotHasAssignments==='function' && rotHasAssignments()) ? '' : 'none';
   const mg=document.getElementById('aigen-al-min-ground'); if (mg && document.activeElement!==mg) mg.value = aiGenAlMinGround;
 }
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
@@ -7884,6 +7890,63 @@ let rotResearch = null;  // cached research so we don't re-call API
 let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...13:[]}}] day 0=Sun wk1 .. 13=Sat wk2
 let rotSplitLegs = new Set(); // legIdx values whose outbound/return are split into independent bars
 let rotDailyLegs = new Set(); // legIdx values marked "Daily" — dropping replicates to the 7 days of week 1
+let rotLegKeys = null;        // route key per legIdx of the current bars (airline mode) — lets "Update unassigned" find them again
+let rotFnumByKey = {};        // route key → {fnum_out, fnum_in} already researched (no new API call needed)
+// Does any aircraft carry an assigned rotation?
+function rotHasAssignments(){
+  try { return rotAircraft.some(ac=>Object.values(ac.assignments||{}).some(l=>l && l.length)); } catch(e){ return false; }
+}
+// Stable key of a route row: airline, type and the airports flown (incl. stops). Identical
+// routes are numbered (#1, #2 …) in input order.
+function rotRouteKeys(validLegs){
+  const seen={};
+  return validLegs.map(l=>{
+    const path = l.knownSegs ? l.knownSegs.filter(x=>x.half==='out').map(x=>x.dep[0]).concat([l.arr[0]])
+               : l.hops ? l.hops.filter(h=>h.half==='out').map(h=>h.dep[0]).concat([l.arr[0]])
+               : [l.dep[0], l.arr[0]];
+    const base = l.airline+'|'+l.aircraft+'|'+path.join('>');
+    seen[base]=(seen[base]||0)+1;
+    return base+'#'+seen[base];
+  });
+}
+// "Update unassigned": put the previous planner state back on top of freshly built bars.
+// Routes that were already assigned keep their old bars (times as assigned) and all their
+// assignments; only the routes nobody has assigned yet use the new bars. Assignments of
+// routes that no longer exist in the input (deleted, airports or type changed) are removed.
+function rotRestoreAssignments(prev, newKeys){
+  const newIdx = new Map(newKeys.map((k,i)=>[k,i]));
+  const map = new Map();                                   // old legIdx → new legIdx
+  (prev.keys||[]).forEach((k,oi)=>{ if (newIdx.has(k)) map.set(oi, newIdx.get(k)); });
+  const assignedOld = new Set();
+  prev.aircraft.forEach(ac=>Object.values(ac.assignments||{}).forEach(list=>(list||[]).forEach(a=>assignedOld.add(a.legIdx))));
+  let keptLegs=0;
+  map.forEach((ni,oi)=>{
+    if (!assignedOld.has(oi)) return;
+    const oldBars = prev.bars.filter(b=>b.legIdx===oi);
+    if (!oldBars.length) return;
+    rotBars = rotBars.filter(b=>b.legIdx!==ni).concat(oldBars.map(b=>Object.assign({}, b, { legIdx:ni })));
+    keptLegs++;
+  });
+  let kept=0, dropped=0;
+  const fresh = rotAircraft;                               // aircraft built for the new routes
+  const fleet = prev.aircraft.map(ac=>{
+    const asg = rotEmptyAssignments();
+    Object.keys(ac.assignments||{}).forEach(d=>{
+      (ac.assignments[d]||[]).forEach(a=>{
+        if (!map.has(a.legIdx)) { dropped++; return; }
+        (asg[d] = asg[d] || []).push(Object.assign({}, a, { legIdx: map.get(a.legIdx) }));
+        kept++;
+      });
+    });
+    return Object.assign({}, ac, { assignments: asg });
+  });
+  fresh.forEach(f=>{ if (!fleet.some(a=>a.key===f.key)) fleet.push(f); });   // new aircraft types
+  rotAircraft = fleet;
+  const remap = set => new Set([...set].filter(oi=>map.has(oi)).map(oi=>map.get(oi)));
+  rotSplitLegs = remap(prev.split);
+  rotDailyLegs = remap(prev.daily);
+  return { keptLegs, kept, dropped, updated: newKeys.length - keptLegs };
+}
 const ROT_DAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 // Rotation planner cycle, chosen with the "1 week cycle / 2 week cycle" switch:
 //  1 week : timeline day 0..6; a rotation crossing Saturday→Sunday continues at the start
@@ -7973,7 +8036,8 @@ async function createRotations() {
 // ── Airline-mode: build rotations from aiGenAlLegs ────────────────────────────
 // Uses UI-computed block times + UTC offsets; one API call only for flight numbers
 // + registrations (keeps under the input-token limit and respects manual overrides).
-async function createRotationsAirline() {
+async function createRotationsAirline(mode) {
+  let keep = (mode==='keep');
   if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
   if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
@@ -8048,10 +8112,33 @@ async function createRotationsAirline() {
     };
   });
 
+  // Full regeneration throws the planner away — ask first when rotations are assigned.
+  if (keep && !(rotLegKeys && rotHasAssignments())) keep = false;      // nothing to keep
+  if (!keep && rotHasAssignments() && !confirm('Generate Rotations recalculates ALL routes and removes every rotation already assigned to an aircraft.\n\nOK = recalculate everything\nCancel = keep them (use "Update unassigned" instead)')) return;
+  const legKeys = rotRouteKeys(validLegs);
+  const prev = keep ? { bars:rotBars, aircraft:rotAircraft, keys:rotLegKeys, split:rotSplitLegs, daily:rotDailyLegs } : null;
+  const digitsOnlyK = v => String(v||'').replace(/\D/g,'');
+
   switchView('rotations');
   const setStatus = txt => { const el=document.getElementById('rot-status'); if(el) el.textContent=txt; };
   const container = document.getElementById('rot-bars-container');
-  if (container) container.innerHTML = '';
+  if (container && !keep) container.innerHTML = '';     // keep: the old bars stay visible until the update is done
+
+  // Build bars from the research; in keep mode put the assigned rotations back.
+  const finish = (research, note) => {
+    buildRotationBars(validLegs, research);
+    rotLegKeys = legKeys.slice();
+    (research.routes||[]).forEach((rt,idx)=>{ if (rt && (rt.fnum_out || rt.fnum_in)) rotFnumByKey[legKeys[idx]] = { fnum_out:rt.fnum_out, fnum_in:rt.fnum_in }; });
+    let msg = '';
+    if (prev) {
+      const r = rotRestoreAssignments(prev, legKeys);
+      renderRotationBars();
+      msg = ' · '+r.keptLegs+' assigned route'+(r.keptLegs===1?'':'s')+' kept, '+r.updated+' recalculated'
+          + (r.dropped ? ' · '+r.dropped+' assignment'+(r.dropped===1?'':'s')+' removed (route deleted or changed)' : '');
+    }
+    renderRotationLanes();
+    setStatus('✓ '+rotBars.length+' bars ready'+msg+' · drag onto aircraft below'+(note||''));
+  };
 
   // Pre-build research from UI data (UTC offsets + block times come straight from the inputs)
   const utc = {};
@@ -8071,10 +8158,31 @@ async function createRotationsAirline() {
     (l.knownSegs||[]).map(x=>x.dep[0]+':'+(x.fnum||'')).join('-')]));
   if (rotResearch && rotResearch._sig === sig) {
     setStatus('✓ Reusing cached research — rebuilding bars…');
-    buildRotationBars(validLegs, rotResearch);
-    renderRotationLanes();
-    setStatus('✓ '+rotBars.length+' bars ready (cached research) · drag onto aircraft below');
+    finish(rotResearch, ' (cached research)');
     return;
+  }
+  // Update unassigned: no API call when every route already has flight numbers (typed or
+  // researched before) and every aircraft type has registrations.
+  if (keep) {
+    const regsOld = (rotResearch && rotResearch.registrations) || {};
+    const local = routes.map((rt,idx)=>{
+      const vl = validLegs[idx], c = rotFnumByKey[legKeys[idx]] || {};
+      return Object.assign({}, rt, { fnum_out: digitsOnlyK(vl.flightNum) || c.fnum_out, fnum_in: digitsOnlyK(vl.rFlightNum) || c.fnum_in });
+    });
+    const needsFn = idx => {
+      const l = validLegs[idx], rt = local[idx];
+      if (l.hops) return false;
+      if (l.knownSegs && l.knownSegs.every(x=>digitsOnlyK(x.fnum))) return false;
+      return !(rt.fnum_out && rt.fnum_in);
+    };
+    const missing = validLegs.some((l,idx)=>needsFn(idx));
+    const typesOk = validLegs.every(l=> regsOld[l.airline+' '+l.aircraft] || prev.aircraft.some(a=>a.key===l.airline+'|'+l.aircraft));
+    if (!missing && typesOk) {
+      const research = { utc, routes: local, registrations: regsOld, _sig: sig };
+      rotResearch = research;
+      finish(research, ' · no new research needed');
+      return;
+    }
   }
 
   let _swSecs=0, _aborted=false;
@@ -8140,16 +8248,17 @@ Output exactly this shape (one line is fine):
     const manIn  = digitsOnly(vl.rFlightNum);
     return {
       r: rt.r, block_out: rt.block_out, block_in: rt.block_in,
-      fnum_out: manOut || (fnumByR[rt.r]||{}).fnum_out,
-      fnum_in:  manIn  || (fnumByR[rt.r]||{}).fnum_in,
+      // keep mode: a route researched before keeps its flight numbers
+      fnum_out: manOut || (keep && (rotFnumByKey[legKeys[idx]]||{}).fnum_out) || (fnumByR[rt.r]||{}).fnum_out,
+      fnum_in:  manIn  || (keep && (rotFnumByKey[legKeys[idx]]||{}).fnum_in)  || (fnumByR[rt.r]||{}).fnum_in,
     };
   });
-  const research = { utc, routes: mergedRoutes, registrations: (apiPart&&apiPart.registrations)||{}, _sig: sig };
+  const apiRegs = (apiPart&&apiPart.registrations)||{};
+  const research = { utc, routes: mergedRoutes,
+    registrations: keep ? Object.assign({}, apiRegs, (rotResearch&&rotResearch.registrations)||{}) : apiRegs, _sig: sig };
   rotResearch = research;
 
-  buildRotationBars(validLegs, research);
-  renderRotationLanes();
-  setStatus('✓ '+rotBars.length+' bars ready · drag onto aircraft below · '+_swSecs+'s');
+  finish(research, ' · '+_swSecs+'s');
 }
 
 // Shared rotation pipeline: research (single API call, cached) → bars → lanes.
@@ -8496,28 +8605,60 @@ function renderRotationBars() {
       inp.type='text'; inp.maxLength=5;
       inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
       inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;cursor:text;';
-      inp.title='Click to edit — type 4 digits (e.g. 0825), Enter/Tab to confirm. Return leg follows automatically.';
+      inp.title='Type any time (4 digits, e.g. 0825), Enter/Tab to confirm. DEP moves the flight, ARR sets the block time (shorter is fine). A departure typed after the previous flight sets the ground time there. Your times are taken as typed.';
+      const edited = which==='dep' ? bar.editedDep : bar.editedArr;
+      if (edited) inp.style.color = '#e0b341';                   // typed on this page
       inp.onclick=e=>{ e.stopPropagation(); inp.select(); };
       inp.onfocus=()=>inp.select();
       inp.ondragstart=e=>e.preventDefault();
       inp.onblur=()=>{
         const norm=formatTimeStr(inp.value);
         const m=String(norm).match(/^(\d{1,2}):(\d{2})$/);
-        if(!m){ inp.value=fmt(which==='dep'?bar.depLocal:bar.arrLocal); return; }
+        const cur = which==='dep'?bar.depLocal:bar.arrLocal;
+        if(!m || +m[1]>23 || +m[2]>59){ inp.value=fmt(cur); return; }
         const newMin=((+m[1])*60+(+m[2]));
-        if(which==='dep'){ const shift=newMin-bar.depLocal; bar.depLocal=((newMin%1440)+1440)%1440; bar.arrLocal=((bar.arrLocal+shift)%1440+1440)%1440; }
-        else { const shift=newMin-bar.arrLocal; bar.arrLocal=((newMin%1440)+1440)%1440; bar.depLocal=((bar.depLocal+shift)%1440+1440)%1440; }
-        // Point 4: if this is an outbound bar, shift the paired return bar so it departs
-        // at (this arrival, local at the turn airport) + ground. Only for non-split pairs.
-        if(bar.dir==='out' && !rotSplitLegs.has(bar.legIdx)){
-          const ret = rotBars.find(b=>b.legIdx===bar.legIdx && b.dir==='ret');
-          if(ret){
-            // outbound arrival in UTC, + ground, expressed as the return's local dep clock
-            const outArrUTC = bar.depLocal - bar.depOff*60 + bar.block;
-            const retDepLocal = ((outArrUTC + ret.depOff*60 + bar.ground)%1440+1440)%1440;
-            const rShift = retDepLocal - ret.depLocal;
-            ret.depLocal = retDepLocal;
-            ret.arrLocal = ((ret.arrLocal + rShift)%1440+1440)%1440;
+        if(newMin===cur){ inp.value=fmt(cur); return; }          // unchanged (e.g. just tabbed through)
+        const n1440 = x => ((x%1440)+1440)%1440;
+        const setCross = b => { b.dayCross = Math.floor((b.depLocal + b.block + (b.arrOff-b.depOff)*60)/1440); };
+        const legBars = rotBars.filter(b=>b.legIdx===bar.legIdx).sort(rotBarOrder);
+        const pos = legBars.indexOf(bar);
+        const isSplitLeg = rotSplitLegs.has(bar.legIdx);
+        if(which==='dep'){
+          // DEP: the flight moves, block time stays
+          const shift=newMin-bar.depLocal; bar.depLocal=n1440(newMin); bar.arrLocal=n1440(bar.arrLocal+shift);
+          bar.editedDep = true;
+          // departure typed after the previous flight of this rotation → that gap is the
+          // ground time now, even if it is shorter than the default (accepted as typed)
+          const prevBar = (!isSplitLeg && pos>0) ? legBars[pos-1] : null;
+          if (prevBar) {
+            const prevArrUTC = prevBar.depLocal - prevBar.depOff*60 + prevBar.block;
+            const gap = n1440((bar.depLocal - bar.depOff*60) - prevArrUTC);
+            const need = (prevBar.minTurn!=null ? prevBar.minTurn : prevBar.ground);
+            if (gap < need) prevBar.minTurn = gap;
+            if (gap < prevBar.ground) prevBar.ground = gap;
+          }
+        } else {
+          // ARR: departure stays, block time = ARR − DEP (time zones considered)
+          const blk = n1440((newMin - bar.arrOff*60) - (bar.depLocal - bar.depOff*60));
+          if (blk===0) { inp.value=fmt(cur); return; }
+          bar.block = blk; bar.arrLocal = n1440(newMin);
+          bar.editedArr = true;
+        }
+        setCross(bar);
+        // Following flights keep their ground time: in a simple out/return pair the return
+        // follows the outbound; in a multi-stop rotation the onward flights of the same
+        // direction follow (the return start keeps its own time).
+        if (!isSplitLeg) {
+          const simple = legBars.length===2;
+          let curB = bar;
+          for (let k=pos+1; k<legBars.length; k++) {
+            const nx = legBars[k];
+            if (!simple && nx.dir!==curB.dir) break;
+            const curArrUTC = curB.depLocal - curB.depOff*60 + curB.block;
+            const nd = n1440(curArrUTC + nx.depOff*60 + curB.ground);
+            const sh = nd - nx.depLocal; nx.depLocal = nd; nx.arrLocal = n1440(nx.arrLocal + sh); setCross(nx);
+            curB = nx;
+            if (simple) break;
           }
         }
         syncBarTimesToLanes(bar.legIdx);
@@ -9178,7 +9319,7 @@ function showBarPopup(bar) {
     +'<span style="color:var(--txt3);">Departure</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.depLocal)+' local ('+bar.depIcao+')</span>'
     +'<span style="color:var(--txt3);">Arrival</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.arrLocal)+' local ('+bar.arrIcao+')'+(night?' +'+bar.dayCross+'d':'')+'</span>'
     +'<span style="color:var(--txt3);">Block time</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.block)+'</span>'
-    +'<span style="color:var(--txt3);">Min ground</span><span style="font-family:monospace;color:#fff;">'+bar.ground+' min</span>'
+    +'<span style="color:var(--txt3);">Ground</span><span style="font-family:monospace;color:#fff;">'+bar.ground+' min</span>'
     +'<span style="color:var(--txt3);">Flight no.</span><span style="font-family:monospace;color:#fff;">'+bar.fnum+'</span>'
     +'<span style="color:var(--txt3);">Type</span><span style="color:'+(night?'#5a8dee':'#f0b400')+';">'+(night?'☾ Overnight (+'+bar.dayCross+' day)':'☀ Same day')+'</span>'
     +'<span style="color:var(--txt3);">Assigned</span><span style="color:#fff;">'+(bar.assigned||0)+' / 7</span>'
