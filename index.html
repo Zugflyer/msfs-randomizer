@@ -8784,7 +8784,18 @@ function renderRotationBars() {
         if(rotDailyLegs.has(li)) rotDailyLegs.delete(li); else rotDailyLegs.add(li);
         renderRotationBars();
       };
-      trackCol.appendChild(dailyBtn);
+      // 🗑 next to Daily: remove every placed rotation of this flight (all days, all aircraft)
+      const nAsg = rotLegAssignmentCount(parseInt(legIdx));
+      const trashBtn=document.createElement('button');
+      trashBtn.textContent='🗑';
+      trashBtn.title = nAsg ? 'Remove this flight from ALL days and aircraft ('+nAsg+' placed)' : 'Not placed on any aircraft yet';
+      trashBtn.disabled = !nAsg;
+      trashBtn.style.cssText='font-size:11px;line-height:1;padding:2px 6px;border-radius:10px;border:1px solid '+(nAsg?'rgba(248,81,73,.5)':'var(--bdr2)')+';background:transparent;color:'+(nAsg?'#f85149':'var(--txt3)')+';cursor:'+(nAsg?'pointer':'default')+';opacity:'+(nAsg?1:.4)+';';
+      trashBtn.onclick=()=>{ if(nAsg) removeLegEverywhere(parseInt(legIdx)); };
+      const dailyRow=document.createElement('div');
+      dailyRow.style.cssText='display:flex;align-items:center;gap:4px;';
+      dailyRow.appendChild(dailyBtn); dailyRow.appendChild(trashBtn);
+      trackCol.appendChild(dailyRow);
     }
     rowWrap.appendChild(trackCol);
 
@@ -8809,6 +8820,29 @@ function renderRotationBars() {
       if(ret.length) buildRow(legIdx, ret, 'ret', true);
     }
   });
+}
+
+// How often a flight (legIdx) is placed on aircraft — all days, both weeks.
+function rotLegAssignmentCount(legIdx){
+  let n=0;
+  rotAircraft.forEach(ac=>Object.values(ac.assignments||{}).forEach(list=>(list||[]).forEach(a=>{ if(a.legIdx===legIdx) n++; })));
+  return n;
+}
+// Remove every placed rotation of one flight from all days and all aircraft (🗑 next to Daily).
+function removeLegEverywhere(legIdx){
+  rotAircraft.forEach(ac=>{
+    Object.keys(ac.assignments||{}).forEach(d=>{
+      ac.assignments[d] = (ac.assignments[d]||[]).filter(a=>a.legIdx!==legIdx);
+    });
+  });
+  rotBars.filter(b=>b.legIdx===legIdx).forEach(b=>{ b.assigned=0; });
+  // redraw without jumping (keep the scroll position of both panes)
+  const cont=document.getElementById('rot-bars-container'), lanes=document.getElementById('rot-lanes-container');
+  const sx=cont?cont.scrollLeft:0, sy=cont?cont.scrollTop:0, lx=lanes?lanes.scrollLeft:0, ly=lanes?lanes.scrollTop:0;
+  renderRotationBars(); renderRotationLanes();
+  const restore=()=>{ const c2=document.getElementById('rot-bars-container'); if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
+                      const l2=document.getElementById('rot-lanes-container'); if(l2){ l2.scrollLeft=lx; l2.scrollTop=ly; } };
+  restore(); requestAnimationFrame(restore);
 }
 
 function splitRotation(legIdx){ rotSplitLegs.add(legIdx); renderRotationBars(); }
