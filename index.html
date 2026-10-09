@@ -993,11 +993,11 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 
           <!-- Import routes from Excel: with times → Known schedule, without times → Random schedule -->
           <div id="aigen-al-import" style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-            <label title="Import flights from an Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD). DEP/ARR empty = Random schedule; FLN empty = flight numbers are generated."
+            <label title="Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD): DEP/ARR empty = Random schedule, FLN empty = flight numbers are generated. — TTools files: select Flightplans_CRE_….txt and Aircraft_CRE_….txt together; the routes and the rotation planner are rebuilt with the exact times."
               style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;">
-              ⬆ Import XLS
-              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xls,.csv" style="display:none;"
-                onchange="if(this.files&&this.files[0]){ aiGenAlImportXls(this.files[0]); } this.value='';">
+              ⬆ Import XLS / TTools
+              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xls,.csv,.txt" multiple style="display:none;"
+                onchange="if(this.files&&this.files.length){ aiGenAlImportFiles(this.files); } this.value='';">
             </label>
             <span id="aigen-al-import-status" style="font-size:10px;color:var(--txt3);max-width:260px;text-align:center;"></span>
           </div>
@@ -6261,6 +6261,7 @@ async function aiGenAlImportXls(file) {
       aiGenAlLegs = aiGenAlLegs.filter(l=>l.arr || l.depFixed || l.flightNum).concat(legs);
     } else {
       aiGenAlLegs = legs;
+      aiGenAlExtraLegs = [];
     }
     aiGenAlSchedMode = timed ? 'known' : 'random';
     try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
@@ -6284,6 +6285,241 @@ async function aiGenAlImportXls(file) {
   }
 }
 
+// ══ Import TTools files back into the generator ══════════════════════════════════
+// Flightplans_CRE_xxx.txt (+ Aircraft_CRE_xxx.txt for the aircraft types). Every
+// aircraft's week (or 2 weeks) is cut into rotations from its base and back. Rotations
+// flown out and back the same way (A→B→A, A→B→C→B→A) become route rows with their
+// exact times (Known schedule); the planner is rebuilt with every rotation on its aircraft
+// and day, so it can be redistributed and exported again. Rotations with another shape
+// (e.g. A→B→C→A) can't be shown as rows — they stay on the planner as they are.
+let aiGenAlExtraLegs = [];      // planner-only rotations from a TTools import (validLeg objects)
+function alExtraValidLegs(){ return aiGenAlExtraLegs.filter(l=>l.airline===aiGenAirline); }
+function aiGenAlDiscardExtras(){ aiGenAlExtraLegs = []; renderAiGenAlLegs(); }
+
+function ttParseStamp(v){                        // "D/HH:MM" or "1/D/HH:MM" → minutes in the cycle
+  const p=String(v||'').trim().split('/');
+  let w=0, d, t;
+  if (p.length===3) { w=parseInt(p[0],10); d=parseInt(p[1],10); t=p[2]; }
+  else if (p.length===2) { d=parseInt(p[0],10); t=p[1]; }
+  else return null;
+  const m=String(t).match(/^(\d{1,2}):(\d{2})$/);
+  if (!m || isNaN(d) || isNaN(w) || d<0 || d>6) return null;
+  return w*10080 + d*1440 + (+m[1])*60 + (+m[2]);
+}
+function ttParseFlightplans(text){
+  const acs=[];
+  String(text||'').split(/\r?\n/).forEach(raw=>{
+    const line=raw.trim();
+    if (!/^AC#\d+/i.test(line) || /"/.test(line)) return;      // aircraft-file lines carry a quoted title
+    const f=line.split(',').map(x=>x.trim());
+    let i=2; while (i<f.length && ttParseStamp(f[i])==null) i++;
+    const legs=[];
+    for (; i+5<f.length; i+=6) {
+      const dep=ttParseStamp(f[i]), arr=ttParseStamp(f[i+1]), to=String(f[i+5]||'').toUpperCase();
+      if (dep==null || arr==null || !to) break;
+      legs.push({ dep, arr, fnum:String(f[i+4]||'').replace(/\D/g,''), to });
+    }
+    if (!legs.length) return;
+    acs.push({ acNum:parseInt(f[0].slice(3),10), reg:f[1], twoWeeks:/2/.test(f[3]||''), legs });
+  });
+  return acs;
+}
+function ttParseAircraftTitles(text){
+  const out={};
+  String(text||'').split(/\r?\n/).forEach(raw=>{
+    const m=raw.trim().match(/^AC#(\d+)\s*,[^,]*,\s*"([^"]*)"/i);
+    if (m) out[parseInt(m[1],10)] = m[2];
+  });
+  return out;
+}
+// "AIGAIM_ITF A320 NCv2" (written by this app) or e.g. "FAIB B742 TWA" → {airline, eqp}
+function ttTitleInfo(title){
+  const t=String(title||'').toUpperCase();
+  const m=t.match(/AIGAIM_([A-Z0-9]{2,4})\s+([A-Z0-9]{2,5})/);
+  if (m) return { airline:m[1], eqp:m[2] };
+  const tok=t.split(/[\s_\-]+/).filter(Boolean);
+  const eqp=tok.find(x=>/^[A-Z]{1,3}\d{1,3}[A-Z0-9]{0,2}$/.test(x) && !/^NCV?\d/.test(x)) || '';
+  const airline=tok.find(x=>/^[A-Z]{3}$/.test(x) && x!==eqp) || '';
+  return { airline, eqp };
+}
+
+async function aiGenAlImportTTools(files){
+  const st=document.getElementById('aigen-al-import-status');
+  const say=(txt,col)=>{ if(st){ st.textContent=txt; st.style.color=col||'var(--txt3)'; } };
+  try {
+    const texts=await Promise.all(files.map(f=>f.text()));
+    let fpText='', fpName='', acText='', acName='';
+    files.forEach((f,i)=>{
+      const tx=texts[i];
+      if (/^\s*AC#\d+\s*,[^,]*,\s*"/m.test(tx) && !/\d\/\d{1,2}:\d{2}/.test(tx)) { acText=tx; acName=f.name; }
+      else { fpText=tx; fpName=f.name; }
+    });
+    const acs=ttParseFlightplans(fpText);
+    if (!acs.length) { say('No TTools flight plan found. Select the Flightplans_CRE_….txt file (and the Aircraft_CRE_….txt file).','#f85149'); return; }
+    const titles=ttParseAircraftTitles(acText);
+    const notes=[];
+    if (!acText) notes.push('Aircraft file missing — types shown as AC1, AC2 … (select both files)');
+
+    // airline: file name (…_CRE_ITF.txt) → aircraft titles → the code already entered
+    const fromName=(fpName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||acName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||[])[1];
+    const fromTitle=Object.values(titles).map(t=>ttTitleInfo(t).airline).find(Boolean);
+    const airline=String(fromName||fromTitle||aiGenAirline||'').toUpperCase();
+    if (!airline || airline.length<3) { say('Airline code unknown — enter it above and import again.','#f85149'); return; }
+    const eqpOf=n=> (titles[n] && ttTitleInfo(titles[n]).eqp) || ('AC'+n);
+
+    // continuity: each flight departs where the previous one (cyclically) arrived
+    const unknown=new Set();
+    acs.forEach(ac=>{ ac.legs.forEach((l,i)=>{ l.from=ac.legs[(i-1+ac.legs.length)%ac.legs.length].to; });
+      ac.legs.forEach(l=>{ [l.from,l.to].forEach(c=>{ if(!schedByCode[c]) unknown.add(c); }); }); });
+    // base: the hub entered above if the plan uses it, else the most frequent departure airport
+    const depCount={}; acs.forEach(ac=>ac.legs.forEach(l=>{ depCount[l.from]=(depCount[l.from]||0)+1; }));
+    let hub = (aiGenAlHub && depCount[aiGenAlHub[0]]) ? aiGenAlHub[0]
+            : Object.keys(depCount).sort((x,y)=>depCount[y]-depCount[x])[0];
+
+    const hasContent = aiGenAlLegs.some(l=>l.arr || l.depFixed || l.flightNum) || rotHasAssignments() || aiGenAlExtraLegs.length;
+    if (hasContent && !confirm('Replace the current routes and the rotation planner with the TTools files?')) { say('Import cancelled.'); return; }
+
+    // ── cut every aircraft's plan into rotations (base → … → base) ──
+    const groups=new Map();           // signature → {tour, eqp, occ:[{ac, start}]}
+    let skipped=0;
+    acs.forEach(ac=>{
+      const span = ac.twoWeeks ? 20160 : 10080;
+      const L=ac.legs;
+      const base = L.some(l=>l.from===hub) ? hub
+                 : (()=>{ const c={}; L.forEach(l=>{c[l.from]=(c[l.from]||0)+1;}); return Object.keys(c).sort((x,y)=>c[y]-c[x])[0]; })();
+      let k=L.findIndex(l=>l.from===base); if (k<0) k=0;
+      const R=L.slice(k).concat(L.slice(0,k));
+      let prev=-Infinity;
+      const seq=R.map(l=>{ let d=l.dep; while (d<prev) d+=span; const blk=((l.arr-l.dep)%span+span)%span; prev=d+blk; return { from:l.from, to:l.to, fnum:l.fnum, dep:d, block:blk }; });
+      const tours=[]; let cur=[];
+      seq.forEach(x=>{ cur.push(x); if (x.to===base) { tours.push(cur); cur=[]; } });
+      if (cur.length) tours.push(cur);
+      tours.forEach(t=>{
+        if (t.some(x=>!schedByCode[x.from] || !schedByCode[x.to])) { skipped++; return; }
+        const start=t[0].dep;
+        const sig=[eqpOf(ac.acNum), ((start%1440)+1440)%1440, t.map(x=>[x.from,x.to,x.fnum,x.dep-start,x.block].join(':')).join('|')].join('#');
+        if (!groups.has(sig)) groups.set(sig, { tour:t.map(x=>Object.assign({}, x, { dep:x.dep-start })), eqp:eqpOf(ac.acNum), startTod:((start%1440)+1440)%1440, occ:[] });
+        groups.get(sig).occ.push({ ac, start, span });
+      });
+    });
+    if (!groups.size) { say('Nothing imported'+(unknown.size?' — unknown airports: '+[...unknown].join(', '):''),'#f85149'); return; }
+
+    // ── rows (Known schedule) and planner-only rotations ──
+    const ap=c=>schedByCode[c];
+    const hhmm=m=>{ m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+    const dur=m=>Math.floor(m/60)+':'+String(m%60).padStart(2,'0');
+    // local clock + day offset of a flight (times relative to the first departure of the tour)
+    const loc=(g,x)=>{
+      const d=g.startTod + x.dep, a=d + x.block;
+      const ld=d + getUtcOffset(ap(x.from))*60, la=a + getUtcOffset(ap(x.to))*60;
+      return { dep:hhmm(ld), arr:hhmm(la), off:Math.floor(la/1440)-Math.floor(ld/1440) };
+    };
+    const rows=[], extras=[], gList=[...groups.values()];
+    gList.forEach((g,gid)=>{
+      const t=g.tour, n=t.length;
+      const pal = n>=2 && n%2===0 && t.every((x,i)=> i>=n/2 || (x.from===t[n-1-i].to && x.to===t[n-1-i].from));
+      if (pal) {
+        for (let j=0; j<n/2; j++) {
+          const o=t[j], r=t[n-1-j], lo=loc(g,o), lr=loc(g,r);
+          const L=aiGenAlEmptyLeg();
+          L.eqp=g.eqp; L.dep=ap(o.from); L.arr=ap(o.to); L._editingDep=false;
+          L.flightNum=o.fnum; L.rFlightNum=r.fnum;
+          L.depFixed=lo.dep; L.arrFixed=lo.arr; L.arrDayOff=lo.off;
+          L.rDepFixed=lr.dep; L._custom_rDepFixed=true; L.rArrFixed=lr.arr; L.rArrDayOff=lr.off;
+          L.blockTime=dur(o.block); L.rBlockTime=dur(r.block);
+          if (j>0) L.cont=true; else { L._ttg=gid; L.ttFirst=true; }
+          rows.push(L);
+        }
+      } else {
+        const h=Math.ceil(n/2);
+        const segs=t.map((x,k2)=>({ half:k2<h?'out':'ret', dep:ap(x.from), arr:ap(x.to), depFixed:loc(g,x).dep, block:dur(x.block), fnum:x.fnum }));
+        extras.push({ dep:ap(t[0].from), arr:ap(t[h-1].to), airline, aircraft:g.eqp,
+          groundTime:String(alGroundTime(g.eqp, { groundOverride:aiGenAlMinGround })), dnOut:'any', dnRet:'any',
+          exact:true, knownSegs:segs, blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block, _ttg:gid });
+      }
+    });
+
+    // ── apply: airline, hub, Known schedule, cycle, rows ──
+    aiGenAirline=airline; aiGenAlHub=ap(hub)||aiGenAlHub;
+    aiGenAlSchedMode='known'; try { localStorage.setItem('aigen_al_schedmode','known'); } catch(e){}
+    if (acs.some(a=>a.twoWeeks) && ROT_WEEKS!==2) setRotCycleWeeks(2);
+    aiGenAlLegs=rows.length ? rows : [aiGenAlEmptyLeg()];
+    aiGenAlExtraLegs=extras.map(x=>{ const c=Object.assign({}, x); delete c._ttg; return c; });
+    renderAiGenAirline();
+
+    // ── planner: bars for every route, then every rotation back on its aircraft and day ──
+    const built=alBuildValidLegs();
+    const validLegs=built.validLegs.concat(alExtraValidLegs());
+    const legOf={};
+    built.units.forEach((u,idx)=>{ if (u[0] && u[0]._ttg!=null) legOf[u[0]._ttg]=idx; });
+    extras.forEach((x,k2)=>{ legOf[x._ttg]=built.validLegs.length+k2; });
+    rows.forEach(r=>{ delete r._ttg; });
+    const utc={};
+    validLegs.forEach(l=>{ (l.knownSegs||[{dep:l.dep,arr:l.arr}]).forEach(h=>{ utc[h.dep[0]]=getUtcOffset(h.dep); utc[h.arr[0]]=getUtcOffset(h.arr); }); });
+    const regsByType={};
+    acs.forEach(a=>{ const k=airline+' '+eqpOf(a.acNum); (regsByType[k]=regsByType[k]||[]).push(a.reg); });
+    const routes=validLegs.map((l,idx)=> l.knownSegs ? { r:idx+1 }
+      : { r:idx+1, block_out:l.blockTime, block_in:l.rBlockTime, fnum_out:l.flightNum, fnum_in:l.rFlightNum });
+    const research={ utc, routes, registrations:regsByType, _sig:alResearchSig(validLegs) };
+    rotResearch=research;
+    switchView('rotations');
+    buildRotationBars(validLegs, research);
+    rotLegKeys=rotRouteKeys(validLegs);
+    routes.forEach((rt,idx)=>{ if (rt.fnum_out||rt.fnum_in) rotFnumByKey[rotLegKeys[idx]]={ fnum_out:rt.fnum_out, fnum_in:rt.fnum_in }; });
+
+    const fleet=[], seenType={};
+    acs.forEach(a=>{
+      const eqp=eqpOf(a.acNum), key=airline+'|'+eqp;
+      seenType[key]=(seenType[key]||0);
+      fleet.push({ key, airline, eqp, reg:a.reg, regPool:regsByType[airline+' '+eqp].slice(), regIdx:seenType[key]++, assignments:rotEmptyAssignments(), _src:a });
+    });
+    let placed=0, lost=0;
+    gList.forEach((g,gid)=>{
+      const li=legOf[gid];
+      const bars=rotBars.filter(b=>b.legIdx===li).sort(rotBarOrder);
+      g.occ.forEach(o=>{
+        const ac=fleet.find(f=>f._src===o.ac);
+        if (li==null || bars.length!==g.tour.length || !ac) { lost++; return; }
+        const start=((o.start % o.span)+o.span)%o.span;
+        const segs=g.tour.map((x,k2)=>{
+          const base=barToUTCSeg(bars[k2]);
+          const absDep=start + x.dep, absArr=absDep + x.block;
+          return Object.assign(base, { depUTC:((absDep%1440)+1440)%1440, arrUTC:((absArr%1440)+1440)%1440,
+            utcDayCross:Math.floor((((absDep%1440)+1440)%1440 + x.block)/1440), fnum:x.fnum||base.fnum, block:x.block,
+            absDep:((absDep%ROT_SPAN)+ROT_SPAN)%ROT_SPAN, absArr:((absArr%ROT_SPAN)+ROT_SPAN)%ROT_SPAN });
+        });
+        const day=Math.floor(start/1440) % ROT_NDAYS;
+        rotDayList(ac, day).push({ uid:'asg-tt-'+gid+'-'+placed+'-'+Math.random().toString(36).slice(2,6), legIdx:li, dropDay:day, kind:'pair', segs });
+        placed++;
+      });
+    });
+    fleet.forEach(f=>{ delete f._src; });
+    rotAircraft=fleet;
+    renderRotationBars(); renderRotationLanes();
+
+    const nRot=gList.length;
+    let msg='✓ '+acs.length+' aircraft · '+placed+' rotations placed · '+rows.length+' route rows';
+    if (extras.length) msg+=' · '+extras.length+' irregular rotation'+(extras.length>1?'s':'')+' kept on the planner only';
+    if (skipped) msg+=' · '+skipped+' rotation'+(skipped>1?'s':'')+' skipped (unknown airports: '+[...unknown].join(', ')+')';
+    if (lost) msg+=' · '+lost+' could not be placed';
+    if (notes.length) msg+=' · '+notes.join(' · ');
+    say(msg, (skipped||lost||notes.length) ? '#e0b341' : '#3fb950');
+    const rs=document.getElementById('rot-status');
+    if (rs) rs.textContent=msg.replace('✓','✓ TTools import:')+' · '+nRot+' different rotations · move, edit or delete them and export again';
+  } catch(e) {
+    console.error('TTools import failed', e);
+    say('Import failed: '+(e && e.message || e), '#f85149');
+  }
+}
+// One import button for both: .txt → TTools files, otherwise Excel
+function aiGenAlImportFiles(fileList){
+  const files=[...(fileList||[])];
+  if (!files.length) return;
+  const txt=files.filter(f=>/\.txt$/i.test(f.name));
+  if (txt.length) aiGenAlImportTTools(txt);
+  else aiGenAlImportXls(files[0]);
+}
+
 // Multi-stop flights (both schedule modes). Row B continues the flight of row A when B
 // departs where A arrives AND either
 //   • both rows carry the same outbound flight number (708 SBGL→LPPT + 708 LPPT→LPPR), or
@@ -6292,9 +6528,12 @@ function alRowContinues(a, b) {
   if (!a || !b || a===b || !a.arr || !b.dep || b.dep[0]!==a.arr[0]) return false;
   const isSplit = l => Array.isArray(l.stops) && l.stops.length;
   if (isSplit(a) || isSplit(b)) return false;
+  // an explicit link always means the row directly above
+  if (b.cont) return aiGenAlLegs[aiGenAlLegs.indexOf(b)-1]===a;
+  // first row of a rotation imported from TTools: starts its own flight
+  if (b.ttFirst) return false;
   const fd = v => String(v||'').replace(/\D/g,'');
-  if (fd(a.flightNum) && fd(a.flightNum)===fd(b.flightNum)) return true;
-  return !!b.cont && aiGenAlLegs[aiGenAlLegs.indexOf(b)-1]===a;
+  return !!(fd(a.flightNum) && fd(a.flightNum)===fd(b.flightNum));
 }
 // Group route rows into multi-stop flights. Returns an array of row arrays in flown order.
 function alGroupKnownChains(rows) {
@@ -6718,6 +6957,17 @@ function _renderAiGenAlLegsNow() {
     return;
   }
   if (!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg());
+  const nExtra = alExtraValidLegs().length;
+  if (nExtra) {
+    const note=document.createElement('div');
+    note.style.cssText='display:flex;align-items:center;gap:10px;margin:0 8px 8px;padding:6px 10px;border:1px dashed rgba(224,179,65,.5);border-radius:6px;font-size:11px;color:#e0b341;';
+    note.innerHTML='<span>⚑ '+nExtra+' rotation'+(nExtra>1?'s':'')+' from the TTools import fly an irregular routing (e.g. A→B→C→A). They can\'t be shown as rows here, but they stay on the planner with their times and are exported again.</span>';
+    const del=document.createElement('button'); del.textContent='✕ Discard them';
+    del.style.cssText='margin-left:auto;font-size:10px;padding:3px 9px;border-radius:10px;border:1px solid rgba(224,179,65,.5);background:transparent;color:#e0b341;cursor:pointer;white-space:nowrap;';
+    del.onclick=()=>aiGenAlDiscardExtras();
+    note.appendChild(del);
+    container.appendChild(note);
+  }
 
   const mDepFrom  = document.getElementById('aigen-al-dep-from')?.value  || '06:00';
   const mDepUntil = document.getElementById('aigen-al-dep-until')?.value || '22:30';
@@ -8033,16 +8283,9 @@ async function createRotations() {
 }
 
 
-// ── Airline-mode: build rotations from aiGenAlLegs ────────────────────────────
-// Uses UI-computed block times + UTC offsets; one API call only for flight numbers
-// + registrations (keeps under the input-token limit and respects manual overrides).
-async function createRotationsAirline(mode) {
-  let keep = (mode==='keep');
-  if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
-  if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
-  const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
-  if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
-
+// Route rows → the legs the rotation planner builds bars from (shared by Generate
+// Rotations and the TTools import). Returns { src, units, validLegs, knownMode }.
+function alBuildValidLegs() {
   // Keep only legs that are completely specified.
   const isChain = l => Array.isArray(l.stops) && l.stops.length;
   const chainComplete = l => l.outHops && l.outHops.every(h=>h.dep&&h.arr&&h.blockTime)
@@ -8052,12 +8295,6 @@ async function createRotationsAirline(mode) {
     isChain(l) ? chainComplete(l)
     : (l.dep && l.arr && (knownMode ? (alKnownBlock(l,'out') && alKnownBlock(l,'ret')) : (l.blockTime && l.rBlockTime)))
   ));
-  if (!src.length) {
-    alert(knownMode
-      ? 'Please complete at least one route: airports, EQP, and DEP + ARR times for outbound and return.'
-      : 'Please complete at least one route (all airports, EQP, and block times).');
-    return;
-  }
 
   // Convert to the shape buildRotationBars expects.
   // If the user entered a FIXED departure time for a leg, pin that leg to exactly that
@@ -8111,6 +8348,33 @@ async function createRotationsAirline(mode) {
       da1: retFixed ? '00:00' : l.raa1, da2: retFixed ? '23:59' : l.raa2,
     };
   });
+  return { src, units, validLegs, knownMode };
+}
+// Research signature (cache key) over the converted legs.
+function alResearchSig(validLegs) {
+  return JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime,l.flightNum||'',l.rFlightNum||'',
+    (l.knownSegs||[]).map(x=>x.dep[0]+':'+(x.fnum||'')).join('-')]));
+}
+
+// ── Airline-mode: build rotations from aiGenAlLegs ────────────────────────────
+// Uses UI-computed block times + UTC offsets; one API call only for flight numbers
+// + registrations (keeps under the input-token limit and respects manual overrides).
+async function createRotationsAirline(mode) {
+  let keep = (mode==='keep');
+  if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
+  if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
+  const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;
+  if (!apiKey) { alert('This feature needs an API key (set it with the 🔑 button).'); return; }
+
+  const built = alBuildValidLegs();
+  const extras = alExtraValidLegs();                 // irregular rotations from a TTools import
+  if (!built.src.length && !extras.length) {
+    alert(built.knownMode
+      ? 'Please complete at least one route: airports, EQP, and DEP + ARR times for outbound and return.'
+      : 'Please complete at least one route (all airports, EQP, and block times).');
+    return;
+  }
+  const validLegs = built.validLegs.concat(extras);
 
   // Full regeneration throws the planner away — ask first when rotations are assigned.
   if (keep && !(rotLegKeys && rotHasAssignments())) keep = false;      // nothing to keep
@@ -8154,8 +8418,7 @@ async function createRotationsAirline(mode) {
     : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
 
   // Cache check (signature over the converted legs)
-  const sig = JSON.stringify(validLegs.map(l=>[l.dep[0],l.arr[0],l.airline,l.aircraft,l.blockTime,l.rBlockTime,l.flightNum||'',l.rFlightNum||'',
-    (l.knownSegs||[]).map(x=>x.dep[0]+':'+(x.fnum||'')).join('-')]));
+  const sig = alResearchSig(validLegs);
   if (rotResearch && rotResearch._sig === sig) {
     setStatus('✓ Reusing cached research — rebuilding bars…');
     finish(rotResearch, ' (cached research)');
