@@ -6343,6 +6343,11 @@ function ttTitleInfo(title){
   return { airline, eqp };
 }
 
+// Out and back the same way: A→B→C→B→A (flight i mirrors flight n-1-i)
+function ttIsMirror(t){
+  const n=t.length;
+  return n>=2 && n%2===0 && t.every((x,i)=> i>=n/2 || (x.from===t[n-1-i].to && x.to===t[n-1-i].from));
+}
 async function aiGenAlImportTTools(files){
   const st=document.getElementById('aigen-al-import-status');
   const say=(txt,col)=>{ if(st){ st.textContent=txt; st.style.color=col||'var(--txt3)'; } };
@@ -6394,6 +6399,11 @@ async function aiGenAlImportTTools(files){
       const tours=[]; let cur=[];
       seq.forEach(x=>{ cur.push(x); if (x.to===base) { tours.push(cur); cur=[]; } });
       if (cur.length) tours.push(cur);
+      // two loops that mirror each other form one rotation (e.g. round the world eastbound
+      // SYD→…→SYD, then back westbound SYD→…→SYD)
+      for (let i=0; i<tours.length-1; i++) {
+        if (!ttIsMirror(tours[i]) && ttIsMirror(tours[i].concat(tours[i+1]))) tours.splice(i, 2, tours[i].concat(tours[i+1]));
+      }
       tours.forEach(t=>{
         if (t.some(x=>!schedByCode[x.from] || !schedByCode[x.to])) { skipped++; return; }
         const start=t[0].dep;
@@ -6417,7 +6427,7 @@ async function aiGenAlImportTTools(files){
     const rows=[], extras=[], gList=[...groups.values()];
     gList.forEach((g,gid)=>{
       const t=g.tour, n=t.length;
-      const pal = n>=2 && n%2===0 && t.every((x,i)=> i>=n/2 || (x.from===t[n-1-i].to && x.to===t[n-1-i].from));
+      const pal = ttIsMirror(t);
       if (pal) {
         for (let j=0; j<n/2; j++) {
           const o=t[j], r=t[n-1-j], lo=loc(g,o), lr=loc(g,r);
@@ -6550,7 +6560,19 @@ function alGroupKnownChains(rows) {
     while (next.has(x) && !used.has(next.get(x))) { x=next.get(x); c.push(x); used.add(x); }
     chains.push(c);
   });
-  rows.forEach(a=>{ if (!used.has(a)) chains.push([a]); });   // safety (circular links)
+  // Rows left over form closed loops: the same flight number all the way round, back to
+  // where it started (e.g. a round-the-world flight SYD→…→SYD). Start such a loop at the
+  // row leaving the hub (else its first row in the list) and follow it once round.
+  rows.forEach(a=>{
+    if (used.has(a)) return;
+    const loop=[]; let x=a;
+    while (x && !loop.includes(x)) { loop.push(x); x=next.get(x); }
+    const hubRow = aiGenAlHub ? loop.find(r=>r.dep && r.dep[0]===aiGenAlHub[0]) : null;
+    const start = hubRow || loop.reduce((m,r)=> rows.indexOf(r)<rows.indexOf(m) ? r : m, loop[0]);
+    const c=[start]; used.add(start); let y=start;
+    while (next.has(y) && !used.has(next.get(y))) { y=next.get(y); c.push(y); used.add(y); }
+    chains.push(c);
+  });
   return chains;
 }
 // Flight numbers of a chain: an empty field takes the number typed elsewhere in the same
