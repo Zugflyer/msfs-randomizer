@@ -1107,6 +1107,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
         <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
         <button onclick="openMergeDialog()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;white-space:nowrap;">+ Merge into Flightplan</button>
+        <button id="rot-daily-all" onclick="toggleRotDailyAll()" title="Daily for all rotations: when on, every rotation is set to Daily — dragging it onto an aircraft fills all 7 days of week 1. Single rotations can still be switched off with their own Daily button."
+          style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:#c9b8ff;cursor:pointer;white-space:nowrap;">Daily for all</button>
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
@@ -6604,6 +6606,7 @@ async function aiGenAlImportTTools(files){
     fleet.forEach(f=>{ delete f._src; });
     rotAircraft=fleet;
     rotLegNew=validLegs.map(()=>false);                    // everything here already exists
+    rotApplyDailyAll();
     // Aircraft file: kept verbatim for the export (titles, passengers, AC# numbers)
     const acLines=String(acText||'').split(/\r?\n/).map(x=>x.trim()).filter(x=>/^AC#\d+\s*,/.test(x));
     rotAcMeta = { airline, lines:acLines,
@@ -8283,6 +8286,23 @@ let rotResearch = null;  // cached research so we don't re-call API
 let rotAircraft = [];    // [{type, eqp, airline, reg, assignments:{0:[],...13:[]}}] day 0=Sun wk1 .. 13=Sat wk2
 let rotSplitLegs = new Set(); // legIdx values whose outbound/return are split into independent bars
 let rotDailyLegs = new Set(); // legIdx values marked "Daily" — dropping replicates to the 7 days of week 1
+// Master switch in the planner header: every rotation is Daily (also new ones after an update)
+let rotDailyAll = (function(){ try { return localStorage.getItem('rot_daily_all')==='1'; } catch(e) { return false; } })();
+function rotApplyDailyAll(){ if (rotDailyAll) rotBars.forEach(b=>rotDailyLegs.add(b.legIdx)); }
+function toggleRotDailyAll(){
+  rotDailyAll = !rotDailyAll;
+  try { localStorage.setItem('rot_daily_all', rotDailyAll ? '1' : '0'); } catch(e) {}
+  if (rotDailyAll) rotApplyDailyAll(); else rotDailyLegs = new Set();
+  const cont=document.getElementById('rot-bars-container'); const sy=cont?cont.scrollTop:0;
+  renderRotationBars();
+  if (cont) cont.scrollTop=sy;
+}
+function applyRotDailyAllUI(){
+  const b=document.getElementById('rot-daily-all'); if (!b) return;
+  b.textContent = (rotDailyAll ? '✓ ' : '') + 'Daily for all';
+  b.style.background = rotDailyAll ? 'var(--acc)' : 'transparent';
+  b.style.color = rotDailyAll ? '#fff' : '#c9b8ff';
+}
 let rotLegKeys = null;        // route key per legIdx of the current bars (airline mode) — lets "Update unassigned" find them again
 let rotFnumByKey = {};        // route key → {fnum_out, fnum_in} already researched (no new API call needed)
 let rotLegNew = null;         // per legIdx: true = route added after a TTools import (shown first, marked NEW)
@@ -8637,6 +8657,7 @@ async function createRotationsAirline(mode) {
           + (r.dropped ? ' · '+r.dropped+' assignment'+(r.dropped===1?'':'s')+' removed (route deleted or changed)' : '');
     }
     renderRotationLanes();
+    if (rotDailyAll) { rotApplyDailyAll(); renderRotationBars(); }
     setStatus('✓ '+rotBars.length+' bars ready'+msg+' · drag onto aircraft below'+(note||''));
   };
 
@@ -9036,6 +9057,7 @@ function rotBarOrder(a,b){
 function renderRotationBars() {
   const container = document.getElementById('rot-bars-container');
   if (!container) return;
+  applyRotDailyAllUI();
   container.innerHTML = '';
   const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
@@ -9503,6 +9525,7 @@ function rotSwapAircraft(acIdx, newEqp){
   buildRotationBars(validLegs2, { utc, routes:[], registrations:(keepResearch&&keepResearch.registrations)||{} });
   rotResearch=keepResearch;
   const res=rotRestoreAssignments(prev, newKeys, { keepAllBars:true, noNewAircraft:true });
+  rotApplyDailyAll();
   rotLegKeys=newKeys;
   rotLegNew=built2.units.map(u=>!(u[0] && u[0].ttImported)).concat(extras2.map(()=>false));
   // flight numbers per route from the bars (so later updates need no research for them)
