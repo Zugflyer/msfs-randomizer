@@ -1014,7 +1014,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <label title="Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD): DEP/ARR empty = Random schedule, FLN empty = flight numbers are generated. — TTools files: select Flightplans_CRE_….txt and Aircraft_CRE_….txt together; the routes and the rotation planner are rebuilt with the exact times."
               style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;">
               ⬆ Import XLS / TTools
-              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xls,.csv,.txt" multiple style="display:none;"
+              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xlsm,.xlsb,.xls,.ods,.csv,.txt" multiple style="display:none;"
                 onchange="if(this.files&&this.files.length){ aiGenAlImportFiles(this.files); } this.value='';">
             </label>
             <span id="aigen-al-import-status" style="font-size:10px;color:var(--txt3);max-width:260px;text-align:center;"></span>
@@ -6154,13 +6154,25 @@ function alFindAirport(code) {
   return schedByCode[c] || (c.length===3 ? schedByIata[c] : null) || null;
 }
 // Read the sheet rows (array of arrays) into flight segments.
+// The legs table: the first row that has FROM and TO plus at least one more known column
+// (FLN, DEP, ARR, EQP …). Anything above it — summaries, counters — is ignored.
+const AL_SHEET_HEADS = ['AIRLINE','AL','ALN','CARRIER','FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO','DEP','STD','ARR','STA',
+  'NIGHTFLIGHT','NIGHT','EQP','TYPE','AIRCRAFT','GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT'];
+function alFindLegsHeader(rows){
+  return rows.findIndex(r=>{
+    if (!Array.isArray(r)) return false;
+    const h=r.map(c=>String(c==null?'':c).trim().toUpperCase());
+    const hasFrom=h.some(x=>['FROM','DEPARTURE','ORIGIN'].includes(x)), hasTo=h.some(x=>['TO','ARRIVAL','DEST','DESTINATION'].includes(x));
+    return hasFrom && hasTo && h.filter(x=>AL_SHEET_HEADS.includes(x)).length>=1;
+  });
+}
 function alSheetToSegments(rows) {
   const out={ segs:[], problems:[], airlines:new Set() };
-  const hIdx=rows.findIndex(r=>Array.isArray(r) && r.some(c=>/^(FLN|FROM|DEP)$/i.test(String(c||'').trim())));
-  if (hIdx<0) { out.problems.push('No header row found (expected FLN, FROM, DEP, ARR, TO …)'); return out; }
+  const hIdx=alFindLegsHeader(rows);
+  if (hIdx<0) { out.problems.push('No header row found (expected FROM and TO, plus FLN, DEP, ARR, EQP …)'); return out; }
   const head=rows[hIdx].map(c=>String(c||'').trim().toUpperCase());
   const col=names=>head.findIndex(h=>names.includes(h));
-  const C={ al:col(['AIRLINE','AL']), fln:col(['FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO']), from:col(['FROM','DEPARTURE','ORIGIN']),
+  const C={ al:col(['AIRLINE','AL','ALN','CARRIER']), fln:col(['FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO']), from:col(['FROM','DEPARTURE','ORIGIN']),
             dep:col(['DEP','STD']), arr:col(['ARR','STA']), off:col(['NIGHTFLIGHT','NIGHT','DAY','+1']),
             to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']),
             grd:col(['GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT']) };
@@ -6172,6 +6184,7 @@ function alSheetToSegments(rows) {
     const row=rows[r]||[];
     const get=k=> C[k]>=0 ? row[C[k]] : null;
     if (row.every(c=>c===null||c===undefined||String(c).trim()==='')) continue;
+    if (String(get('from')||'').trim()==='' && String(get('to')||'').trim()==='') continue;   // no airports on this line
     const fromCode=String(get('from')||'').trim() || prevTo;
     const toCode=String(get('to')||'').trim();
     prevTo=toCode;
@@ -6228,8 +6241,13 @@ async function aiGenAlImportXls(file) {
   try {
     const buf=await file.arrayBuffer();
     const wb=XLSX.read(new Uint8Array(buf), { type:'array' });
-    const ws=wb.Sheets[wb.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws, { header:1, raw:true, defval:null });
+    // the sheet that holds the legs table (e.g. Sheet1 of a planning workbook with helper sheets)
+    let rows=null;
+    for (const nm of wb.SheetNames) {
+      const r=XLSX.utils.sheet_to_json(wb.Sheets[nm], { header:1, raw:true, defval:null });
+      if (alFindLegsHeader(r)>=0) { rows=r; break; }
+    }
+    if (!rows) rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null });
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
     const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
@@ -6328,7 +6346,13 @@ async function aiGenAlImportXls(file) {
     if (nLinked) msg+=' · '+nLinked+' onward flight'+(nLinked>1?'s':'')+' linked (multi-stop)';
     if (oneWay) msg+=' · '+oneWay+' without return (please complete)';
     if (noTimes) msg+=' · '+noTimes+' without times (please complete)';
-    if (parsed.problems.length) msg+=' · check: '+parsed.problems.join('; ');
+    if (parsed.problems.length) {
+      const unk={}; const other=[];
+      parsed.problems.forEach(p=>{ const m=p.match(/unknown airport (\S+)/); if (m) unk[m[1]]=(unk[m[1]]||0)+1; else other.push(p); });
+      const u=Object.keys(unk);
+      if (u.length) msg+=' · unknown airport'+(u.length>1?'s':'')+' (rows skipped): '+u.map(c=>c+' ×'+unk[c]).join(', ')+' — add the code via Data → Edit Airport';
+      if (other.length) msg+=' · check: '+other.join('; ');
+    }
     if (!aiGenAirline) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
     else if (!aiGenAlHub) msg+=' · select the hub above';
     say(msg, (oneWay||noTimes||parsed.problems.length) ? '#e0b341' : '#3fb950');
