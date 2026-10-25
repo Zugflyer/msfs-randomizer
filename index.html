@@ -1112,7 +1112,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       </div>
       <!-- Top half: time bars (50%) -->
       <div style="display:flex;flex-direction:column;overflow:hidden;flex:0 0 50%;border-bottom:2px solid var(--bdr2);">
-        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;display:flex;align-items:center;gap:12px;"><span>Time bars — one per leg (outbound &amp; return) · drag a pair down onto an aircraft/day</span><span id="rot-bars-tools" style="margin-left:auto;display:flex;align-items:center;gap:8px;text-transform:none;letter-spacing:0;"></span></div>
+        <div style="padding:8px 16px 4px;font-size:11px;font-weight:600;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;flex-shrink:0;display:flex;align-items:center;gap:12px;"><span>Time bars — one per leg (outbound &amp; return) · drag a pair down onto an aircraft/day</span><span id="rot-bars-tools" style="display:flex;align-items:center;gap:10px;text-transform:none;letter-spacing:0;"></span></div>
         <div id="rot-bars-container" style="flex:1;overflow-y:auto;padding:6px 16px 12px;display:flex;flex-direction:column;gap:8px;"></div>
       </div>
       <!-- Bottom half: aircraft resources with weekly UTC calendar (50%) -->
@@ -6394,7 +6394,9 @@ function ttTitleInfo(title){
   if (m) return { airline:m[1], eqp:m[2] };
   const tok=t.split(/[\s_\-]+/).filter(Boolean);
   const eqp=tok.find(x=>/^[A-Z]{1,3}\d{1,3}[A-Z0-9]{0,2}$/.test(x) && !/^NCV?\d/.test(x)) || '';
-  const airline=tok.find(x=>/^[A-Z]{3}$/.test(x) && x!==eqp) || '';
+  // the airline code follows the type ("OSP AT43 ITF": OSP is the model maker, ITF the airline)
+  const after=tok.slice(tok.indexOf(eqp)+1).find(x=>/^[A-Z]{3}$/.test(x));
+  const airline=after || tok.find(x=>/^[A-Z]{3}$/.test(x) && x!==eqp) || '';
   return { airline, eqp };
 }
 
@@ -6422,7 +6424,8 @@ async function aiGenAlImportTTools(files){
 
     // airline: file name (…_CRE_ITF.txt) → aircraft titles → the code already entered
     const fromName=(fpName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||acName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||[])[1];
-    const fromTitle=Object.values(titles).map(t=>ttTitleInfo(t).airline).find(Boolean);
+    const tAir={}; Object.values(titles).forEach(t=>{ const a=ttTitleInfo(t).airline; if (a) tAir[a]=(tAir[a]||0)+1; });
+    const fromTitle=(aiGenAirline && tAir[aiGenAirline]) ? aiGenAirline : Object.keys(tAir).sort((x,y)=>tAir[y]-tAir[x])[0];
     const airline=String(fromName||fromTitle||aiGenAirline||'').toUpperCase();
     if (!airline || airline.length<3) { say('Airline code unknown — enter it above and import again.','#f85149'); return; }
     const eqpOf=n=> (titles[n] && ttTitleInfo(titles[n]).eqp) || ('AC'+n);
@@ -8274,6 +8277,26 @@ function rotNextReg(key, pool){
   if (used.has(String(r).toUpperCase())) r = rotRegIncrement(r);
   return r;
 }
+// The airline code was changed in the header (e.g. corrected after an import): carry the
+// planner over to the new code — aircraft, bars, route keys, researched flight numbers and
+// registrations — so "Update unassigned" recognises every rotation as before.
+function rotAdoptAirline(code){
+  if (!code || code.length<3) return;
+  const old = (Array.isArray(rotLegKeys) && rotLegKeys.find(Boolean) || '').split('|')[0]
+           || (rotAircraft[0] && rotAircraft[0].airline) || '';
+  if (!old || old===code) return;
+  const fixKey = k => (String(k).indexOf(old+'|')===0) ? code+String(k).slice(old.length) : k;
+  rotAircraft.forEach(ac=>{ if (ac.airline===old) { ac.airline=code; ac.key=fixKey(ac.key); } });
+  rotBars.forEach(b=>{ if (b.airline===old) b.airline=code; });
+  if (Array.isArray(rotLegKeys)) rotLegKeys = rotLegKeys.map(k=> k ? fixKey(k) : k);
+  const fk={}; Object.keys(rotFnumByKey).forEach(k=>{ fk[fixKey(k)]=rotFnumByKey[k]; }); rotFnumByKey=fk;
+  if (rotResearch && rotResearch.registrations) {
+    const r={}; Object.keys(rotResearch.registrations).forEach(k=>{ r[k.indexOf(old+' ')===0 ? code+k.slice(old.length) : k]=rotResearch.registrations[k]; });
+    rotResearch.registrations=r;
+  }
+  aiGenAlExtraLegs.forEach(l=>{ if (l.airline===old) l.airline=code; });
+  if (rotAcMeta && rotAcMeta.airline===old) { rotAcMeta.airline=code; rotAcMeta.types.forEach(t=>{ t.key=fixKey(t.key); }); }
+}
 // Does any aircraft carry an assigned rotation?
 function rotHasAssignments(){
   try { return rotAircraft.some(ac=>Object.values(ac.assignments||{}).some(l=>l && l.length)); } catch(e){ return false; }
@@ -8295,7 +8318,7 @@ function rotRouteKeys(validLegs){
 // Routes that were already assigned keep their old bars (times as assigned) and all their
 // assignments; only the routes nobody has assigned yet use the new bars. Assignments of
 // routes that no longer exist in the input (deleted, airports or type changed) are removed.
-function rotRestoreAssignments(prev, newKeys){
+function rotRestoreAssignments(prev, newKeys, opts){
   const newIdx = new Map(newKeys.map((k,i)=>[k,i]));
   const map = new Map();                                   // old legIdx → new legIdx
   (prev.keys||[]).forEach((k,oi)=>{ if (newIdx.has(k)) map.set(oi, newIdx.get(k)); });
@@ -8303,7 +8326,7 @@ function rotRestoreAssignments(prev, newKeys){
   prev.aircraft.forEach(ac=>Object.values(ac.assignments||{}).forEach(list=>(list||[]).forEach(a=>assignedOld.add(a.legIdx))));
   let keptLegs=0;
   map.forEach((ni,oi)=>{
-    if (!assignedOld.has(oi)) return;
+    if (!assignedOld.has(oi) && !(opts && opts.keepAllBars)) return;
     const oldBars = prev.bars.filter(b=>b.legIdx===oi);
     if (!oldBars.length) return;
     rotBars = rotBars.filter(b=>b.legIdx!==ni).concat(oldBars.map(b=>Object.assign({}, b, { legIdx:ni })));
@@ -8322,7 +8345,7 @@ function rotRestoreAssignments(prev, newKeys){
     });
     return Object.assign({}, ac, { assignments: asg });
   });
-  fresh.forEach(f=>{ if (!fleet.some(a=>a.key===f.key)) fleet.push(f); });   // new aircraft types
+  if (!(opts && opts.noNewAircraft)) fresh.forEach(f=>{ if (!fleet.some(a=>a.key===f.key)) fleet.push(f); });   // new aircraft types
   rotAircraft = fleet;
   const remap = set => new Set([...set].filter(oi=>map.has(oi)).map(oi=>map.get(oi)));
   rotSplitLegs = remap(prev.split);
@@ -8496,6 +8519,7 @@ async function createRotationsAirline(mode) {
   if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
   if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;   // only needed for new research
+  rotAdoptAirline(aiGenAirline);
 
   const built = alBuildValidLegs();
   const extras = alExtraValidLegs();                 // irregular rotations from a TTools import
@@ -8529,7 +8553,7 @@ async function createRotationsAirline(mode) {
     : { r: idx+1, block_out: l.blockTime, block_in: l.rBlockTime });
   const sig = alResearchSig(validLegs);
   const cachedOk = !!(rotResearch && rotResearch._sig === sig);
-  let localResearch = null;
+  let localResearch = null, needIdx = null, needTypes = null;
   if (!cachedOk) {
     const regsOld = (rotResearch && rotResearch.registrations) || {};
     const local = routes.map((rt,idx)=>{
@@ -8543,8 +8567,13 @@ async function createRotationsAirline(mode) {
       return !(rt.fnum_out && rt.fnum_in);
     };
     const missing = validLegs.some((l,idx)=>needsFn(idx));
-    const typesOk = validLegs.every(l=> regsOld[l.airline+' '+l.aircraft] || (prev && prev.aircraft.some(a=>a.key===l.airline+'|'+l.aircraft)));
+    const typeKnown = l => regsOld[l.airline+' '+l.aircraft] || (prev && prev.aircraft.some(a=>a.key===l.airline+'|'+l.aircraft))
+                        || rotAircraft.some(a=>a.key===l.airline+'|'+l.aircraft);
+    const typesOk = validLegs.every(typeKnown);
     if (!missing && typesOk) localResearch = { utc, routes: local, registrations: regsOld, _sig: sig };
+    // otherwise ask only for what is missing (e.g. the 3 new routes, not all 300 existing ones)
+    needIdx = validLegs.map((l,idx)=>idx).filter(needsFn);
+    needTypes = validLegs.filter(l=>!typeKnown(l));
   }
   if (!cachedOk && !localResearch && !apiKey) {
     alert('New flight numbers / registrations have to be researched for this, which needs an API key (set it with the 🔑 button).\n\nTip: type the flight numbers of the new flights yourself — then no research is needed.');
@@ -8591,17 +8620,18 @@ async function createRotationsAirline(mode) {
 
   // Single API call: flight numbers per route + registrations per EQP type.
   const combos=[];
-  validLegs.forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+  (needTypes || validLegs).forEach(l=>{const k=l.airline+'|'+l.aircraft;if(!combos.find(c=>c.key===k))combos.push({key:k,airline:l.airline,eqp:l.aircraft});});
+  const askIdx = (needIdx && needIdx.length) ? needIdx : (needIdx ? [] : validLegs.map((l,i)=>i));
   const routePath = l => l.knownSegs
     ? l.knownSegs.filter(x=>x.half==='out').map(x=>x.dep[0]).concat([l.arr[0]]).join('->')   // multi-stop: one number out, one back
     : l.dep[0]+'->'+l.arr[0];
-  const routeList=validLegs.map((l,i)=>`R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} (and return)`).join('\n');
+  const routeList=askIdx.map(i=>{ const l=validLegs[i]; return `R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} (and return)`; }).join('\n') || '(none)';
   const researchPrompt = `Research real aviation data for one airline. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
 
 AIRLINE: ${aiGenAirline}
 ROUTES (outbound and return each):
 ${routeList}
-AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
+AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ') || '(none)'}
 
 For each route: realistic flight numbers as DIGITS ONLY (no airline letters/IATA prefix — e.g. "431" not "ME431") — the airline's real numbers to that destination if known, else plausible; give fnum_out and fnum_in.
 For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "MEA A332").
@@ -8647,14 +8677,14 @@ Output exactly this shape (one line is fine):
     const manIn  = digitsOnly(vl.rFlightNum);
     return {
       r: rt.r, block_out: rt.block_out, block_in: rt.block_in,
-      // keep mode: a route researched before keeps its flight numbers
-      fnum_out: manOut || (keep && (rotFnumByKey[legKeys[idx]]||{}).fnum_out) || (fnumByR[rt.r]||{}).fnum_out,
-      fnum_in:  manIn  || (keep && (rotFnumByKey[legKeys[idx]]||{}).fnum_in)  || (fnumByR[rt.r]||{}).fnum_in,
+      // a route researched (or imported) before keeps its flight numbers
+      fnum_out: manOut || (rotFnumByKey[legKeys[idx]]||{}).fnum_out || (fnumByR[rt.r]||{}).fnum_out,
+      fnum_in:  manIn  || (rotFnumByKey[legKeys[idx]]||{}).fnum_in  || (fnumByR[rt.r]||{}).fnum_in,
     };
   });
   const apiRegs = (apiPart&&apiPart.registrations)||{};
   const research = { utc, routes: mergedRoutes,
-    registrations: keep ? Object.assign({}, apiRegs, (rotResearch&&rotResearch.registrations)||{}) : apiRegs, _sig: sig };
+    registrations: Object.assign({}, apiRegs, (rotResearch&&rotResearch.registrations)||{}), _sig: sig };
   rotResearch = research;
 
   finish(research, ' · '+_swSecs+'s');
@@ -8701,7 +8731,7 @@ async function _rotationsFromValidLegs(validLegs, apiKey) {
 AIRPORTS (need summer/DST UTC offset as a number): ${apList}
 ROUTES:
 ${routeList}
-AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ')}
+AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ') || '(none)'}
 
 For each route: give SEPARATE real nonstop block times for the outbound and the return as "H:MM" each (they differ on long routes due to winds/jetstream). If you cannot find real data, estimate: great-circle flight time + 30 min taxi for BOTH directions, then add an extra 40 min ONLY to whichever direction flies broadly east-to-west (against the rotation / typically the longer one). Also give realistic flight numbers as DIGITS ONLY (no airline letters/IATA prefix — e.g. "431" not "OS431"), the airline's real numbers to that destination if known, else plausible.
 For each type: a registration series continuing the real fleet (airfleets.net), 8 NEW sequential regs. Use the EXACT key "<AIRLINE> <EQP>" (e.g. "BAW A35K", "AUA A20N").
@@ -9193,9 +9223,15 @@ function renderRotationBars() {
       trashBtn.disabled = !nAsg;
       trashBtn.style.cssText='font-size:11px;line-height:1;padding:2px 6px;border-radius:10px;border:1px solid '+(nAsg?'rgba(248,81,73,.5)':'var(--bdr2)')+';background:transparent;color:'+(nAsg?'#f85149':'var(--txt3)')+';cursor:'+(nAsg?'pointer':'default')+';opacity:'+(nAsg?1:.4)+';';
       trashBtn.onclick=()=>{ if(nAsg) removeLegEverywhere(parseInt(legIdx)); };
+      // ✈⇄ next to the trash: fly this rotation with another aircraft type
+      const swapBtn=document.createElement('button');
+      swapBtn.innerHTML='<span style="display:block;font-size:10px;line-height:1;">✈</span><span style="display:block;font-size:10px;line-height:1;margin-top:-1px;">⇄</span>';
+      swapBtn.title='Move this rotation to another aircraft type';
+      swapBtn.style.cssText='padding:1px 5px;border-radius:8px;border:1px solid rgba(88,166,255,.5);background:transparent;color:#9fc7ff;cursor:pointer;';
+      swapBtn.onclick=e=>{ e.stopPropagation(); showTypeSwapPopup(parseInt(legIdx), swapBtn); };
       const dailyRow=document.createElement('div');
       dailyRow.style.cssText='display:flex;align-items:center;gap:4px;';
-      dailyRow.appendChild(dailyBtn); dailyRow.appendChild(trashBtn);
+      dailyRow.appendChild(dailyBtn); dailyRow.appendChild(trashBtn); dailyRow.appendChild(swapBtn);
       trackCol.appendChild(dailyRow);
     }
     rowWrap.appendChild(trackCol);
@@ -9209,23 +9245,32 @@ function renderRotationBars() {
     container.appendChild(rowWrap);
   };
 
-  // after a TTools import: the routes added since come first (marked NEW), optional filter
+  // after a TTools import: the routes added since come first (marked NEW); the existing
+  // (imported) rotations can be hidden
   const hasNew = rotHasNewLegs();
+  const hasExisting = Array.isArray(rotLegNew) && rotLegNew.some(x=>x===false);
   const tools = document.getElementById('rot-bars-tools');
   if (tools) {
     tools.innerHTML = '';
-    if (hasNew) {
-      const nNew = Object.keys(byLeg).filter(li=>rotIsNewLeg(+li)).length;
-      const lbl=document.createElement('span'); lbl.style.cssText='font-size:11px;color:#3fb950;font-weight:600;'; lbl.textContent=nNew+' new route'+(nNew===1?'':'s')+' (shown first)';
+    if (hasExisting) {
+      const nOld = Object.keys(byLeg).filter(li=>rotLegNew[+li]===false).length;
       const tb=document.createElement('button');
-      tb.textContent=(rotOnlyNew?'✓ ':'')+'Only new flights';
-      tb.style.cssText='font-size:10px;padding:2px 10px;border-radius:10px;border:1px solid '+(rotOnlyNew?'#3fb950':'var(--bdr2)')+';background:'+(rotOnlyNew?'rgba(63,185,80,.15)':'transparent')+';color:'+(rotOnlyNew?'#3fb950':'var(--txt3)')+';cursor:pointer;';
+      tb.textContent = rotOnlyNew ? '👁 Show the '+nOld+' existing rotations' : '🙈 Hide the '+nOld+' existing rotations';
+      tb.style.cssText='font-size:11px;font-weight:600;padding:3px 12px;border-radius:12px;border:1px solid var(--acc);background:'+(rotOnlyNew?'var(--acc)':'rgba(123,97,255,.12)')+';color:'+(rotOnlyNew?'#fff':'#c9b8ff')+';cursor:pointer;';
       tb.onclick=()=>{ rotOnlyNew=!rotOnlyNew; renderRotationBars(); };
-      tools.appendChild(lbl); tools.appendChild(tb);
+      tools.appendChild(tb);
+      if (hasNew) {
+        const nNew = Object.keys(byLeg).filter(li=>rotIsNewLeg(+li)).length;
+        const lbl=document.createElement('span'); lbl.style.cssText='font-size:11px;color:#3fb950;font-weight:600;'; lbl.textContent=nNew+' new route'+(nNew===1?'':'s')+(rotOnlyNew?'':' (shown first)');
+        tools.appendChild(lbl);
+      }
     }
   }
   let legOrder = Object.keys(byLeg).sort((a,b)=> (hasNew ? (rotIsNewLeg(+b)-rotIsNewLeg(+a)) : 0) || (a-b));
-  if (hasNew && rotOnlyNew) legOrder = legOrder.filter(li=>rotIsNewLeg(+li));
+  if (hasExisting && rotOnlyNew) {
+    legOrder = legOrder.filter(li=>rotLegNew[+li]!==false);
+    if (!legOrder.length) container.innerHTML='<div style="font-size:12px;color:var(--txt3);padding:10px 4px;">Existing rotations hidden — add new flights on the input page and click ↻ Update unassigned.</div>';
+  }
   legOrder.forEach(legIdx=>{
     const bars = byLeg[legIdx].slice().sort(rotBarOrder);
     const isSplit = rotSplitLegs.has(parseInt(legIdx));
@@ -9238,6 +9283,206 @@ function renderRotationBars() {
       if(ret.length) buildRow(legIdx, ret, 'ret', true);
     }
   });
+}
+
+// ── Move a rotation to another aircraft type (✈⇄) ──
+// Types to offer: every type of this airline that already flies rotations or has aircraft.
+function rotAirlineTypes(){
+  const m=new Map();
+  rotAircraft.forEach(a=>{ if (a.airline===aiGenAirline || !aiGenAirline) m.set(a.eqp,(m.get(a.eqp)||0)+1); });
+  rotBars.forEach(b=>{ if (!m.has(b.eqp)) m.set(b.eqp,0); });
+  return [...m.entries()].sort((x,y)=>String(x[0]).localeCompare(String(y[0])));
+}
+function showTypeSwapPopup(legIdx, anchor){
+  const bars=rotBars.filter(b=>b.legIdx===legIdx); if (!bars.length) return;
+  const cur=bars[0].eqp;
+  let pop=document.getElementById('rot-swap-popup'); if (pop) pop.remove();
+  pop=document.createElement('div'); pop.id='rot-swap-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;';
+  pop.onclick=()=>pop.remove();
+  const r=anchor.getBoundingClientRect();
+  const menu=document.createElement('div');
+  menu.style.cssText='position:absolute;left:'+Math.min(r.left, window.innerWidth-260)+'px;top:'+(r.bottom+4)+'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:8px;min-width:230px;max-height:60vh;overflow:auto;';
+  menu.onclick=e=>e.stopPropagation();
+  const path=bars.slice().sort(rotBarOrder).filter(b=>b.dir==='out').map(b=>b.depIcao).concat([bars.slice().sort(rotBarOrder).filter(b=>b.dir==='out').slice(-1)[0].arrIcao]).join('–');
+  menu.innerHTML='<div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">Fly <b style="color:#fff;">'+path+'</b> ('+cur+') with:</div>';
+  rotAirlineTypes().forEach(([eqp,n])=>{
+    const b=document.createElement('button');
+    const isCur = eqp===cur;
+    b.innerHTML='<b>'+eqp+'</b><span style="color:var(--txt3);font-weight:400;margin-left:8px;">'+n+' aircraft'+(isCur?' · current':'')+'</span>';
+    b.disabled=isCur;
+    b.style.cssText='display:block;width:100%;text-align:left;font-size:12px;padding:7px 10px;border:none;border-radius:6px;background:transparent;color:'+(isCur?'var(--txt3)':'#fff')+';cursor:'+(isCur?'default':'pointer')+';';
+    if (!isCur) {
+      b.onmouseenter=()=>b.style.background='rgba(88,166,255,.12)';
+      b.onmouseleave=()=>b.style.background='transparent';
+      b.onclick=()=>{ pop.remove(); rotSwapLegType(legIdx, eqp); };
+    }
+    menu.appendChild(b);
+  });
+  pop.appendChild(menu); document.body.appendChild(pop);
+}
+// Change the aircraft type of a rotation. Every aircraft that flew it hands it over to a NEW
+// aircraft of the chosen type (registration continues the series); an aircraft left without
+// any rotation is deleted. The input rows follow, so "Update unassigned" keeps all of it.
+function rotSwapLegType(legIdx, newEqp){
+  const bars=rotBars.filter(b=>b.legIdx===legIdx); if (!bars.length) return;
+  const oldEqp=bars[0].eqp; if (!newEqp || newEqp===oldEqp) return;
+  const airline=bars[0].airline, newKey=airline+'|'+newEqp;
+  // input rows / planner-only rotation behind this legIdx (same order as at generation)
+  const built=alBuildValidLegs(), extras=alExtraValidLegs();
+  const all=built.validLegs.concat(extras), keysNow=rotRouteKeys(all);
+  const core=k=>{ const p=String(k||'').split('|'); return p.slice(1).join('|').replace(/#\d+$/,''); };
+  const aligned = Array.isArray(rotLegKeys) && rotLegKeys.length===keysNow.length && keysNow.every((k,i)=>core(k)===core(rotLegKeys[i]));
+  if (!aligned) { alert('The routes on the input page were changed since this planner was built.\nClick "↻ Update unassigned" first, then change the type.'); return; }
+  if (legIdx < built.units.length) built.units[legIdx].forEach(row=>{ row.eqp=newEqp; });
+  else if (extras[legIdx-built.units.length]) extras[legIdx-built.units.length].aircraft=newEqp;
+  bars.forEach(b=>{ b.eqp=newEqp; });
+  rotLegKeys = rotRouteKeys(built.validLegs.map((l,i)=> i===legIdx ? Object.assign({}, l, { aircraft:newEqp }) : l).concat(extras));
+  if (rotFnumByKey) { const fk={}; const nk=rotLegKeys[legIdx]; const ok=keysNow[legIdx]; Object.keys(rotFnumByKey).forEach(k=>{ fk[k===ok?nk:k]=rotFnumByKey[k]; }); rotFnumByKey=fk; }
+  // move the placed rotations
+  const pool=((rotResearch&&rotResearch.registrations)||{})[airline+' '+newEqp] || ((rotAircraft.find(a=>a.key===newKey)||{}).regPool) || [];
+  const sources=rotAircraft.filter(ac=>Object.values(ac.assignments||{}).some(l=>(l||[]).some(a=>a.legIdx===legIdx)));
+  let created=[], removed=[];
+  sources.forEach(src=>{
+    const proto=rotAircraft.find(a=>a.key===newKey);
+    const nac={ key:newKey, airline, eqp:newEqp, reg:rotNextReg(newKey, pool), regPool:(proto&&proto.regPool)||pool.slice(), regIdx:0,
+                assignments:rotEmptyAssignments(), ttPct:src.ttPct, ttRules:src.ttRules };
+    Object.keys(src.assignments).forEach(d=>{
+      const stay=[], move=[];
+      (src.assignments[d]||[]).forEach(a=>(a.legIdx===legIdx?move:stay).push(a));
+      src.assignments[d]=stay;
+      if (move.length) nac.assignments[d]=(nac.assignments[d]||[]).concat(move);
+    });
+    let at=rotAircraft.length; for (let i=rotAircraft.length-1;i>=0;i--){ if (rotAircraft[i].key===newKey){ at=i+1; break; } }
+    rotAircraft.splice(at,0,nac); created.push(nac.reg);
+    if (!Object.values(src.assignments).some(l=>l && l.length)) { rotAircraft.splice(rotAircraft.indexOf(src),1); removed.push(src.reg); }
+  });
+  const cont=document.getElementById('rot-bars-container'), lanes=document.getElementById('rot-lanes-container');
+  const sx=cont?cont.scrollLeft:0, sy=cont?cont.scrollTop:0, lx=lanes?lanes.scrollLeft:0, ly=lanes?lanes.scrollTop:0;
+  renderRotationBars(); renderRotationLanes();
+  const restore=()=>{ const c2=document.getElementById('rot-bars-container'); if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
+                      const l2=document.getElementById('rot-lanes-container'); if(l2){ l2.scrollLeft=lx; l2.scrollTop=ly; } };
+  restore(); requestAnimationFrame(restore);
+  const st=document.getElementById('rot-status');
+  if (st) st.textContent='✓ '+oldEqp+' → '+newEqp+(created.length ? ' · new aircraft '+created.join(', ') : ' · not placed yet — drag it onto a '+newEqp)
+    + (removed.length ? ' · removed '+removed.join(', ')+' (no rotations left)' : '')
+    + (sources.length>removed.length ? ' · '+(sources.length-removed.length)+' aircraft kept (still fly other rotations)' : '');
+}
+
+// ── Aircraft swap (✈⇄ in the aircraft row): a new aircraft of another type takes over ALL
+// flights of this aircraft; the old one is deleted. A route this aircraft flies alone simply
+// changes its type; a route other aircraft fly as well is copied for the new type (the
+// others keep theirs). Input rows follow, so "Update unassigned" keeps everything.
+function showAircraftSwapPopup(acIdx, anchor){
+  const ac=rotAircraft[acIdx]; if (!ac) return;
+  let pop=document.getElementById('rot-swap-popup'); if (pop) pop.remove();
+  pop=document.createElement('div'); pop.id='rot-swap-popup';
+  pop.style.cssText='position:fixed;inset:0;z-index:9999;';
+  pop.onclick=()=>pop.remove();
+  const r=anchor.getBoundingClientRect();
+  const menu=document.createElement('div');
+  menu.style.cssText='position:absolute;left:'+Math.min(r.right+6, window.innerWidth-260)+'px;top:'+Math.min(r.top, window.innerHeight-320)+'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,.5);padding:8px;min-width:240px;max-height:60vh;overflow:auto;';
+  menu.onclick=e=>e.stopPropagation();
+  const nFl = Object.values(ac.assignments||{}).reduce((n,l)=>n+(l||[]).length,0);
+  menu.innerHTML='<div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">Replace <b style="color:#fff;">'+ac.reg+'</b> ('+ac.eqp+', '+nFl+' rotation'+(nFl===1?'':'s')+') by a new:</div>';
+  rotAirlineTypes().forEach(([eqp,n])=>{
+    const b=document.createElement('button');
+    const isCur = eqp===ac.eqp;
+    b.innerHTML='<b>'+eqp+'</b><span style="color:var(--txt3);font-weight:400;margin-left:8px;">'+n+' aircraft'+(isCur?' · current':'')+'</span>';
+    b.disabled=isCur;
+    b.style.cssText='display:block;width:100%;text-align:left;font-size:12px;padding:7px 10px;border:none;border-radius:6px;background:transparent;color:'+(isCur?'var(--txt3)':'#fff')+';cursor:'+(isCur?'default':'pointer')+';';
+    if (!isCur) {
+      b.onmouseenter=()=>b.style.background='rgba(88,166,255,.12)';
+      b.onmouseleave=()=>b.style.background='transparent';
+      b.onclick=()=>{ pop.remove(); rotSwapAircraft(acIdx, eqp); };
+    }
+    menu.appendChild(b);
+  });
+  pop.appendChild(menu); document.body.appendChild(pop);
+}
+function rotSwapAircraft(acIdx, newEqp){
+  const ac=rotAircraft[acIdx]; if (!ac || !newEqp || newEqp===ac.eqp) return;
+  const airline=ac.airline, newKey=airline+'|'+newEqp;
+  // the planner must still match the input page (same check as for a single rotation)
+  const built=alBuildValidLegs(), extras=alExtraValidLegs();
+  const keysNow=rotRouteKeys(built.validLegs.concat(extras));
+  const core=k=>{ const p=String(k||'').split('|'); return p.slice(1).join('|').replace(/#\d+$/,''); };
+  if (!(Array.isArray(rotLegKeys) && rotLegKeys.length===keysNow.length && keysNow.every((k,i)=>core(k)===core(rotLegKeys[i])))) {
+    alert('The routes on the input page were changed since this planner was built.\nClick "↻ Update unassigned" first, then swap the aircraft.'); return;
+  }
+  const nU=built.units.length;
+  const unitOf = li => li<nU ? { rows:built.units[li] } : { extra:extras[li-nU] };
+  const legsOfAc=new Set(); Object.values(ac.assignments||{}).forEach(l=>(l||[]).forEach(a=>legsOfAc.add(a.legIdx)));
+  const flownElsewhere = li => rotAircraft.some(o=>o!==ac && Object.values(o.assignments||{}).some(l=>(l||[]).some(a=>a.legIdx===li)));
+
+  // snapshot of the planner (bars copied: they are changed below)
+  const prev={ bars:rotBars.map(b=>Object.assign({},b)), aircraft:rotAircraft, keys:rotLegKeys.slice(), split:rotSplitLegs, daily:rotDailyLegs };
+  const firstOf = li => { const u=unitOf(li); return u.rows ? u.rows[0] : u.extra; };   // identity of a route across the rebuild
+  const ident = prev.keys.map((k,li)=>firstOf(li));
+  let pseudo = prev.keys.length, nInPlace=0, nCopied=0;
+  const moveLeg = {};                                          // old legIdx → legIdx the new aircraft flies
+  legsOfAc.forEach(li=>{
+    const u=unitOf(li);
+    if (!flownElsewhere(li)) {
+      // only this aircraft flies it → the route itself changes type
+      if (u.rows) u.rows.forEach(r=>{ r.eqp=newEqp; }); else if (u.extra) u.extra.aircraft=newEqp;
+      prev.bars.forEach(b=>{ if (b.legIdx===li) b.eqp=newEqp; });
+      moveLeg[li]=li; nInPlace++;
+    } else {
+      // other aircraft fly it too → a copy of the route for the new type
+      let copyFirst;
+      if (u.rows) {
+        const copies=u.rows.map((r,j)=>Object.assign({}, r, { eqp:newEqp, cont:j>0, ttFirst:j===0 ? true : r.ttFirst }));
+        aiGenAlLegs.push(...copies); copyFirst=copies[0];
+      } else {
+        const c=Object.assign({}, u.extra, { aircraft:newEqp, knownSegs:u.extra.knownSegs.map(x=>Object.assign({},x)) });
+        aiGenAlExtraLegs.push(c); copyFirst=c;
+      }
+      prev.bars.filter(b=>b.legIdx===li).forEach(b=>prev.bars.push(Object.assign({}, b, { legIdx:pseudo, eqp:newEqp })));
+      ident[pseudo]=copyFirst; moveLeg[li]=pseudo; pseudo++; nCopied++;
+    }
+  });
+  // the new aircraft takes over every rotation of the old one; the old one goes
+  const pool=((rotResearch&&rotResearch.registrations)||{})[airline+' '+newEqp] || ((rotAircraft.find(a=>a.key===newKey)||{}).regPool) || [];
+  const proto=rotAircraft.find(a=>a.key===newKey);
+  const nac={ key:newKey, airline, eqp:newEqp, reg:rotNextReg(newKey, pool), regPool:(proto&&proto.regPool)||pool.slice(), regIdx:0,
+              assignments:rotEmptyAssignments(), ttPct:ac.ttPct, ttRules:ac.ttRules };
+  Object.keys(ac.assignments||{}).forEach(d=>{ (ac.assignments[d]||[]).forEach(a=>{ (nac.assignments[d]=nac.assignments[d]||[]).push(Object.assign({}, a, { legIdx:moveLeg[a.legIdx] })); }); });
+  const fleet=rotAircraft.filter(a=>a!==ac);
+  let at=fleet.length; for (let i=fleet.length-1;i>=0;i--){ if (fleet[i].key===newKey){ at=i+1; break; } }
+  fleet.splice(at,0,nac);
+  prev.aircraft=fleet;
+
+  // rebuild the planner from the (changed) input rows and put everything back by route key
+  const built2=alBuildValidLegs(), extras2=alExtraValidLegs();
+  const validLegs2=built2.validLegs.concat(extras2);
+  const newKeys=rotRouteKeys(validLegs2);
+  const idx2=new Map(); built2.units.forEach((u,i)=>idx2.set(u[0],i)); extras2.forEach((x,i)=>idx2.set(x, built2.units.length+i));
+  prev.keys = ident.map(o=> idx2.has(o) ? newKeys[idx2.get(o)] : null);
+  const utc={};
+  validLegs2.forEach(l=>{ (l.knownSegs||l.hops||[{dep:l.dep,arr:l.arr}]).forEach(h=>{ if(h.dep) utc[h.dep[0]]=getUtcOffset(h.dep); if(h.arr) utc[h.arr[0]]=getUtcOffset(h.arr); }); });
+  const keepResearch=rotResearch;
+  buildRotationBars(validLegs2, { utc, routes:[], registrations:(keepResearch&&keepResearch.registrations)||{} });
+  rotResearch=keepResearch;
+  const res=rotRestoreAssignments(prev, newKeys, { keepAllBars:true, noNewAircraft:true });
+  rotLegKeys=newKeys;
+  rotLegNew=built2.units.map(u=>!(u[0] && u[0].ttImported)).concat(extras2.map(()=>false));
+  // flight numbers per route from the bars (so later updates need no research for them)
+  rotFnumByKey={};
+  newKeys.forEach((k,li)=>{ const bs=rotBars.filter(b=>b.legIdx===li).sort(rotBarOrder); const o=bs.find(b=>b.dir==='out'), t=bs.find(b=>b.dir==='ret');
+    if (o||t) rotFnumByKey[k]={ fnum_out:o?o.fnum:'', fnum_in:t?t.fnum:'' }; });
+
+  const cont=document.getElementById('rot-bars-container'), lanes=document.getElementById('rot-lanes-container');
+  const sx=cont?cont.scrollLeft:0, sy=cont?cont.scrollTop:0, lx=lanes?lanes.scrollLeft:0, ly=lanes?lanes.scrollTop:0;
+  renderRotationBars(); renderRotationLanes();
+  const restore=()=>{ const c2=document.getElementById('rot-bars-container'); if(c2){ c2.scrollLeft=sx; c2.scrollTop=sy; }
+                      const l2=document.getElementById('rot-lanes-container'); if(l2){ l2.scrollLeft=lx; l2.scrollTop=ly; } };
+  restore(); requestAnimationFrame(restore);
+  const st=document.getElementById('rot-status');
+  if (st) st.textContent='✓ Aircraft swap: '+ac.reg+' ('+ac.eqp+') → '+nac.reg+' ('+newEqp+') · '+res.kept+' rotations kept'
+    +(nInPlace ? ' · '+nInPlace+' route'+(nInPlace===1?'':'s')+' now '+newEqp : '')
+    +(nCopied ? ' · '+nCopied+' route'+(nCopied===1?'':'s')+' also flown by other aircraft → copied for the '+newEqp : '')
+    +(res.dropped ? ' · ⚠ '+res.dropped+' could not be kept' : '');
 }
 
 // How often a flight (legIdx) is placed on aircraft — all days, both weeks.
@@ -9325,7 +9570,16 @@ function renderRotationLanes() {
     trashBtn.onmouseenter=()=>{trashBtn.style.background='rgba(248,81,73,.15)';trashBtn.style.color='#f85149';};
     trashBtn.onmouseleave=()=>{trashBtn.style.background='transparent';trashBtn.style.color='var(--txt3)';};
     trashBtn.onclick=e=>{ e.stopPropagation(); showAircraftTrashPopup(e.clientX, e.clientY, acIdx); };
-    idc.appendChild(trashBtn);
+    // ✈⇄ under the trash: swap the whole aircraft to another type (it keeps all its flights)
+    const acSwapBtn=document.createElement('button');
+    acSwapBtn.innerHTML='<span style="display:block;font-size:9px;line-height:1;">✈</span><span style="display:block;font-size:9px;line-height:1;margin-top:-1px;">⇄</span>';
+    acSwapBtn.title='Aircraft swap: replace '+ac.reg+' by a new aircraft of another type that takes over all its flights';
+    acSwapBtn.style.cssText='padding:1px 4px;border-radius:6px;border:1px solid rgba(88,166,255,.45);background:transparent;color:#9fc7ff;cursor:pointer;flex-shrink:0;';
+    acSwapBtn.onclick=e=>{ e.stopPropagation(); showAircraftSwapPopup(acIdx, acSwapBtn); };
+    const btnCol=document.createElement('div');
+    btnCol.style.cssText='display:flex;flex-direction:column;align-items:center;gap:3px;flex-shrink:0;';
+    btnCol.appendChild(trashBtn); btnCol.appendChild(acSwapBtn);
+    idc.appendChild(btnCol);
     const idInfo=document.createElement('div');
     idInfo.style.cssText='display:flex;align-items:center;gap:5px;overflow:hidden;';
     idInfo.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
