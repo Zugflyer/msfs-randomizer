@@ -6167,7 +6167,7 @@ function alFindLegsHeader(rows){
   });
 }
 function alSheetToSegments(rows) {
-  const out={ segs:[], problems:[], airlines:new Set() };
+  const out={ segs:[], problems:[], airlines:new Set(), alCount:{} };
   const hIdx=alFindLegsHeader(rows);
   if (hIdx<0) { out.problems.push('No header row found (expected FROM and TO, plus FLN, DEP, ARR, EQP …)'); return out; }
   const head=rows[hIdx].map(c=>String(c||'').trim().toUpperCase());
@@ -6194,7 +6194,7 @@ function alSheetToSegments(rows) {
     const dep=alParseClock(depRaw), arr=alParseClock(arrRaw);
     const fln=String(get('fln')||'').replace(/\D/g,'');
     const offRaw=get('off'); const off=(offRaw===null||offRaw===undefined||String(offRaw).trim()==='') ? 0 : (parseInt(String(offRaw).replace(/\s/g,''),10)||0);
-    if (get('al')) out.airlines.add(String(get('al')).trim().toUpperCase());
+    if (get('al')) { const a=String(get('al')).trim().toUpperCase(); out.airlines.add(a); out.alCount[a]=(out.alCount[a]||0)+1; }
     const line='row '+(r+1);
     if (!from || !to) { out.problems.push(line+': unknown airport '+(!from?fromCode:toCode)); continue; }
     // empty times are fine (schedule not known); only a value that cannot be read is reported
@@ -6250,6 +6250,19 @@ async function aiGenAlImportXls(file) {
     if (!rows) rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null });
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
+    // Airline and hub still empty? Take them from the file: the most frequent airline code
+    // (3 letters = ICAO) and the airport with the most departures. Without them the rows
+    // can't be shown ("Enter an airline ICAO code above to start").
+    const autoSet=[];
+    if (!aiGenAirline || aiGenAirline.length<3) {
+      const best=Object.keys(parsed.alCount||{}).filter(c=>/^[A-Z0-9]{3}$/.test(c)).sort((a,b)=>parsed.alCount[b]-parsed.alCount[a])[0];
+      if (best) { aiGenAirline=best; autoSet.push('airline '+best); }
+    }
+    if (!aiGenAlHub) {
+      const cnt={}; parsed.segs.forEach(sg=>{ cnt[sg.from[0]]=(cnt[sg.from[0]]||0)+1; });
+      const h=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
+      if (h && schedByCode[h]) { aiGenAlHub=schedByCode[h]; autoSet.push('hub '+h); }
+    }
     const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
     let pairs=alSegmentsToRows(parsed.segs, hubIcao);
     // Multi-stop flights WITHOUT flight numbers: flights listed in flown order that lead
@@ -6336,7 +6349,7 @@ async function aiGenAlImportXls(file) {
     }
     aiGenAlSchedMode = timed ? 'known' : 'random';
     try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
-    renderAiGenAlLegs();
+    renderAiGenAirline();                 // header (airline, logo, hub) + rows
     // a route without return only needs completing when times are typed (Known schedule)
     const oneWay=timed ? pairs.filter(p=>!p.ret).length : 0;
     const noTimes=timed ? parsed.segs.filter(x=>!x.dep || !x.arr).length : 0;
@@ -6353,7 +6366,8 @@ async function aiGenAlImportXls(file) {
       if (u.length) msg+=' · unknown airport'+(u.length>1?'s':'')+' (rows skipped): '+u.map(c=>c+' ×'+unk[c]).join(', ')+' — add the code via Data → Edit Airport';
       if (other.length) msg+=' · check: '+other.join('; ');
     }
-    if (!aiGenAirline) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
+    if (autoSet.length) msg+=' · '+autoSet.join(' and ')+' taken from the file (change above if needed)';
+    if (!aiGenAirline || aiGenAirline.length<3) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
     else if (!aiGenAlHub) msg+=' · select the hub above';
     say(msg, (oneWay||noTimes||parsed.problems.length) ? '#e0b341' : '#3fb950');
   } catch(e) {
