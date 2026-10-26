@@ -9578,9 +9578,82 @@ function mergeRotation(legIdx){ rotSplitLegs.delete(legIdx); renderRotationBars(
 
 
 // ── Bottom half: aircraft resource lanes with weekly UTC calendar ──
+// ── Hover info window for the placed flights in the weekly plan (lower half) ──
+function rotTipEl(){
+  let t=document.getElementById('rot-hover-tip');
+  if(!t){
+    t=document.createElement('div');
+    t.id='rot-hover-tip';
+    t.style.cssText='position:fixed;left:0;top:0;z-index:10000;display:none;pointer-events:none;background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;padding:10px 14px;min-width:240px;max-width:360px;box-shadow:0 8px 28px rgba(0,0,0,.6);font-size:12px;color:var(--txt2);';
+    document.body.appendChild(t);
+  }
+  return t;
+}
+function rotTipHide(){ const t=document.getElementById('rot-hover-tip'); if(t) t.style.display='none'; }
+function rotTipMove(e){
+  const t=document.getElementById('rot-hover-tip'); if(!t || t.style.display==='none') return;
+  const w=t.offsetWidth, h=t.offsetHeight, vw=window.innerWidth, vh=window.innerHeight;
+  let x=e.clientX+16, y=e.clientY+18;
+  if (x+w > vw-8) x = Math.max(8, e.clientX-w-16);
+  if (y+h > vh-8) y = Math.max(8, e.clientY-h-14);
+  t.style.left=x+'px'; t.style.top=y+'px';
+}
+function rotTipShow(e, html){ const t=rotTipEl(); t.innerHTML=html; t.style.display='block'; rotTipMove(e); }
+// Details of one placed flight: which flight, when (local + UTC, weekday), block/ground,
+// and the whole rotation it belongs to (the hovered flight highlighted).
+function rotLaneTipHtml(ac, asg, segIdx){
+  const seg=asg.segs[segIdx]; if(!seg) return '';
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const hm=m=>{ m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+  const dur=m=>Math.floor(m/60)+'h '+String(m%60).padStart(2,'0');
+  const N=ROT_NDAYS*1440;
+  const dayOf=abs=>{ const d=Math.floor((((abs%N)+N)%N)/1440); return ROT_DAYS[d%7]+(ROT_WEEKS>1?' (week '+(Math.floor(d/7)+1)+')':''); };
+  const apName=code=>{ const r=lookupAirport(String(code||'')); return r ? (r[7]||r[2]||'') : ''; };
+  const depLocAbs = seg.absDep + (seg.depOff||0)*60;
+  const arrLocAbs = seg.absDep + seg.block + (seg.arrOff||0)*60;
+  const dayDiff = Math.floor(arrLocAbs/1440) - Math.floor(depLocAbs/1440);
+  const al=(ac.airline||'').toUpperCase();
+  const fn=String(seg.fnum||'');
+  const fTitle = (al && fn.toUpperCase().indexOf(al)!==0 ? al+' ' : '')+fn;
+  const dep=esc(seg.depIcao), arr=esc(seg.arrIcao);
+  const depN=esc(apName(seg.depIcao)), arrN=esc(apName(seg.arrIcao));
+  const kindTxt = asg.kind==='out' ? ' · outbound only' : asg.kind==='ret' ? ' · return only' : '';
+  const row=(k,v)=>'<span style="color:var(--txt3);">'+k+'</span><span style="color:#fff;">'+v+'</span>';
+  let html =
+    '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">'
+    +'<span style="font-size:14px;font-weight:700;color:#fff;">'+esc(fTitle)+'</span>'
+    +'<span style="font-size:11px;color:#9fc7ff;font-family:monospace;">'+esc(ac.eqp)+' · '+esc(ac.reg)+'</span>'
+    +(rotIsNewLeg(+asg.legIdx)?'<span style="font-size:9px;font-weight:800;color:#0d1117;background:#3fb950;border-radius:3px;padding:0 4px;">NEW</span>':'')
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">'
+    + row('Route', '<b>'+dep+' → '+arr+'</b>'+(depN||arrN?'<div style="font-size:11px;color:var(--txt2);">'+(depN||dep)+' → '+(arrN||arr)+'</div>':''))
+    + row('Departure', '<span style="font-family:monospace;">'+hm(depLocAbs)+'</span> local · '+dayOf(depLocAbs)+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep)+' UTC</span>')
+    + row('Arrival', '<span style="font-family:monospace;">'+hm(arrLocAbs)+'</span> local'+(dayDiff>0?' <span style="color:#f0b400;">+'+dayDiff+'d</span>':'')+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep+seg.block)+' UTC</span>')
+    + row('Block time', '<span style="font-family:monospace;">'+dur(seg.block)+'</span>')
+    + row('Ground after', '<span style="font-family:monospace;">'+(seg.ground||0)+' min</span>')
+    + row('Daily', rotDailyLegs.has(+asg.legIdx)?'<span style="color:var(--acc);">✓ yes</span>':'no')
+    +'</div>';
+  if (asg.segs.length>1) {
+    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+asg.segs.length+' flights'+esc(kindTxt)+')</div>'
+      +'<div style="margin-top:3px;font-family:monospace;font-size:11px;line-height:1.5;">';
+    asg.segs.forEach((s,k)=>{
+      const cur = k===segIdx;
+      const dL = s.absDep+(s.depOff||0)*60, aL = s.absDep+s.block+(s.arrOff||0)*60;
+      html += '<div style="'+(cur?'color:#fff;font-weight:700;background:rgba(88,166,255,.18);border-radius:3px;padding:0 4px;margin:0 -4px;':'color:var(--txt2);')+'">'
+        + (cur?'▶ ':'&nbsp;&nbsp;')+ROT_DAYS[Math.floor((((dL%N)+N)%N)/1440)%7].slice(0,3)+' '+hm(dL)+' '+esc(s.depIcao)+'→'+esc(s.arrIcao)+' '+hm(aL)+' · '+esc(s.fnum)+'</div>';
+    });
+    html += '</div>';
+  } else if (kindTxt) {
+    html += '<div style="margin-top:6px;font-size:11px;color:var(--txt3);">'+esc(kindTxt.slice(3))+'</div>';
+  }
+  html += '<div style="margin-top:8px;font-size:10px;color:var(--txt3);">Drag to move · right-click to remove</div>';
+  return html;
+}
+
 function renderRotationLanes() {
   const container = document.getElementById('rot-lanes-container');
   if (!container) return;
+  rotTipHide();
   container.innerHTML = '';
   const fmtU = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
@@ -9693,7 +9766,7 @@ function renderRotationLanes() {
           const fmtLocal = m => { m=(((m%1440)+1440)%1440); return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
           const innerHTML='<div style="font-size:9px;font-family:monospace;color:#fff;white-space:nowrap;overflow:hidden;line-height:1.15;">'+fmtLocal(depLocalMin)+' '+seg.depIcao+'→'+seg.arrIcao+' '+fmtLocal(arrLocalMin)+(seg.utcDayCross>=1?' +'+seg.utcDayCross:'')+'</div>'
             +'<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;line-height:1.1;">'+seg.fnum+'</div>';
-          const groundTail='<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);" title="ground time"></div>';
+          const groundTail='<div style="position:absolute;right:0;top:0;bottom:0;width:'+(seg.ground*pxPerMin)+'px;background:repeating-linear-gradient(45deg,rgba(255,255,255,.05),rgba(255,255,255,.05) 3px,transparent 3px,transparent 6px);border-left:1px dashed rgba(255,255,255,.2);"></div>';
 
           // Helper to create one drawable piece [pieceStart, pieceWidth] in week minutes
           const makePiece=(pieceStartMin, pieceWidthMin, isHead, isTail)=>{
@@ -9703,11 +9776,15 @@ function renderRotationLanes() {
             const wPx=Math.max(6, pieceWidthMin*pxPerMin);
             const radius=(isHead?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isTail?'4px':'0')+' '+(isHead?'4px':'0');
             el.style.cssText='position:absolute;top:6px;height:'+(ROW_H-12)+'px;left:'+leftPx+'px;width:'+wPx+'px;border-radius:'+radius+';background:'+(night?'linear-gradient(90deg,rgba(50,60,95,.95),rgba(38,46,75,.95))':'linear-gradient(90deg,rgba(64,78,102,.9),rgba(50,60,80,.9))')+';border:1px solid rgba(88,166,255,.5);'+(isHead?'':'border-left:none;')+(isTail?'':'border-right:none;')+'overflow:hidden;cursor:grab;display:flex;flex-direction:column;justify-content:center;padding:2px 5px;box-sizing:border-box;';
-            el.title='Drag to move · right-click to remove'+(!isHead?' (continues from the start of week 1)':'');
+            // hover → small info window with the flight's details (no click needed)
+            el.addEventListener('mouseenter', e=>rotTipShow(e, rotLaneTipHtml(ac, asg, segIdx)
+              +(!isHead?'<div style="font-size:10px;color:var(--txt3);">(continued from the end of the timeline)</div>':'')));
+            el.addEventListener('mousemove', rotTipMove);
+            el.addEventListener('mouseleave', rotTipHide);
             el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
-            el.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
+            el.addEventListener('dragstart', e=>{ rotTipHide(); e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
             el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
-            el.addEventListener('contextmenu', e=>{ e.preventDefault(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
+            el.addEventListener('contextmenu', e=>{ e.preventDefault(); rotTipHide(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
             track.appendChild(el);
           };
 
