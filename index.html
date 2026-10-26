@@ -7031,6 +7031,86 @@ function alGroundTime(eqp, leg) {
 // being left (blur) are deferred one tick, so the field the user moved to is the one
 // that gets restored (works for Tab, Shift+Tab and mouse clicks).
 let _alInBlur = false, _alRenderPending = false, _alRendering = false;
+
+// ── Sorting (input page and planner). Display only: the list itself keeps its order,
+// so linked rows, flight numbers and keys are not touched. ──
+const AL_SORT_OPTS=[['','As entered'],['time','Departure time'],['from','Departure airport'],['to','Destination'],['type','Aircraft type'],['fnum','Flight number']];
+let aiGenAlSort=(function(){ try{ return localStorage.getItem('aigen_al_sort')||''; }catch(e){ return ''; } })();
+let _alSortSnap=null;   // { mode, legs:[…] } — order taken when the sort was chosen
+let _alVisRank=null;    // row index → position on screen (Tab order follows the screen)
+function alSortHm(s){ const m=String(s||'').match(/^\s*(\d{1,2}):(\d{2})/); return m ? (+m[1])*60+(+m[2]) : null; }
+function alSortTime(leg){
+  let t=alSortHm(leg.depFixed);
+  if (t==null && Array.isArray(leg.outHops) && leg.outHops[0]) t=alSortHm(leg.outHops[0].depFixed);
+  if (t==null && aiGenAlSchedMode!=='known') t=alSortHm(leg.dd1);
+  return t;
+}
+// compare two sort values; empty values go last
+function alSortCmpVal(a,b){
+  const na=(a==null||a===''), nb=(b==null||b==='');
+  if (na||nb) return na-nb;
+  return (typeof a==='number' && typeof b==='number') ? a-b : String(a).localeCompare(String(b));
+}
+function alFnumVal(v){ const d=String(v||'').replace(/\D/g,''); return d ? +d : null; }
+// Take the sorted order now. Rows flown as one flight (linked onward rows) and rows not
+// filled in yet stay together with the row above them.
+function alSortSnapshot(){
+  const L=aiGenAlLegs, groups=[];
+  L.forEach((l,i)=>{
+    const g=groups[groups.length-1];
+    if (g && (!l.arr || alRowContinues(L[i-1], l))) g.rows.push(l); else groups.push({ rows:[l], pos:i });
+  });
+  const mode=aiGenAlSort;
+  const keyOf=g=>{ const f=g.rows[0], z=g.rows[g.rows.length-1];
+    if (mode==='time') return alSortTime(f);
+    if (mode==='from') return f.dep ? f.dep[0] : null;
+    if (mode==='to')   return z.arr ? z.arr[0] : (f.arr ? f.arr[0] : null);
+    if (mode==='type') return String(f.eqp||'').toUpperCase() || null;
+    if (mode==='fnum') return alFnumVal(f.flightNum);
+    return g.pos; };
+  groups.forEach(g=>{ g.k=keyOf(g); g.t=alSortTime(g.rows[0]); });
+  groups.sort((a,b)=> alSortCmpVal(a.k,b.k) || alSortCmpVal(a.t,b.t) || (a.pos-b.pos));
+  _alSortSnap={ mode, legs:[].concat(...groups.map(g=>g.rows)) };
+}
+// Order in which the rows are shown: the order taken when sorting; rows added since then
+// appear directly below the row they were added under.
+function alDisplayOrder(){
+  const L=aiGenAlLegs, idx=L.map((_,i)=>i);
+  if (!aiGenAlSort) return idx;
+  if (!_alSortSnap || _alSortSnap.mode!==aiGenAlSort || !L.some(l=>_alSortSnap.legs.includes(l))) alSortSnapshot();
+  const rank=new Map(); _alSortSnap.legs.forEach((l,k)=>rank.set(l,k));
+  const out=[];
+  for (let j=0; j<L.length && !rank.has(L[j]); j++) out.push(j);
+  idx.filter(i=>rank.has(L[i])).sort((a,b)=>rank.get(L[a])-rank.get(L[b])).forEach(i=>{
+    out.push(i);
+    for (let j=i+1; j<L.length && !rank.has(L[j]); j++) out.push(j);
+  });
+  return out;
+}
+function setAiGenAlSort(v){
+  aiGenAlSort=v||''; _alSortSnap=null;
+  try{ localStorage.setItem('aigen_al_sort', aiGenAlSort); }catch(e){}
+  renderAiGenAlLegs();
+}
+// small "Sort by" control (shared look on both pages)
+function buildSortControl(value, onChange, resortTitle){
+  const wrap=document.createElement('span');
+  wrap.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--txt3);text-transform:none;letter-spacing:0;font-weight:400;';
+  const lbl=document.createElement('span'); lbl.textContent='Sort by'; wrap.appendChild(lbl);
+  const sel=document.createElement('select');
+  AL_SORT_OPTS.forEach(([v,t])=>{ const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o); });
+  sel.value=value||'';
+  sel.style.cssText='font-size:11px;padding:2px 6px;border-radius:10px;border:1px solid '+(value?'var(--acc)':'var(--bdr2)')+';background:var(--bg);color:'+(value?'#c9b8ff':'var(--txt2)')+';cursor:pointer;outline:none;';
+  sel.onchange=()=>onChange(sel.value);
+  wrap.appendChild(sel);
+  if (value && resortTitle) {
+    const rb=document.createElement('button'); rb.textContent='↻'; rb.title=resortTitle;
+    rb.style.cssText='font-size:12px;line-height:1;padding:2px 7px;border-radius:10px;border:1px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;';
+    rb.onclick=()=>onChange(value, true);
+    wrap.appendChild(rb);
+  }
+  return wrap;
+}
 // capture-phase 'blur' runs BEFORE the field's own onblur handler (focusout would be too late)
 document.addEventListener('blur', e=>{
   if (_alRendering) return;   // blur caused by our own DOM rebuild — ignore
@@ -7088,6 +7168,14 @@ function _renderAiGenAlLegsNow() {
     return;
   }
   if (!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg());
+  {
+    const sb=document.createElement('div');
+    sb.style.cssText='display:flex;align-items:center;gap:8px;margin:0 8px 6px;';
+    sb.appendChild(buildSortControl(aiGenAlSort, v=>setAiGenAlSort(v),
+      'Sort again — rows you added or changed since stay where they are until you sort again'));
+    if (aiGenAlSort) { const n=document.createElement('span'); n.style.cssText='font-size:10px;color:var(--txt3);'; n.textContent='(display only — the list itself keeps its order)'; sb.appendChild(n); }
+    container.appendChild(sb);
+  }
   // Routes of a TTools import are collapsed into one line; new flights are entered below.
   const nImported = aiGenAlLegs.filter(l=>l.ttImported).length;
   if (nImported && !aiGenAlShowImported && !aiGenAlLegs.some(l=>!l.ttImported)) aiGenAlLegs.push(aiGenAlEmptyLeg());
@@ -7122,7 +7210,10 @@ function _renderAiGenAlLegsNow() {
   const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
   const utcStr = ap => { if(!ap) return ''; const o=getUtcOffset(ap); return 'UTC'+(o>=0?'+':'')+o; };
 
-  aiGenAlLegs.forEach((leg, i) => {
+  const alOrder = alDisplayOrder();
+  _alVisRank = {}; alOrder.forEach((ix,k)=>{ _alVisRank[ix]=k; });
+  let visPrev = -1, rowVisPrev = -1;          // row shown directly above (for "Link to row above")
+  const renderRow = (leg, i) => {
     if (leg.ttImported && !aiGenAlShowImported) return;          // collapsed (see the line above)
     if (!leg.dep && !leg._editingDep) leg.dep = aiGenAlHub;
     if (!leg.dd1) leg.dd1 = mDepFrom;
@@ -7579,7 +7670,9 @@ function _renderAiGenAlLegsNow() {
     // so both rows become ONE flight with a stop (A→B→C and back C→B→A).
     const prevLeg = i>0 ? aiGenAlLegs[i-1] : null;
     const prevSplit = prevLeg && Array.isArray(prevLeg.stops) && prevLeg.stops.length;
-    if (prevLeg && !prevSplit && prevLeg.arr && leg.dep && leg.dep[0]===prevLeg.arr[0]) {
+    // sorted view: only offer the link when that row really stands above this one
+    if (prevLeg && !prevSplit && prevLeg.arr && leg.dep && leg.dep[0]===prevLeg.arr[0]
+        && (!aiGenAlSort || rowVisPrev===i-1 || alRowContinues(prevLeg, leg))) {
       const linked = alRowContinues(prevLeg, leg);
       const byNumber = linked && !leg.cont;
       const linkBtn=document.createElement('button');
@@ -7605,6 +7698,11 @@ function _renderAiGenAlLegsNow() {
     wrapper.appendChild(row);
 
     container.appendChild(wrapper);
+  };
+  alOrder.forEach(i=>{
+    const leg=aiGenAlLegs[i]; if (!leg) return;
+    rowVisPrev=visPrev; renderRow(leg, i);
+    if (!(leg.ttImported && !aiGenAlShowImported)) visPrev=i;
   });
 
   // Restore focus to a specific field after re-render (keeps Tab flowing across
@@ -8307,6 +8405,10 @@ let rotLegKeys = null;        // route key per legIdx of the current bars (airli
 let rotFnumByKey = {};        // route key → {fnum_out, fnum_in} already researched (no new API call needed)
 let rotLegNew = null;         // per legIdx: true = route added after a TTools import (shown first, marked NEW)
 let rotOnlyNew = false;       // planner filter: show only the new routes' bars
+let rotSort = (function(){ try{ return localStorage.getItem('rot_sort')||''; }catch(e){ return ''; } })();
+let rotHideAssigned = (function(){ try{ return localStorage.getItem('rot_hide_assigned')==='1'; }catch(e){ return false; } })();
+function setRotSort(v){ rotSort=v||''; try{ localStorage.setItem('rot_sort', rotSort); }catch(e){} renderRotationBars(); }
+function toggleRotHideAssigned(){ rotHideAssigned=!rotHideAssigned; try{ localStorage.setItem('rot_hide_assigned', rotHideAssigned?'1':'0'); }catch(e){} renderRotationBars(); }
 let rotAcMeta = null;         // Aircraft file of a TTools import: { airline, lines, types:[{acNum,key}], maxAc }
 // Next free registration of a type: unused regs of its pool first, then the series continued
 // (PP-VNS → PP-VNT, N771TW → N772TW, D-ABYA → D-ABYB …).
@@ -9310,8 +9412,19 @@ function renderRotationBars() {
   const hasNew = rotHasNewLegs();
   const hasExisting = Array.isArray(rotLegNew) && rotLegNew.some(x=>x===false);
   const tools = document.getElementById('rot-bars-tools');
+  // already assigned (placed on an aircraft at least once); split legs per direction
+  const isAssigned = (li, which) => rotSplitLegs.has(+li) ? legDepartureDays(+li, which).size>0 : rotLegAssignmentCount(+li)>0;
+  const nAssigned = Object.keys(byLeg).filter(li=> rotSplitLegs.has(+li) ? (isAssigned(li,'out')&&isAssigned(li,'ret')) : isAssigned(li)).length;
   if (tools) {
     tools.innerHTML = '';
+    tools.appendChild(buildSortControl(rotSort, v=>setRotSort(v)));
+    const ha=document.createElement('button');
+    ha.textContent = rotHideAssigned ? '👁 Show assigned ('+nAssigned+')' : '🙈 Hide assigned ('+nAssigned+')';
+    ha.title = rotHideAssigned ? 'Show the flights that are already placed on an aircraft again'
+                               : 'Hide the flights that are already placed on an aircraft (on at least one day) — only the open ones stay up here';
+    ha.style.cssText='font-size:11px;font-weight:600;padding:3px 12px;border-radius:12px;border:1px solid #3fb950;background:'+(rotHideAssigned?'#3fb950':'rgba(63,185,80,.1)')+';color:'+(rotHideAssigned?'#0d1117':'#7ee787')+';cursor:pointer;';
+    ha.onclick=()=>toggleRotHideAssigned();
+    tools.appendChild(ha);
     if (hasExisting) {
       const nOld = Object.keys(byLeg).filter(li=>rotLegNew[+li]===false).length;
       const tb=document.createElement('button');
@@ -9321,28 +9434,47 @@ function renderRotationBars() {
       tools.appendChild(tb);
       if (hasNew) {
         const nNew = Object.keys(byLeg).filter(li=>rotIsNewLeg(+li)).length;
-        const lbl=document.createElement('span'); lbl.style.cssText='font-size:11px;color:#3fb950;font-weight:600;'; lbl.textContent=nNew+' new route'+(nNew===1?'':'s')+(rotOnlyNew?'':' (shown first)');
+        const lbl=document.createElement('span'); lbl.style.cssText='font-size:11px;color:#3fb950;font-weight:600;'; lbl.textContent=nNew+' new route'+(nNew===1?'':'s')+(rotOnlyNew||rotSort?'':' (shown first)');
         tools.appendChild(lbl);
       }
     }
   }
-  let legOrder = Object.keys(byLeg).sort((a,b)=> (hasNew ? (rotIsNewLeg(+b)-rotIsNewLeg(+a)) : 0) || (a-b));
+  // sort keys of a rotation: its first flight (destination = end of the outbound part)
+  const sortKey = li => {
+    const bars = byLeg[li].slice().sort(rotBarOrder), f = bars[0];
+    const outs = bars.filter(b=>b.dir==='out'), z = outs[outs.length-1] || f;
+    if (rotSort==='time') return f.depLocal;
+    if (rotSort==='from') return f.depIcao;
+    if (rotSort==='to')   return z.arrIcao;
+    if (rotSort==='type') return String(f.eqp||'').toUpperCase();
+    if (rotSort==='fnum') return alFnumVal(f.fnum);
+    return null;
+  };
+  const firstDep = li => { const b=byLeg[li].slice().sort(rotBarOrder)[0]; return b ? b.depLocal : null; };
+  let legOrder = rotSort
+    ? Object.keys(byLeg).sort((a,b)=> alSortCmpVal(sortKey(a),sortKey(b)) || alSortCmpVal(firstDep(a),firstDep(b)) || (a-b))
+    : Object.keys(byLeg).sort((a,b)=> (hasNew ? (rotIsNewLeg(+b)-rotIsNewLeg(+a)) : 0) || (a-b));
   if (hasExisting && rotOnlyNew) {
     legOrder = legOrder.filter(li=>rotLegNew[+li]!==false);
     if (!legOrder.length) container.innerHTML='<div style="font-size:12px;color:var(--txt3);padding:10px 4px;">Existing rotations hidden — add new flights on the input page and click ↻ Update unassigned.</div>';
   }
+  let shown = 0;
   legOrder.forEach(legIdx=>{
     const bars = byLeg[legIdx].slice().sort(rotBarOrder);
     const isSplit = rotSplitLegs.has(parseInt(legIdx));
     if(!isSplit){
-      buildRow(legIdx, bars, 'pair', false);
+      if (rotHideAssigned && isAssigned(legIdx)) return;
+      buildRow(legIdx, bars, 'pair', false); shown++;
     } else {
       const out = bars.filter(b=>b.dir==='out');
       const ret = bars.filter(b=>b.dir==='ret');
-      if(out.length) buildRow(legIdx, out, 'out', true);
-      if(ret.length) buildRow(legIdx, ret, 'ret', true);
+      if(out.length && !(rotHideAssigned && isAssigned(legIdx,'out'))) { buildRow(legIdx, out, 'out', true); shown++; }
+      if(ret.length && !(rotHideAssigned && isAssigned(legIdx,'ret'))) { buildRow(legIdx, ret, 'ret', true); shown++; }
     }
   });
+  if (rotHideAssigned && legOrder.length && !shown) {
+    container.innerHTML='<div style="font-size:12px;color:#7ee787;padding:10px 4px;">✓ All flights are placed on an aircraft — click 👁 Show assigned to see them again.</div>';
+  }
 }
 
 // ── Move a rotation to another aircraft type (✈⇄) ──
@@ -10991,7 +11123,7 @@ function buildSceneryRow(row, ri) {
     if (!cont) return;
     const back = e.shiftKey;
     // all tab stops currently on screen, in row/position order (collapsed rows have none)
-    const key = x => { const [r,p]=String(x.dataset.tabseq).split('.'); return (+r)*100 + (+p); };
+    const key = x => { const [r,p]=String(x.dataset.tabseq).split('.'); const rk=(_alVisRank && _alVisRank[+r]!=null) ? _alVisRank[+r] : +r; return rk*100 + (+p); };
     const stops = [...cont.querySelectorAll('[data-tabseq]')].sort((a,b)=>key(a)-key(b));
     const idx = stops.indexOf(el);
     const next = stops[idx + (back?-1:1)];
