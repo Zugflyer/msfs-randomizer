@@ -6158,6 +6158,7 @@ function alFindAirport(code) {
 // Read the sheet rows (array of arrays) into flight segments.
 // The legs table: the first row that has FROM and TO plus at least one more known column
 // (FLN, DEP, ARR, EQP …). Anything above it — summaries, counters — is ignored.
+const AL_LEG_HEADS = ['LEG #','LEG#','LEG NO','LEG NO.','LEG NR','LEG NR.','LEG NUMBER','LEGNO','LEG','#'];
 const AL_SHEET_HEADS = ['AIRLINE','AL','ALN','CARRIER','FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO','DEP','STD','ARR','STA',
   'NIGHTFLIGHT','NIGHT','EQP','TYPE','AIRCRAFT','GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT'];
 function alFindLegsHeader(rows){
@@ -6177,7 +6178,8 @@ function alSheetToSegments(rows) {
   const C={ al:col(['AIRLINE','AL','ALN','CARRIER']), fln:col(['FLN','FLT','FLIGHT','FLIGHTNUMBER','FLIGHT NO']), from:col(['FROM','DEPARTURE','ORIGIN']),
             dep:col(['DEP','STD']), arr:col(['ARR','STA']), off:col(['NIGHTFLIGHT','NIGHT','DAY','+1']),
             to:col(['TO','ARRIVAL','DEST','DESTINATION']), eqp:col(['EQP','TYPE','AIRCRAFT']),
-            grd:col(['GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT']) };
+            grd:col(['GRD','GROUND','GROUND TIME','MIN GROUND','MIN GROUND TIME','TAT']),
+            leg:col(AL_LEG_HEADS) };
   // only the airports are mandatory — FLN, DEP and ARR may be missing or empty
   ['from','to'].forEach(k=>{ if(C[k]<0) out.problems.push('Column missing: '+k.toUpperCase()); });
   if (out.problems.length) return out;
@@ -6203,7 +6205,9 @@ function alSheetToSegments(rows) {
     if (!dep && !blank(depRaw)) out.problems.push(line+': DEP time not readable');
     if (!arr && !blank(arrRaw)) out.problems.push(line+': ARR time not readable');
     const grdRaw=get('grd'); const grd=(grdRaw===null||grdRaw===undefined||String(grdRaw).trim()==='') ? null : (parseInt(String(grdRaw).replace(/\D/g,''),10));
-    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r });
+    const legRaw=get('leg'); const legNo=(legRaw===null||legRaw===undefined||String(legRaw).trim()==='') ? null : parseInt(String(legRaw).replace(/\D/g,''),10);
+    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r,
+                    leg:(Number.isFinite(legNo)?legNo:null) });
   }
   return out;
 }
@@ -6311,6 +6315,7 @@ async function aiGenAlImportXls(file) {
     }
     // Does the file contain any times? yes → Known schedule · no → Random schedule
     const timed=parsed.segs.some(x=>x.dep || x.arr);
+    const hasLegNos=parsed.segs.some(x=>x.leg!=null);
     const est=(a,b)=>{ const e=(a&&b) ? alEstimateEffectiveBlock(a,b) : null; return e!=null ? Math.floor(e/60)+':'+String(e%60).padStart(2,'0') : ''; };
     // GRD → header MIN GROUND TIME (most frequent value); rows keep their own value
     const grds=parsed.segs.map(x=>x.grd).filter(v=>v!=null);
@@ -6328,14 +6333,16 @@ async function aiGenAlImportXls(file) {
       // no times: a single flight INTO the hub is the return half of the route hub → X
       const flip = !timed && !p.ret && hubIcao && p.out.to[0]===hubIcao && p.out.from[0]!==hubIcao;
       if (flip) {
-        L.dep=p.out.to; L.arr=p.out.from; L.rFlightNum=p.out.fln;
+        L.dep=p.out.to; L.arr=p.out.from; L.rFlightNum=p.out.fln; L.rLegNo=p.out.leg;
       } else {
         L.dep=p.out.from; L.arr=p.out.to;
         L.flightNum=p.out.fln; L.depFixed=p.out.dep; L.arrFixed=p.out.arr; L.arrDayOff=p.out.off;
+        L.legNo=p.out.leg;
       }
       if (p.ret) {
         L.rFlightNum=p.ret.fln; L.rDepFixed=p.ret.dep; L._custom_rDepFixed=!!p.ret.dep;
         L.rArrFixed=p.ret.arr; L.rArrDayOff=p.ret.off;
+        L.rLegNo=p.ret.leg;
       }
       // estimated block times (no API call) — used by Random schedule, → looks up the real one
       L.blockTime=est(L.dep, L.arr);  L.blockTimeReal=false;
@@ -6368,6 +6375,7 @@ async function aiGenAlImportXls(file) {
       if (u.length) msg+=' · unknown airport'+(u.length>1?'s':'')+' (rows skipped): '+u.map(c=>c+' ×'+unk[c]).join(', ')+' — add the code via Data → Edit Airport';
       if (other.length) msg+=' · check: '+other.join('; ');
     }
+    if (hasLegNos) msg+=' · leg numbers read (Sort by → Leg number)';
     if (autoSet.length) msg+=' · '+autoSet.join(' and ')+' taken from the file (change above if needed)';
     if (!aiGenAirline || aiGenAirline.length<3) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
     else if (!aiGenAlHub) msg+=' · select the hub above';
@@ -6698,8 +6706,8 @@ function alChainFillFnums(segs) {
 function alKnownChainLeg(rows) {
   const first=rows[0], last=rows[rows.length-1];
   const segs=[];
-  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum }));
-  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum }));
+  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum, leg:alLegNoVal(r.legNo) }));
+  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }));
   alChainFillFnums(segs);
   return {
     dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
@@ -6722,9 +6730,9 @@ function alRandomChainLeg(rows) {
   const inWin = (m,a,b) => (a==null||b==null) ? true : (a<=b ? (m>=a&&m<=b) : (m>=a||m<=b));
   const ground = alGroundTime(first.eqp, first);
   const segs=[];
-  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, blk:Math.max(5, r5(hm(r.blockTime)||120)), fnum:r.flightNum,
+  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, blk:Math.max(5, r5(hm(r.blockTime)||120)), fnum:r.flightNum, leg:alLegNoVal(r.legNo),
                                w:[hm(r.dd1),hm(r.dd2),hm(r.aa1),hm(r.aa2)] }));
-  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum,
+  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo),
                                w:[hm(r.rdd1),hm(r.rdd2),hm(r.raa1),hm(r.raa2)] }));
   const plan = list => {
     const lo = list[0].w[0] ?? 360, hi = list[0].w[1] ?? 1350;
@@ -7034,7 +7042,7 @@ let _alInBlur = false, _alRenderPending = false, _alRendering = false;
 
 // ── Sorting (input page and planner). Display only: the list itself keeps its order,
 // so linked rows, flight numbers and keys are not touched. ──
-const AL_SORT_OPTS=[['','As entered'],['time','Departure time'],['from','Departure airport'],['to','Destination'],['type','Aircraft type'],['fnum','Flight number']];
+const AL_SORT_OPTS=[['','As entered'],['leg','Leg number'],['time','Departure time'],['from','Departure airport'],['to','Destination'],['type','Aircraft type'],['fnum','Flight number']];
 let aiGenAlSort=(function(){ try{ return localStorage.getItem('aigen_al_sort')||''; }catch(e){ return ''; } })();
 let _alSortSnap=null;   // { mode, legs:[…] } — order taken when the sort was chosen
 let _alVisRank=null;    // row index → position on screen (Tab order follows the screen)
@@ -7052,6 +7060,10 @@ function alSortCmpVal(a,b){
   return (typeof a==='number' && typeof b==='number') ? a-b : String(a).localeCompare(String(b));
 }
 function alFnumVal(v){ const d=String(v||'').replace(/\D/g,''); return d ? +d : null; }
+// leg number (LEG # column) as a number, or null
+function alLegNoVal(v){ if (v===null||v===undefined||String(v).trim()==='') return null; const n=parseInt(String(v).replace(/\D/g,''),10); return Number.isFinite(n)?n:null; }
+// lowest leg number of some rows (outbound or return) — a row sorts where its first leg stands
+function alRowsLegKey(rows){ let m=null; rows.forEach(r=>[r.legNo,r.rLegNo].forEach(v=>{ const n=alLegNoVal(v); if(n!=null && (m==null||n<m)) m=n; })); return m; }
 // Take the sorted order now. Rows flown as one flight (linked onward rows) and rows not
 // filled in yet stay together with the row above them.
 function alSortSnapshot(){
@@ -7067,6 +7079,7 @@ function alSortSnapshot(){
     if (mode==='to')   return z.arr ? z.arr[0] : (f.arr ? f.arr[0] : null);
     if (mode==='type') return String(f.eqp||'').toUpperCase() || null;
     if (mode==='fnum') return alFnumVal(f.flightNum);
+    if (mode==='leg')  return alRowsLegKey(g.rows.filter(r=>r.arr));
     return g.pos; };
   groups.forEach(g=>{ g.k=keyOf(g); g.t=alSortTime(g.rows[0]); });
   groups.sort((a,b)=> alSortCmpVal(a.k,b.k) || alSortCmpVal(a.t,b.t) || (a.pos-b.pos));
@@ -7210,6 +7223,7 @@ function _renderAiGenAlLegsNow() {
   const bS = 'display:flex;flex-direction:column;justify-content:center;align-items:stretch;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;';
   const utcStr = ap => { if(!ap) return ''; const o=getUtcOffset(ap); return 'UTC'+(o>=0?'+':'')+o; };
 
+  const alUsesLegNos = aiGenAlLegs.some(l=>alLegNoVal(l.legNo)!=null || alLegNoVal(l.rLegNo)!=null);
   const alOrder = alDisplayOrder();
   _alVisRank = {}; alOrder.forEach((ix,k)=>{ _alVisRank[ix]=k; });
   let visPrev = -1, rowVisPrev = -1;          // row shown directly above (for "Link to row above")
@@ -7571,6 +7585,16 @@ function _renderAiGenAlLegsNow() {
       fnInp.title='Optional flight number. Empty = generated when the rotations are created.';
       fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
       fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
+      if (alUsesLegNos) {
+        const lgInp=document.createElement('input');
+        lgInp.type='text'; lgInp.maxLength=5; lgInp.placeholder='leg#';
+        const lv=isOut ? leg.legNo : leg.rLegNo;
+        lgInp.value = (lv!=null && lv!=='') ? String(lv) : '';
+        lgInp.title='Leg number (LEG # column of your sheet) — used by "Sort by → Leg number"';
+        lgInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#e0b341;background:transparent;border:1px dashed rgba(224,179,65,.45);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
+        lgInp.oninput=()=>{ const v=lgInp.value.replace(/\D/g,''); lgInp.value=v; const n=v?parseInt(v,10):null; if(isOut) leg.legNo=n; else leg.rLegNo=n; };
+        cell.appendChild(lgInp);
+      }
       cell.appendChild(fnInp);
       if (!knownMode) {
         // RANDOM schedule: block time looked up (→) or estimated, editable
@@ -8655,6 +8679,7 @@ function alBuildValidLegs() {
       // typed or imported flight numbers (empty = generated)
       flightNum:  (l.flightNum||'').trim(),
       rFlightNum: (l.rFlightNum||'').trim(),
+      legNo: alLegNoVal(l.legNo), rLegNo: alLegNoVal(l.rLegNo),
       // outbound dep window (pinned if fixed) + arr window (wide-open if fixed)
       dd1: outFixed || l.dd1, dd2: outFixed || l.dd2,
       aa1: outFixed ? '00:00' : l.aa1, aa2: outFixed ? '23:59' : l.aa2,
@@ -8974,7 +8999,7 @@ function buildRotationBars(validLegs, research) {
           depIcao:sg.dep[0], arrIcao:sg.arr[0],
           depLocal, arrLocal:((arrRaw%1440)+1440)%1440, dayCross:Math.floor(arrRaw/1440),
           depOff:dOff, arrOff:aOff,
-          block:blockMin, ground, minTurn: (l.exact===false ? undefined : KNOWN_MIN_TURN), fnum:fn,
+          block:blockMin, ground, minTurn: (l.exact===false ? undefined : KNOWN_MIN_TURN), fnum:fn, legNo:(sg.leg!=null?sg.leg:null),
           ok:true, reason:'', assigned:0
         });
       });
@@ -9085,7 +9110,7 @@ function buildRotationBars(validLegs, research) {
       depIcao:l.dep[0], arrIcao:l.arr[0],
       depLocal:out.depLocal, arrLocal:out.arrLocal, dayCross:out.dayCross,
       depOff:depUtc, arrOff:arrUtc,
-      block:blockOut, ground, fnum:fnumOut, minTurn: l.exact ? KNOWN_MIN_TURN : undefined,
+      block:blockOut, ground, fnum:fnumOut, minTurn: l.exact ? KNOWN_MIN_TURN : undefined, legNo:(l.legNo!=null?l.legNo:null),
       ok: out.ok, reason: out.reason||'', assigned:0
     });
 
@@ -9096,7 +9121,7 @@ function buildRotationBars(validLegs, research) {
       depIcao:l.arr[0], arrIcao:l.dep[0],
       depLocal:ret.depLocal, arrLocal:ret.arrLocal, dayCross:ret.dayCross,
       depOff:arrUtc, arrOff:depUtc,
-      block:blockIn, ground, fnum:fnumIn, minTurn: l.exact ? KNOWN_MIN_TURN : undefined,
+      block:blockIn, ground, fnum:fnumIn, minTurn: l.exact ? KNOWN_MIN_TURN : undefined, legNo:(l.rLegNo!=null?l.rLegNo:null),
       ok: ret.ok, reason: ret.reason||'', assigned:0
     });
   });
@@ -9281,7 +9306,8 @@ function renderRotationBars() {
     depAp.textContent=bar.depIcao; left.appendChild(depAp);
     const mid=document.createElement('div');
     mid.style.cssText='display:flex;align-items:center;justify-content:center;padding:4px 6px;flex:1;overflow:hidden;';
-    if(!compact){ mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.fnum+'</div>'; }
+    if(!compact){ mid.style.flexDirection='column'; mid.innerHTML='<div style="font-size:11px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.85;">'+bar.airline+' '+bar.fnum+'</div>'
+      +(bar.legNo!=null ? '<div style="font-size:9px;font-weight:700;color:#e0b341;letter-spacing:.04em;">LEG '+bar.legNo+'</div>' : ''); }
     const right=document.createElement('div');
     right.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;padding:4px 8px;background:rgba(0,0,0,.2);flex-shrink:0;';
     const arrTimeWrap=document.createElement('div');
@@ -9448,6 +9474,7 @@ function renderRotationBars() {
     if (rotSort==='to')   return z.arrIcao;
     if (rotSort==='type') return String(f.eqp||'').toUpperCase();
     if (rotSort==='fnum') return alFnumVal(f.fnum);
+    if (rotSort==='leg')  { let m=null; bars.forEach(b=>{ if (b.legNo!=null && (m==null||b.legNo<m)) m=b.legNo; }); return m; }
     return null;
   };
   const firstDep = li => { const b=byLeg[li].slice().sort(rotBarOrder)[0]; return b ? b.depLocal : null; };
@@ -9761,6 +9788,7 @@ function rotLaneTipHtml(ac, asg, segIdx){
     + row('Route', '<b>'+dep+' → '+arr+'</b>'+(depN||arrN?'<div style="font-size:11px;color:var(--txt2);">'+(depN||dep)+' → '+(arrN||arr)+'</div>':''))
     + row('Departure', '<span style="font-family:monospace;">'+hm(depLocAbs)+'</span> local · '+dayOf(depLocAbs)+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep)+' UTC</span>')
     + row('Arrival', '<span style="font-family:monospace;">'+hm(arrLocAbs)+'</span> local'+(dayDiff>0?' <span style="color:#f0b400;">+'+dayDiff+'d</span>':'')+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep+seg.block)+' UTC</span>')
+    + (seg.legNo!=null ? row('Leg #', '<span style="font-family:monospace;color:#e0b341;">'+seg.legNo+'</span>') : '')
     + row('Block time', '<span style="font-family:monospace;">'+dur(seg.block)+'</span>')
     + row('Ground after', '<span style="font-family:monospace;">'+(seg.ground||0)+' min</span>')
     + row('Daily', rotDailyLegs.has(+asg.legIdx)?'<span style="color:var(--acc);">✓ yes</span>':'no')
@@ -10007,7 +10035,7 @@ function barToUTCSeg(bar) {
   const arrUTCraw = depUTCraw + bar.block;
   const arrUTC = ((arrUTCraw%1440)+1440)%1440;
   const utcDayCross = Math.floor(arrUTCraw/1440) - Math.floor(depUTCraw/1440);
-  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground, minTurn:bar.minTurn, depOff:bar.depOff, arrOff:bar.arrOff };
+  return { depUTC, arrUTC, utcDayCross, depIcao:bar.depIcao, arrIcao:bar.arrIcao, fnum:bar.fnum, block:bar.block, ground:bar.ground, minTurn:bar.minTurn, depOff:bar.depOff, arrOff:bar.arrOff, legNo:(bar.legNo!=null?bar.legNo:null) };
 }
 
 // Compute ALL segments of a leg (2 for a simple out/return, N for a split chain),
@@ -10301,6 +10329,7 @@ function showBarPopup(bar) {
     +'<span style="color:var(--txt3);">Block time</span><span style="font-family:monospace;color:#fff;">'+fmt(bar.block)+'</span>'
     +'<span style="color:var(--txt3);">Ground</span><span style="font-family:monospace;color:#fff;">'+bar.ground+' min</span>'
     +'<span style="color:var(--txt3);">Flight no.</span><span style="font-family:monospace;color:#fff;">'+bar.fnum+'</span>'
+    +(bar.legNo!=null ? '<span style="color:var(--txt3);">Leg #</span><span style="font-family:monospace;color:#e0b341;">'+bar.legNo+'</span>' : '')
     +'<span style="color:var(--txt3);">Type</span><span style="color:'+(night?'#5a8dee':'#f0b400')+';">'+(night?'☾ Overnight (+'+bar.dayCross+' day)':'☀ Same day')+'</span>'
     +'<span style="color:var(--txt3);">Assigned</span><span style="color:#fff;">'+(bar.assigned||0)+' / 7</span>'
     +'</div>'
