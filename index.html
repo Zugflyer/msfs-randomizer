@@ -6223,6 +6223,25 @@ function alSheetToSegments(rows) {
   }
   return out;
 }
+// Base of the rotations in an imported sheet: every flight (rows with the same flight
+// number, in sheet order) scores 1 for the airport it starts at and 1 for the one it ends
+// at. LHR→…→SYD + SYD→…→LHR gives LHR the most, even though SYD has more departures
+// (its onward hops to AKL). Ties: more departures, then the first airport of the sheet.
+// score = the values the hub was chosen by (to compare a hub that is already set).
+function alHubScores(segs){
+  const score={}, dep={}, add=(c,n)=>{ if (c) score[c]=(score[c]||0)+n; };
+  const byFln=new Map();
+  segs.forEach(sg=>{ const k=sg.fln||('#'+sg.row); if (!byFln.has(k)) byFln.set(k,[]); byFln.get(k).push(sg); dep[sg.from[0]]=(dep[sg.from[0]]||0)+1; });
+  byFln.forEach(list=>{ add(list[0].from[0],1); add(list[list.length-1].to[0],1); });
+  const first=segs[0] && segs[0].from[0];
+  const byScore=Object.keys(score).sort((a,b)=> score[b]-score[a] || (dep[b]||0)-(dep[a]||0) || ((b===first)-(a===first)));
+  // only a clear base counts (25 % ahead of the next airport); a network without one
+  // (point to point, e.g. Air Inter Province) keeps the airport with the most departures
+  const clear = byScore.length===1 || (byScore.length>1 && score[byScore[0]] >= 1.25*score[byScore[1]]);
+  const byDep=Object.keys(dep).sort((a,b)=> (dep[b]||0)-(dep[a]||0) || ((b===first)-(a===first)));
+  const best=(clear ? byScore[0] : byDep[0]) || null;
+  return { score: clear ? score : dep, best };
+}
 // Pair outbound and return segments into route rows (A→B with B→A). A flight that departs
 // the hub counts as outbound; the return partner preferably carries the next flight number.
 function alSegmentsToRows(segs, hubIcao) {
@@ -6268,18 +6287,23 @@ async function aiGenAlImportXls(file) {
     if (!rows) rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header:1, raw:true, defval:null });
     const parsed=alSheetToSegments(rows);
     if (!parsed.segs.length) { say('Nothing imported. '+parsed.problems.slice(0,3).join(' · '),'#f85149'); return; }
-    // Airline and hub still empty? Take them from the file: the most frequent airline code
-    // (3 letters = ICAO) and the airport with the most departures. Without them the rows
-    // can't be shown ("Enter an airline ICAO code above to start").
+    // Airline still empty? Take it from the file (most frequent 3-letter code). The hub is
+    // the base of the rotations (see alHubScores) — taken from the file when none is set,
+    // when the one set doesn't occur in the file, or when it is clearly not the base there
+    // (e.g. SYD left over from an import that guessed wrong). Without airline and hub the
+    // rows can't be shown ("Enter an airline ICAO code above to start").
     const autoSet=[];
     if (!aiGenAirline || aiGenAirline.length<3) {
       const best=Object.keys(parsed.alCount||{}).filter(c=>/^[A-Z0-9]{3}$/.test(c)).sort((a,b)=>parsed.alCount[b]-parsed.alCount[a])[0];
       if (best) { aiGenAirline=best; autoSet.push('airline '+best); }
     }
-    if (!aiGenAlHub) {
-      const cnt={}; parsed.segs.forEach(sg=>{ cnt[sg.from[0]]=(cnt[sg.from[0]]||0)+1; });
-      const h=Object.keys(cnt).sort((a,b)=>cnt[b]-cnt[a])[0];
-      if (h && schedByCode[h]) { aiGenAlHub=schedByCode[h]; autoSet.push('hub '+h); }
+    {
+      const hs=alHubScores(parsed.segs);
+      const cur=aiGenAlHub ? aiGenAlHub[0] : '';
+      if (hs.best && schedByCode[hs.best] && hs.best!==cur && (!cur || (hs.score[cur]||0) < hs.score[hs.best])) {
+        aiGenAlHub=schedByCode[hs.best];
+        autoSet.push('hub '+hs.best+(cur ? ' (was '+cur+')' : ''));
+      }
     }
     const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
     let pairs=alSegmentsToRows(parsed.segs, hubIcao);
