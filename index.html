@@ -7018,6 +7018,12 @@ function alIsEastWest(dep, arr) {
 // then +30 for long eastbound→westbound, -30 for long westbound→eastbound.
 // Round a minute value to the nearest 5 minutes (for estimated/derived times only).
 function round5(m) { return m==null ? null : Math.round(m/5)*5; }
+// A looked-up block time "5:47" → "5:50", "1:31" → "1:30" (nearest 5 minutes)
+function rnd5Hm(s) {
+  const m=String(s||'').match(/(\d{1,2}):(\d{2})/); if (!m) return s;
+  const v=Math.max(5, round5((+m[1])*60+(+m[2])));
+  return Math.floor(v/60)+':'+String(v%60).padStart(2,'0');
+}
 
 function alEstimateEffectiveBlock(dep, arr) {
   const air = alEstimateAirMin(dep, arr);
@@ -8056,7 +8062,7 @@ async function aiGenAlFetchHopBlock(i, side, k) {
         const d=await r.json();
         const txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
         const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
-        if (m&&!txt.toUpperCase().includes('NONE')) { set(m[0],true); return; }
+        if (m&&!txt.toUpperCase().includes('NONE')) { set(rnd5Hm(m[0]),true); return; }
       }
     } catch(e){}
   }
@@ -8099,7 +8105,7 @@ async function aiGenAlFetchBlockTime(i, dir) {
         const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
         const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
         if (m&&!txt.toUpperCase().includes('NONE')) {
-          setVal(m[0], true);
+          setVal(rnd5Hm(m[0]), true);
           renderAiGenAlLegs();
           return;
         }
@@ -8149,8 +8155,11 @@ async function aiGenAlFetchAllBlockTimes(){
       set:(v,r)=>{ leg.rBlockTime=v; leg.rBlockTimeReal=r; } });
   });
   if (!targets.length) { say('No complete routes yet (both airports needed).','#e0b341'); return; }
+  // green values from earlier lookups → nearest 5 minutes as well (no API call needed)
+  let nRounded=0;
+  targets.forEach(t=>{ if (!t.real) return; const m=alHmToMin(String(t.cur||'').trim()); if (m!=null && m%5) { t.set(rnd5Hm(t.cur), true); nRounded++; } });
   const todo = targets.filter(t=>!t.real);
-  if (!todo.length) { say('✓ All '+targets.length+' block times are real already.','#3fb950'); return; }
+  if (!todo.length) { if (nRounded) renderAiGenAlLegs(); say('✓ All '+targets.length+' block times are real already'+(nRounded?' · '+nRounded+' rounded to 5 min':'')+'.','#3fb950'); return; }
   const key = (a,b)=>a[0]+'-'+b[0];
   const pairs=new Map(); todo.forEach(t=>{ const k=key(t.dep,t.arr); if (!pairs.has(k)) pairs.set(k,{ dep:t.dep, arr:t.arr }); });
   const list=[...pairs.values()];
@@ -8213,10 +8222,13 @@ async function aiGenAlFetchAllBlockTimes(){
   let nReal=0, nRev=0, nEst=0;
   todo.forEach(t=>{
     const k=key(t.dep,t.arr), rk=key(t.arr,t.dep);
-    if (found[k]!=null)  { t.set(fmtM(found[k]), true);  nReal++; return; }
-    if (found[rk]!=null) { t.set(fmtM(found[rk]), false); nRev++; return; }
+    if (found[k]!=null)  { t.set(fmtM(round5(found[k])), true);  nReal++; return; }
+    if (found[rk]!=null) { t.set(fmtM(round5(found[rk])), false); nRev++; return; }
     nEst++;
-    if (t.cur && String(t.cur).trim()) return;
+    if (t.cur && String(t.cur).trim()) {                 // keep it — on 5 minutes like everything else
+      const m=alHmToMin(String(t.cur).trim()); if (m!=null && m%5) t.set(rnd5Hm(t.cur), false);
+      return;
+    }
     const e=alEstimateEffectiveBlock(t.dep,t.arr); if (e!=null) t.set(fmtM(e), false);
   });
   _alBtAllRun=null;
@@ -8226,6 +8238,7 @@ async function aiGenAlFetchAllBlockTimes(){
   if (nRev) msg+=' · '+nRev+' from the opposite direction';
   if (nEst) msg+=' · '+nEst+' estimated';
   if (targets.length>todo.length) msg+=' · '+(targets.length-todo.length)+' were real already';
+  if (nRounded) msg+=' ('+nRounded+' rounded to 5 min)';
   if (!apiKey) msg='No API key (🔑 top right) — only estimates: '+nEst+' flights';
   else if (run.authFail) msg='API key not accepted (🔑 top right) — only estimates';
   say(msg, (!apiKey||run.authFail) ? '#f85149' : (nEst||run.aborted ? '#e0b341' : '#3fb950'));
@@ -8503,8 +8516,9 @@ async function aiGenFetchBlockTime(i) {
         const txt=(data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join(' ').trim();
         const m=txt.match(/\b(\d{1,2}):(\d{2})\b/);
         if (m&&!txt.toUpperCase().includes('NONE')) {
-          leg.blockTime=m[0]; leg.blockTimeReal=true;
-          if (btEl){btEl.value=m[0];btEl.style.color='#3fb950';btEl.style.fontWeight='700';btEl.style.fontStyle='';}
+          const v5=rnd5Hm(m[0]);
+          leg.blockTime=v5; leg.blockTimeReal=true;
+          if (btEl){btEl.value=v5;btEl.style.color='#3fb950';btEl.style.fontWeight='700';btEl.style.fontStyle='';}
           return;
         }
       }
@@ -8516,7 +8530,7 @@ async function aiGenFetchBlockTime(i) {
   const a=Math.sin(Δφ/2)**2+Math.cos(φ1)*Math.cos(φ2)*Math.sin(Δλ/2)**2;
   const dist=R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
   const spd=dist<200?400:dist<500?580:dist<2000?780:870;
-  const mins=Math.round(dist/spd*60)+(dist<500?15:25);
+  const mins=round5(Math.round(dist/spd*60)+(dist<500?15:25));     // estimates: nearest 5 minutes
   const bt=Math.floor(mins/60)+':'+(String(mins%60)).padStart(2,'0');
   leg.blockTime=bt; leg.blockTimeReal=false;
   if (btEl){btEl.value=bt;btEl.style.color='#777';btEl.style.fontStyle='italic';btEl.style.fontWeight='400';}
