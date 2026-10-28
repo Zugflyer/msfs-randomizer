@@ -1060,6 +1060,18 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             </div>
           </div>
 
+          <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
+
+          <!-- Look up the block times of all routes at once -->
+          <div style="display:flex;flex-direction:column;align-items:center;gap:3px;">
+            <button id="aigen-al-bt-all" onclick="aiGenAlFetchAllBlockTimes()"
+              title="Looks up the real nonstop block time of every flight below (outbound, return and every hop of a split routing) that has no real one yet. Found → green. Not found → estimated (grey). Needs the API key (🔑)."
+              style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid #3fb950;color:#7ee787;background:rgba(63,185,80,.1);cursor:pointer;white-space:nowrap;">
+              ⏱ Look up all block times
+            </button>
+            <span id="aigen-al-bt-all-status" style="font-size:10px;color:var(--txt3);max-width:230px;text-align:center;"></span>
+          </div>
+
           </div>
 
           <div style="width:1px;height:42px;background:var(--bdr2);flex-shrink:0;"></div>
@@ -8077,6 +8089,122 @@ async function aiGenAlFetchBlockTime(i, dir) {
     setVal(bt, false);
   }
   renderAiGenAlLegs();
+}
+
+// ── Look up the block times of ALL flights at once (⏱ button in the header) ──────────
+// Every flight without a real block time yet (outbound, return, each hop of a split
+// routing): the real nonstop block times in a few API calls (20 city pairs each, 3 at a
+// time) → green. Nothing found → the real time of the opposite direction, else the
+// estimate (grey). Clicking again while it runs stops it (what was found is kept).
+let _alBtAllRun = null;
+async function aiGenAlFetchAllBlockTimes(){
+  const btn=document.getElementById('aigen-al-bt-all'), st=document.getElementById('aigen-al-bt-all-status');
+  const say=(t,col)=>{ if(st){ st.textContent=t; st.style.color=col||'var(--txt3)'; } };
+  if (_alBtAllRun) { _alBtAllRun.aborted=true; say('Stopping…','#e0b341'); return; }
+  if (aiGenAlSchedMode==='known') { say('Known schedule: the block times come from your DEP/ARR times.','#e0b341'); return; }
+  const fmtM = m => Math.floor(m/60)+':'+String(m%60).padStart(2,'0');
+  // every flight with both airports; set() writes back by row/hop index (the hop objects
+  // are rebuilt on every redraw)
+  const targets=[];
+  aiGenAlLegs.forEach(leg=>{
+    if (Array.isArray(leg.stops) && leg.stops.length) {
+      ['out','ret'].forEach(side=>{
+        ((side==='out'?leg.outHops:leg.retHops)||[]).forEach((h,k)=>{
+          if (!h || !h.dep || !h.arr) return;
+          targets.push({ dep:h.dep, arr:h.arr, real:!!h.blockTimeReal, cur:h.blockTime,
+            set:(v,r)=>{ const H=((side==='out'?leg.outHops:leg.retHops)||[])[k]; if (H) { H.blockTime=v; H.blockTimeReal=r; } } });
+        });
+      });
+      return;
+    }
+    if (!leg.dep || !leg.arr) return;
+    targets.push({ dep:leg.dep, arr:leg.arr, real:!!leg.blockTimeReal, cur:leg.blockTime,
+      set:(v,r)=>{ leg.blockTime=v; leg.blockTimeReal=r; } });
+    const back = leg.dep || aiGenAlHub;
+    if (back) targets.push({ dep:leg.arr, arr:back, real:!!leg.rBlockTimeReal, cur:leg.rBlockTime,
+      set:(v,r)=>{ leg.rBlockTime=v; leg.rBlockTimeReal=r; } });
+  });
+  if (!targets.length) { say('No complete routes yet (both airports needed).','#e0b341'); return; }
+  const todo = targets.filter(t=>!t.real);
+  if (!todo.length) { say('✓ All '+targets.length+' block times are real already.','#3fb950'); return; }
+  const key = (a,b)=>a[0]+'-'+b[0];
+  const pairs=new Map(); todo.forEach(t=>{ const k=key(t.dep,t.arr); if (!pairs.has(k)) pairs.set(k,{ dep:t.dep, arr:t.arr }); });
+  const list=[...pairs.values()];
+  const apiKey = typeof getApiKey==='function' ? getApiKey() : '';
+  const found={};                                   // "LFLL-LFRS" → minutes
+  const run={ aborted:false }; _alBtAllRun=run;
+  if (btn) { btn.textContent='■ Stop lookup'; btn.style.borderColor='#e0b341'; btn.style.color='#e0b341'; }
+  const t0=Date.now();
+  if (apiKey) {
+    const chunks=[]; for (let i=0;i<list.length;i+=20) chunks.push(list.slice(i,i+20));
+    let done=0;
+    const tick=()=>{ if (!run.aborted) say('⏳ '+done+'/'+list.length+' city pairs · '+Object.keys(found).length+' found · '+Math.round((Date.now()-t0)/1000)+'s'); };
+    tick(); const tm=setInterval(tick,1000);
+    const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+    const ask=async chunk=>{
+      const lines=chunk.map(p=>p.dep[0]+'-'+p.arr[0]+'  ('+(p.dep[1]||p.dep[0])+' '+(p.dep[7]||p.dep[2]||'')+' → '+(p.arr[1]||p.arr[0])+' '+(p.arr[7]||p.arr[2]||'')+')').join('\n');
+      const prompt='Find the real scheduled NONSTOP block time (gate to gate, as in airline timetables) for each city pair below, in the direction given. '
+        +'Use web_search (e.g. "flights LYS-NTE nonstop duration"); one search can cover several pairs. Only give a time for a real nonstop service (current or recent); '
+        +'if you find none, give null — do not guess.\nOutput ONLY one JSON object, no other text, keys exactly as listed (ICAO-ICAO), values "H:MM" or null, e.g. {"LFLL-LFRS":"1:10","LFRS-LFPG":null}\n\n'+lines;
+      for (let attempt=1; attempt<=4 && !run.aborted; attempt++) {
+        try {
+          const r=await fetch('https://api.anthropic.com/v1/messages',{ method:'POST',
+            headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true','x-api-key':apiKey},
+            body:JSON.stringify({ model:'claude-sonnet-4-5-20250929', max_tokens:4000,
+              tools:[{ type:'web_search_20250305', name:'web_search', max_uses:8 }],
+              messages:[{ role:'user', content:prompt }] }) });
+          if (r.ok) {
+            const d=await r.json();
+            const texts=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text);
+            return extractRotJSON(texts[texts.length-1]||'') || extractRotJSON(texts.join('\n'));
+          }
+          if (r.status===401) { run.authFail=true; return null; }
+          if ((r.status===429 || r.status===529) && attempt<4) { await sleep(r.status===429 ? 30000 : 5000*attempt); continue; }
+          return null;
+        } catch(e) { if (attempt>=4) return null; await sleep(3000); }
+      }
+      return null;
+    };
+    let next=0;
+    const worker=async()=>{
+      while (next<chunks.length && !run.aborted && !run.authFail) {
+        const c=chunks[next++];
+        const j=await ask(c);
+        if (j && typeof j==='object') c.forEach(p=>{
+          const m=alHmToMin(String(j[key(p.dep,p.arr)]||'').trim());
+          if (m==null || m<15) return;
+          // a "nonstop" time far off the distance is a connection or a mix-up — not taken
+          const est=alEstimateEffectiveBlock(p.dep,p.arr);
+          if (est!=null && (m<est*0.6 || m>est*1.7+15)) return;
+          found[key(p.dep,p.arr)]=m;
+        });
+        done+=c.length;
+      }
+    };
+    await Promise.all([worker(),worker(),worker()]);
+    clearInterval(tm);
+  }
+  // write back: real → green · opposite direction real → grey · else keep the value there
+  // (estimate from the import or your own) or estimate an empty one
+  let nReal=0, nRev=0, nEst=0;
+  todo.forEach(t=>{
+    const k=key(t.dep,t.arr), rk=key(t.arr,t.dep);
+    if (found[k]!=null)  { t.set(fmtM(found[k]), true);  nReal++; return; }
+    if (found[rk]!=null) { t.set(fmtM(found[rk]), false); nRev++; return; }
+    nEst++;
+    if (t.cur && String(t.cur).trim()) return;
+    const e=alEstimateEffectiveBlock(t.dep,t.arr); if (e!=null) t.set(fmtM(e), false);
+  });
+  _alBtAllRun=null;
+  if (btn) { btn.textContent='⏱ Look up all block times'; btn.style.borderColor='#3fb950'; btn.style.color='#7ee787'; }
+  renderAiGenAlLegs();
+  let msg=(run.aborted?'Stopped · ':'✓ ')+nReal+' real (green)';
+  if (nRev) msg+=' · '+nRev+' from the opposite direction';
+  if (nEst) msg+=' · '+nEst+' estimated';
+  if (targets.length>todo.length) msg+=' · '+(targets.length-todo.length)+' were real already';
+  if (!apiKey) msg='No API key (🔑 top right) — only estimates: '+nEst+' flights';
+  else if (run.authFail) msg='API key not accepted (🔑 top right) — only estimates';
+  say(msg, (!apiKey||run.authFail) ? '#f85149' : (nEst||run.aborted ? '#e0b341' : '#3fb950'));
 }
 
 // Called when a master time field changes — update all leg fields that haven't been manually edited
