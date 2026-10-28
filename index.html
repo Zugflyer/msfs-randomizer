@@ -862,8 +862,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <!-- ═══ AI GENERATOR ═══ -->
     <div id="view-aigen" style="display:none;flex:1;flex-direction:column;overflow:hidden;" class="roster-page">
 
-      <!-- Row 1: Mode buttons, centered -->
-      <div style="padding:8px 16px 6px;display:flex;justify-content:center;gap:8px;flex-shrink:0;">
+      <!-- Row 1: Mode buttons, centered · time-zone date top right -->
+      <div style="padding:8px 16px 6px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;flex-shrink:0;">
+        <div></div>
+        <div style="display:flex;gap:8px;">
         <button id="aigen-btn-airport" onclick="setAiGenMode('airport')"
           style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;">
           🏙 AIRPORT
@@ -872,6 +874,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           style="font-size:12px;font-weight:600;padding:5px 18px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;">
           ✈ AIRLINE
         </button>
+        </div>
+        <div style="justify-self:end;display:flex;align-items:center;gap:6px;"
+          title="Date the AI Generator and the Rotation Planner take the time zones from (summer / winter time, also outside Europe). Pick a date in the season you plan for, e.g. 15 May 2027 = European summer time. Remembered on this computer.">
+          <span style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;">Time zones as on</span>
+          <input type="date" id="aigen-tz-date" onchange="setAiGenTzDate(this.value)"
+            style="font-size:11px;padding:3px 6px;border-radius:4px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);cursor:pointer;color-scheme:dark;">
+          <span id="aigen-tz-label" style="font-size:11px;font-weight:700;white-space:nowrap;"></span>
+        </div>
       </div>
 
       <!-- Airport mode -->
@@ -1121,6 +1131,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button onclick="openMergeDialog()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;white-space:nowrap;">+ Merge into Flightplan</button>
         <button id="rot-daily-all" onclick="toggleRotDailyAll()" title="Daily for all rotations: when on, every rotation is set to Daily — dragging it onto an aircraft fills all 7 days of week 1. Single rotations can still be switched off with their own Daily button."
           style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:#c9b8ff;cursor:pointer;white-space:nowrap;">Daily for all</button>
+        <span id="rot-tz-label" style="font-size:11px;font-weight:600;white-space:nowrap;" title="Date whose time zones (summer / winter time) this planner uses — change it top right on the routes page"></span>
         <div id="rot-status" style="font-size:11px;color:var(--txt3);"></div>
         <button id="rot-abort" style="display:none;font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid #f85149;background:transparent;color:#f85149;cursor:pointer;">✕ Abort</button>
       </div>
@@ -4894,6 +4905,7 @@ function openRoutingInLegs(routingStr) {
 }
 
 window.addEventListener('load', async () => {
+  try { applyAiGenTzUI(); } catch(e) {}
   try { initMap(); } catch(e) { console.error('Map init:', e); }
   await loadAllFromCloud();
   await loadLogbook();
@@ -4911,6 +4923,7 @@ window.addEventListener('load', async () => {
   // Start on logbook
   switchView('logbook');
   initDST();
+  try { applyAiGenTzUI(); } catch(e) {}
   initLbMap();
   // In case airports.js loaded before initAfterAirports was defined
   if (airportsLoaded && typeof initAfterAirports === 'function') initAfterAirports();
@@ -5556,6 +5569,81 @@ function drawCalcLegsOnMap() {
 //              AU (1st Sun Oct → 1st Sun Apr), NZ (last Sun Sep → 1st Sun Apr)
 
 var scheduleDate = ''; // YYYY-MM-DD string, set by date picker
+// AI Generator + Rotation Planner: their own date for the time zones (summer / winter time),
+// remembered on this computer. Default: the coming European summer (15 July).
+function aiGenDefaultTzDate(){
+  var n=new Date(), y=n.getFullYear();
+  if (n.getMonth()>6 || (n.getMonth()===6 && n.getDate()>15)) y++;
+  return y+'-07-15';
+}
+var aiGenTzDate = (function(){ try { var v=localStorage.getItem('aigen_tz_date'); if (v && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v; } catch(e){} return aiGenDefaultTzDate(); })();
+var rotTzDate = null;      // date the rotation planner's flights were built with
+// the date getUtcOffset uses: the generator's while the AI Generator or the planner is open
+function aiGenTzDateNow(){
+  var v; try { v = currentView; } catch(e) { return null; }
+  return (v==='aigen' || v==='rotations') ? aiGenTzDate : null;
+}
+function aiGenTzFmt(d){
+  var m=String(d||'').match(/^(\d{4})-(\d{2})-(\d{2})$/); if (!m) return '';
+  return (+m[3])+' '+['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][+m[2]-1]+' '+m[1];
+}
+function aiGenTzSeason(d){ return isDSTActive('EU', d) ? '☀ summer time' : '❄ winter time'; }
+function applyAiGenTzUI(){
+  var pk=document.getElementById('aigen-tz-date'); if (pk && pk.value!==aiGenTzDate) pk.value=aiGenTzDate;
+  var lb=document.getElementById('aigen-tz-label');
+  if (lb) { var su=isDSTActive('EU', aiGenTzDate); lb.textContent=aiGenTzSeason(aiGenTzDate); lb.style.color= su ? '#e0b341' : '#9fc7ff'; }
+  var rl=document.getElementById('rot-tz-label');
+  if (rl) {
+    var hasBars=false; try { hasBars = rotBars.length>0; } catch(e) {}
+    var d = (hasBars && rotTzDate) ? rotTzDate : aiGenTzDate;
+    var off = d!==aiGenTzDate;
+    rl.textContent = 'Time zones: '+aiGenTzFmt(d)+' · '+aiGenTzSeason(d)+(off ? ' ⚠ (routes page: '+aiGenTzFmt(aiGenTzDate)+')' : '');
+    rl.style.color = off ? '#f85149' : (isDSTActive('EU', d) ? '#e0b341' : '#9fc7ff');
+  }
+}
+// The rotation planner was built with other time zones: every flight keeps its LOCAL
+// departure time (the timetable), its UTC time moves with the new offsets.
+function rotRetimeZones(){
+  var N=ROT_SPAN, n=0;
+  var off=function(icao){ var ap=lookupAirport(String(icao||'')); return ap ? getUtcOffset(ap) : null; };
+  rotBars.forEach(function(b){
+    var d=off(b.depIcao), a=off(b.arrIcao); if (d==null || a==null) return;
+    if (d!==b.depOff || a!==b.arrOff) n++;
+    b.depOff=d; b.arrOff=a;
+    var raw=b.depLocal + b.block + (a-d)*60;
+    b.arrLocal=((raw%1440)+1440)%1440; b.dayCross=Math.floor(raw/1440);
+  });
+  rotAircraft.forEach(function(ac){ Object.keys(ac.assignments||{}).forEach(function(k){ (ac.assignments[k]||[]).forEach(function(asg){ (asg.segs||[]).forEach(function(sg){
+    var d=off(sg.depIcao), a=off(sg.arrIcao); if (d==null || a==null) return;
+    var delta=-(d-(sg.depOff||0))*60;
+    sg.depOff=d; sg.arrOff=a;
+    sg.absDep=(((sg.absDep+delta)%N)+N)%N; sg.absArr=(((sg.absDep+sg.block)%N)+N)%N;
+    sg.depUTC=(((sg.depUTC+delta)%1440)+1440)%1440; sg.arrUTC=(sg.depUTC+sg.block)%1440;
+    sg.utcDayCross=Math.floor((sg.depUTC+sg.block)/1440);
+  }); }); }); });
+  return n;
+}
+function setAiGenTzDate(v){
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))) { applyAiGenTzUI(); return; }
+  aiGenTzDate=v;
+  try { localStorage.setItem('aigen_tz_date', v); } catch(e){}
+  // flights already on the planner: convert them to the new date's time zones?
+  var hasBars=false; try { hasBars = rotBars.length>0; } catch(e) {}
+  if (hasBars && rotTzDate && rotTzDate!==v) {
+    var changes=rotBars.some(function(b){ var d=lookupAirport(String(b.depIcao||'')), a=lookupAirport(String(b.arrIcao||''));
+      return (d && getUtcOffset(d)!==b.depOff) || (a && getUtcOffset(a)!==b.arrOff); });
+    if (!changes) rotTzDate=v;
+    else if (confirm('The rotation planner was built with the time zones of '+aiGenTzFmt(rotTzDate)+' ('+aiGenTzSeason(rotTzDate).slice(2)+').\n\n'
+        +'OK = convert it to '+aiGenTzFmt(v)+' ('+aiGenTzSeason(v).slice(2)+'): every flight keeps its LOCAL time, the UTC times (TTools export) move.\n'
+        +'Cancel = leave the planner as it is.')) {
+      var n=rotRetimeZones(); rotTzDate=v;
+      var st=document.getElementById('rot-status'); if (st) st.textContent='✓ '+n+' flights converted to the time zones of '+aiGenTzFmt(v);
+    }
+  }
+  applyAiGenTzUI();
+  try { if (aiGenMode==='airline') renderAiGenAlLegs(); else renderAiGenLegs(); } catch(e){}
+  try { if (rotBars.length) { renderRotationBars(); renderRotationLanes(); } } catch(e){}
+}
 
 function initDST() {
   // Default to today's date
@@ -5657,7 +5745,7 @@ function isDSTActive(region, dateStr) {
 
 function getUtcOffset(ap, dateOverride) {
   if (!ap || ap[8] === undefined) return 0;
-  var dateStr = dateOverride || scheduleDate;
+  var dateStr = dateOverride || aiGenTzDateNow() || scheduleDate;
   var region = (ap.length > 10) ? ap[10] : null;
   if (region && ap[9] !== null && ap[9] !== undefined && isDSTActive(region, dateStr)) {
     return ap[9];
@@ -6649,6 +6737,7 @@ async function aiGenAlImportTTools(files){
     });
     fleet.forEach(f=>{ delete f._src; });
     rotAircraft=fleet;
+    rotTzDate=aiGenTzDate;                                  // local times shown with this date's time zones
     rotLegNew=validLegs.map(()=>false);                    // everything here already exists
     rotApplyDailyAll();
     // Aircraft file: kept verbatim for the export (titles, passengers, AC# numbers)
@@ -6934,6 +7023,7 @@ function initAiGen() {
 
 function setAiGenMode(mode) {
   aiGenMode = mode;
+  try { applyAiGenTzUI(); } catch(e) {}
   const btnAp = document.getElementById('aigen-btn-airport');
   const btnAl = document.getElementById('aigen-btn-airline');
   if (btnAp) { btnAp.style.background = mode==='airport'?'var(--acc)':'transparent'; btnAp.style.color = mode==='airport'?'#fff':'var(--txt3)'; btnAp.style.borderColor = mode==='airport'?'var(--acc)':'var(--bdr)'; }
@@ -9132,6 +9222,7 @@ Output exactly this shape (one line is fine):
 }
 
 function buildRotationBars(validLegs, research) {
+  rotTzDate = aiGenTzDate;                 // the time zones these flights are built with
   const utc = research.utc||{};
   const rinfo={}; (research.routes||[]).forEach(r=>{rinfo[r.r]=r;});
   const hm = s=>{const m=String(s||'').match(/(\d{1,2}):(\d{2})/);return m?(+m[1])*60+(+m[2]):null;};
@@ -9351,6 +9442,7 @@ function renderRotationBars() {
   const container = document.getElementById('rot-bars-container');
   if (!container) return;
   applyRotDailyAllUI();
+  applyAiGenTzUI();
   container.innerHTML = '';
   const fmt = m=>{m=((m%1440)+1440)%1440;return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0');};
 
