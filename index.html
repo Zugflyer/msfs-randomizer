@@ -994,7 +994,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             style="width:200px;height:60px;background:transparent;border:1px solid rgba(255,255,255,.25);border-radius:6px;color:#fff;font-size:30px;font-weight:700;font-family:monospace;letter-spacing:.14em;text-transform:uppercase;text-align:center;outline:none;padding:0 10px;box-sizing:border-box;"
             oninput="aiGenAirlineInput(this)">
 
-          <div style="width:1px;height:54px;background:var(--bdr2);flex-shrink:0;"></div>
+          <div id="aigen-al-sep1" style="width:1px;height:54px;background:var(--bdr2);flex-shrink:0;"></div>
 
           <!-- Big hub input -->
           <div style="position:relative;">
@@ -6199,7 +6199,21 @@ let aiGenMode = 'airport';
 let aiGenTarget = null;
 let aiGenLegs = [];
 let aiGenAirline = '';   // selected airline ICAO (airline mode)
-let aiGenAlHub = null;   // selected hub airport array (airline mode)
+let aiGenAlHub = null;   // selected hub airport array (airline mode) · AIRPORT mode: the airport
+// AIRPORT mode uses the same route rows as AIRLINE mode, but with one airport instead of
+// airline + hub, and the airline entered per row (leg.al). Each mode keeps its own rows.
+let aiGenMulti = false;
+const _aiGenProfiles = {};
+function alRowAl(l){ return aiGenMulti ? String((l && l.al) || '').toUpperCase() : aiGenAirline; }
+function aiGenSaveProfile(mode){
+  _aiGenProfiles[mode] = { legs:aiGenAlLegs, airline:aiGenAirline, hub:aiGenAlHub, extras:aiGenAlExtraLegs,
+    showImp:aiGenAlShowImported, sched:aiGenAlSchedMode, minGround:aiGenAlMinGround, snap:_alSortSnap };
+}
+function aiGenLoadProfile(mode){
+  const p=_aiGenProfiles[mode] || { legs:[], airline:'', hub:null, extras:[], showImp:false, sched:aiGenAlSchedMode, minGround:'', snap:null };
+  aiGenAlLegs=p.legs; aiGenAirline=p.airline; aiGenAlHub=p.hub; aiGenAlExtraLegs=p.extras; aiGenAlShowImported=p.showImp;
+  aiGenAlSchedMode=p.sched; aiGenAlMinGround=p.minGround; _alSortSnap=p.snap;
+}
 let aiGenAlFocusAfter = null;  // "row.pos" to focus after the next render (tab continuity)
 
 // ── Schedule mode (airline mode) ────────────────────────────────────────────────
@@ -6298,7 +6312,8 @@ function alSheetToSegments(rows) {
     const dep=alParseClock(depRaw), arr=alParseClock(arrRaw);
     const fln=String(get('fln')||'').replace(/\D/g,'');
     const offRaw=get('off'); const off=(offRaw===null||offRaw===undefined||String(offRaw).trim()==='') ? 0 : (parseInt(String(offRaw).replace(/\s/g,''),10)||0);
-    if (get('al')) { const a=String(get('al')).trim().toUpperCase(); out.airlines.add(a); out.alCount[a]=(out.alCount[a]||0)+1; }
+    const segAl = get('al') ? String(get('al')).trim().toUpperCase() : '';
+    if (segAl) { out.airlines.add(segAl); out.alCount[segAl]=(out.alCount[segAl]||0)+1; }
     const line='row '+(r+1);
     if (!from || !to) { out.problems.push(line+': unknown airport '+(!from?fromCode:toCode)); continue; }
     // empty times are fine (schedule not known); only a value that cannot be read is reported
@@ -6306,7 +6321,7 @@ function alSheetToSegments(rows) {
     if (!arr && !blank(arrRaw)) out.problems.push(line+': ARR time not readable');
     const grdRaw=get('grd'); const grd=(grdRaw===null||grdRaw===undefined||String(grdRaw).trim()==='') ? null : (parseInt(String(grdRaw).replace(/\D/g,''),10));
     const legRaw=get('leg'); const legNo=(legRaw===null||legRaw===undefined||String(legRaw).trim()==='') ? null : parseInt(String(legRaw).replace(/\D/g,''),10);
-    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r,
+    out.segs.push({ fln, from, to, dep, arr, off, eqp:String(get('eqp')||'').trim().toUpperCase(), grd:(Number.isFinite(grd)?grd:null), row:r, al:segAl,
                     leg:(Number.isFinite(legNo)?legNo:null) });
   }
   return out;
@@ -6328,7 +6343,55 @@ function alHubScores(segs){
   const clear = byScore.length===1 || (byScore.length>1 && score[byScore[0]] >= 1.25*score[byScore[1]]);
   const byDep=Object.keys(dep).sort((a,b)=> (dep[b]||0)-(dep[a]||0) || ((b===first)-(a===first)));
   const best=(clear ? byScore[0] : byDep[0]) || null;
-  return { score: clear ? score : dep, best };
+  return { score: clear ? score : dep, best, clear: !!clear };
+}
+// Excel import: pair outbound/return segments into rows and keep multi-stop flights
+// together (flown order, each onward row linked to the row above).
+function alPairsFromSegs(segs, hubIcao) {
+    let pairs=alSegmentsToRows(segs, hubIcao);
+    // Multi-stop flights WITHOUT flight numbers: flights listed in flown order that lead
+    // from an airport over one or more stops back to it (A→B, B→C, C→B, B→A) are one tour.
+    // (With flight numbers the same number on both rows links them — nothing to do here.)
+    const tourOf=new Map();
+    { let cur=null, n=0;
+      segs.forEach(sg=>{
+        if (cur && sg.from[0]===cur.last && sg.row===cur.row+1) cur.list.push(sg); else cur={ start:sg.from[0], list:[sg] };
+        cur.last=sg.to[0]; cur.row=sg.row;
+        if (cur.last===cur.start) {
+          if (cur.list.length>2 && cur.list.every(x=>!x.fln)) { n++; cur.list.forEach(x=>tourOf.set(x,n)); }
+          cur=null;
+        }
+      });
+    }
+    // Keep the rows of a multi-stop flight together in flown order; each onward row is
+    // linked to the row above. Two ways to recognise an onward row q of row x:
+    //  • both belong to the same tour (see above), or
+    //  • only the outbound flights are listed: q stands directly below x in the sheet and
+    //    departs where x arrives (A→B, then B→C) — no flight numbers, no returns listed.
+    {
+      const inTour=p=> p.ret && tourOf.has(p.out) && tourOf.get(p.ret)===tourOf.get(p.out);
+      const follows=(x,q)=>{
+        if (q.out.from[0]!==x.out.to[0]) return false;
+        if (inTour(x) && inTour(q)) return tourOf.get(q.out)===tourOf.get(x.out) && q.out.row>x.out.row;
+        return !x.ret && !q.ret && !x.out.fln && !q.out.fln && q.out.row===x.out.row+1
+            && q.out.to[0]!==x.out.from[0] && x.out.to[0]!==hubIcao && q.out.to[0]!==hubIcao;
+      };
+      const isOnward=q=> pairs.some(x=>x!==q && follows(x,q));
+      const ordered=[], done=new Set();
+      pairs.forEach(p=>{
+        if (done.has(p) || isOnward(p)) return;          // onward rows are placed behind their row
+        ordered.push(p); done.add(p);
+        let x=p;
+        for (;;) {
+          const nx=pairs.find(q=>!done.has(q) && follows(x,q));
+          if (!nx) break;
+          nx.cont=true; ordered.push(nx); done.add(nx); x=nx;
+        }
+      });
+      pairs.forEach(p=>{ if (!done.has(p)) ordered.push(p); });   // safety
+      pairs=ordered;
+    }
+    return pairs;
 }
 // Pair outbound and return segments into route rows (A→B with B→A). A flight that departs
 // the hub counts as outbound; the return partner preferably carries the next flight number.
@@ -6381,11 +6444,20 @@ async function aiGenAlImportXls(file) {
     // (e.g. SYD left over from an import that guessed wrong). Without airline and hub the
     // rows can't be shown ("Enter an airline ICAO code above to start").
     const autoSet=[];
-    if (!aiGenAirline || aiGenAirline.length<3) {
+    if (aiGenMulti) {
+      // AIRPORT mode: the airport most flights touch (kept when the one set is in the file)
+      const cnt={}; parsed.segs.forEach(sg=>{ cnt[sg.from[0]]=(cnt[sg.from[0]]||0)+1; cnt[sg.to[0]]=(cnt[sg.to[0]]||0)+1; });
+      const cur=aiGenAlHub ? aiGenAlHub[0] : '';
+      if (!cur || !cnt[cur]) {
+        const b=Object.keys(cnt).sort((x,y)=>cnt[y]-cnt[x])[0];
+        if (b && schedByCode[b]) { aiGenAlHub=schedByCode[b]; autoSet.push('airport '+b+(cur?' (was '+cur+')':'')); }
+      }
+    }
+    else if (!aiGenAirline || aiGenAirline.length<3) {
       const best=Object.keys(parsed.alCount||{}).filter(c=>/^[A-Z0-9]{3}$/.test(c)).sort((a,b)=>parsed.alCount[b]-parsed.alCount[a])[0];
       if (best) { aiGenAirline=best; autoSet.push('airline '+best); }
     }
-    {
+    if (!aiGenMulti) {
       const hs=alHubScores(parsed.segs);
       const cur=aiGenAlHub ? aiGenAlHub[0] : '';
       if (hs.best && schedByCode[hs.best] && hs.best!==cur && (!cur || (hs.score[cur]||0) < hs.score[hs.best])) {
@@ -6393,50 +6465,17 @@ async function aiGenAlImportXls(file) {
         autoSet.push('hub '+hs.best+(cur ? ' (was '+cur+')' : ''));
       }
     }
-    const hubIcao=aiGenAlHub ? aiGenAlHub[0] : '';
-    let pairs=alSegmentsToRows(parsed.segs, hubIcao);
-    // Multi-stop flights WITHOUT flight numbers: flights listed in flown order that lead
-    // from an airport over one or more stops back to it (A→B, B→C, C→B, B→A) are one tour.
-    // (With flight numbers the same number on both rows links them — nothing to do here.)
-    const tourOf=new Map();
-    { let cur=null, n=0;
-      parsed.segs.forEach(sg=>{
-        if (cur && sg.from[0]===cur.last && sg.row===cur.row+1) cur.list.push(sg); else cur={ start:sg.from[0], list:[sg] };
-        cur.last=sg.to[0]; cur.row=sg.row;
-        if (cur.last===cur.start) {
-          if (cur.list.length>2 && cur.list.every(x=>!x.fln)) { n++; cur.list.forEach(x=>tourOf.set(x,n)); }
-          cur=null;
-        }
-      });
-    }
-    // Keep the rows of a multi-stop flight together in flown order; each onward row is
-    // linked to the row above. Two ways to recognise an onward row q of row x:
-    //  • both belong to the same tour (see above), or
-    //  • only the outbound flights are listed: q stands directly below x in the sheet and
-    //    departs where x arrives (A→B, then B→C) — no flight numbers, no returns listed.
-    {
-      const inTour=p=> p.ret && tourOf.has(p.out) && tourOf.get(p.ret)===tourOf.get(p.out);
-      const follows=(x,q)=>{
-        if (q.out.from[0]!==x.out.to[0]) return false;
-        if (inTour(x) && inTour(q)) return tourOf.get(q.out)===tourOf.get(x.out) && q.out.row>x.out.row;
-        return !x.ret && !q.ret && !x.out.fln && !q.out.fln && q.out.row===x.out.row+1
-            && q.out.to[0]!==x.out.from[0] && x.out.to[0]!==hubIcao && q.out.to[0]!==hubIcao;
-      };
-      const isOnward=q=> pairs.some(x=>x!==q && follows(x,q));
-      const ordered=[], done=new Set();
-      pairs.forEach(p=>{
-        if (done.has(p) || isOnward(p)) return;          // onward rows are placed behind their row
-        ordered.push(p); done.add(p);
-        let x=p;
-        for (;;) {
-          const nx=pairs.find(q=>!done.has(q) && follows(x,q));
-          if (!nx) break;
-          nx.cont=true; ordered.push(nx); done.add(nx); x=nx;
-        }
-      });
-      pairs.forEach(p=>{ if (!done.has(p)) ordered.push(p); });   // safety
-      pairs=ordered;
-    }
+    // pair outbound and return, keep multi-stop flights together. AIRPORT mode: every
+    // airline on its own, from its own base (no clear base → the sheet order decides).
+    const pairs=[], hubOfPair=new Map();
+    const alGroups = aiGenMulti
+      ? (()=>{ const m=new Map(); parsed.segs.forEach(sg=>{ const k=sg.al||''; if (!m.has(k)) m.set(k,[]); m.get(k).push(sg); }); return [...m.values()]; })()
+      : [parsed.segs];
+    alGroups.forEach(segsA=>{
+      let h = aiGenAlHub ? aiGenAlHub[0] : '';
+      if (aiGenMulti) { const hs=alHubScores(segsA); h = hs.clear ? hs.best : ''; }
+      alPairsFromSegs(segsA, h).forEach(p=>{ hubOfPair.set(p,h); pairs.push(p); });
+    });
     // Does the file contain any times? yes → Known schedule · no → Random schedule
     const timed=parsed.segs.some(x=>x.dep || x.arr);
     const hasLegNos=parsed.segs.some(x=>x.leg!=null);
@@ -6453,8 +6492,10 @@ async function aiGenAlImportXls(file) {
       if (g!=null) L.groundOverride=String(g);
       L.eqp=p.out.eqp || (p.ret&&p.ret.eqp) || '';
       L._editingDep=false;
+      if (aiGenMulti) L.al=p.out.al || (p.ret&&p.ret.al) || '';
       if (p.cont) L.cont=true;                    // onward flight of the row above (multi-stop)
       // no times: a single flight INTO the hub is the return half of the route hub → X
+      const hubIcao = hubOfPair.get(p) || '';
       const flip = !timed && !p.ret && hubIcao && p.out.to[0]===hubIcao && p.out.from[0]!==hubIcao;
       if (flip) {
         L.dep=p.out.to; L.arr=p.out.from; L.rFlightNum=p.out.fln; L.rLegNo=p.out.leg;
@@ -6501,7 +6542,12 @@ async function aiGenAlImportXls(file) {
     }
     if (hasLegNos) msg+=' · leg numbers read (Sort by → Leg number)';
     if (autoSet.length) msg+=' · '+autoSet.join(' and ')+' taken from the file (change above if needed)';
-    if (!aiGenAirline || aiGenAirline.length<3) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
+    if (aiGenMulti) {
+      const nAl=new Set(legs.map(l=>l.al).filter(Boolean)).size, noAl=legs.filter(l=>!l.al).length;
+      msg+=' · '+nAl+' airline'+(nAl===1?'':'s')+(noAl ? ' · '+noAl+' without airline (no ALN column) — enter it per row' : '');
+      if (!aiGenAlHub) msg+=' · select the airport above';
+    }
+    else if (!aiGenAirline || aiGenAirline.length<3) msg+=' · enter the airline code above'+(parsed.airlines.size?' (file: '+[...parsed.airlines].join(', ')+')':'');
     else if (!aiGenAlHub) msg+=' · select the hub above';
     say(msg, (oneWay||noTimes||parsed.problems.length) ? '#e0b341' : '#3fb950');
   } catch(e) {
@@ -6520,7 +6566,7 @@ async function aiGenAlImportXls(file) {
 let aiGenAlExtraLegs = [];      // planner-only rotations from a TTools import (validLeg objects)
 let aiGenAlShowImported = false; // input page: show the routes of a TTools import (collapsed by default)
 function aiGenAlToggleImported(){ aiGenAlShowImported=!aiGenAlShowImported; renderAiGenAlLegs(); }
-function alExtraValidLegs(){ return aiGenAlExtraLegs.filter(l=>l.airline===aiGenAirline); }
+function alExtraValidLegs(){ return aiGenMulti ? aiGenAlExtraLegs.slice() : aiGenAlExtraLegs.filter(l=>l.airline===aiGenAirline); }
 function aiGenAlDiscardExtras(){ aiGenAlExtraLegs = []; renderAiGenAlLegs(); }
 
 function ttParseStamp(v){                        // "D/HH:MM" or "1/D/HH:MM" → minutes in the cycle
@@ -6598,9 +6644,12 @@ async function aiGenAlImportTTools(files){
     const fromName=(fpName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||acName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||[])[1];
     const tAir={}; Object.values(titles).forEach(t=>{ const a=ttTitleInfo(t).airline; if (a) tAir[a]=(tAir[a]||0)+1; });
     const fromTitle=(aiGenAirline && tAir[aiGenAirline]) ? aiGenAirline : Object.keys(tAir).sort((x,y)=>tAir[y]-tAir[x])[0];
-    const airline=String(fromName||fromTitle||aiGenAirline||'').toUpperCase();
-    if (!airline || airline.length<3) { say('Airline code unknown — enter it above and import again.','#f85149'); return; }
+    const airline=aiGenMulti ? '' : String(fromName||fromTitle||aiGenAirline||'').toUpperCase();
+    if (!aiGenMulti && (!airline || airline.length<3)) { say('Airline code unknown — enter it above and import again.','#f85149'); return; }
     const eqpOf=n=> (titles[n] && ttTitleInfo(titles[n]).eqp) || ('AC'+n);
+    // AIRPORT mode: every aircraft flies for the airline in its title ("AIGAIM_SWR A320 …", "… A320 SWR")
+    const alOfNum=n=> aiGenMulti ? String((titles[n] && ttTitleInfo(titles[n]).airline) || fromName || '').toUpperCase() : airline;
+    const alOf=a=> alOfNum(a.acNum);
 
     // continuity: each flight departs where the previous one (cyclically) arrived
     const unknown=new Set();
@@ -6610,6 +6659,20 @@ async function aiGenAlImportTTools(files){
     const depCount={}; acs.forEach(ac=>ac.legs.forEach(l=>{ depCount[l.from]=(depCount[l.from]||0)+1; }));
     let hub = (aiGenAlHub && depCount[aiGenAlHub[0]]) ? aiGenAlHub[0]
             : Object.keys(depCount).sort((x,y)=>depCount[y]-depCount[x])[0];
+    // AIRPORT mode: the airport = the one set above if the plan uses it, else the one most
+    // flights touch. Each airline's aircraft start from the airline's base (where its flights
+    // begin and end, see alHubScores) — or, without a clear one, where the aircraft night-stops.
+    const alBase={};
+    if (aiGenMulti) {
+      const touch={}; acs.forEach(ac=>ac.legs.forEach(l=>{ touch[l.from]=(touch[l.from]||0)+1; touch[l.to]=(touch[l.to]||0)+1; }));
+      hub = (aiGenAlHub && touch[aiGenAlHub[0]]) ? aiGenAlHub[0] : Object.keys(touch).sort((x,y)=>touch[y]-touch[x])[0];
+      const byAl={};
+      acs.forEach(ac=>{ const a=alOf(ac); (byAl[a]=byAl[a]||[]);
+        ac.legs.slice().sort((x,y)=>x.dep-y.dep).forEach((l,k)=>byAl[a].push({ fln:String(l.fnum||''), from:[l.from], to:[l.to], row:byAl[a].length })); });
+      Object.keys(byAl).forEach(a=>{ const hs=alHubScores(byAl[a]); if (hs.clear) alBase[a]=hs.best; });
+    }
+    const nightStop=ac=>{ const L=ac.legs.slice().sort((x,y)=>x.dep-y.dep), span=ac.twoWeeks?20160:10080; let best=null, gap=-1;
+      L.forEach((l,k)=>{ const pv=L[(k-1+L.length)%L.length]; const g=((l.dep-pv.arr)%span+span)%span; if (g>gap) { gap=g; best=l.from; } }); return best; };
 
     const hasContent = aiGenAlLegs.some(l=>l.arr || l.depFixed || l.flightNum) || rotHasAssignments() || aiGenAlExtraLegs.length;
     if (hasContent && !confirm('Replace the current routes and the rotation planner with the TTools files?')) { say('Import cancelled.'); return; }
@@ -6620,7 +6683,9 @@ async function aiGenAlImportTTools(files){
     acs.forEach(ac=>{
       const span = ac.twoWeeks ? 20160 : 10080;
       const L=ac.legs;
-      const base = L.some(l=>l.from===hub) ? hub
+      const ab = aiGenMulti ? alBase[alOf(ac)] : null;
+      const base = aiGenMulti ? ((ab && L.some(l=>l.from===ab)) ? ab : (nightStop(ac) || L[0].from))
+                 : L.some(l=>l.from===hub) ? hub
                  : (()=>{ const c={}; L.forEach(l=>{c[l.from]=(c[l.from]||0)+1;}); return Object.keys(c).sort((x,y)=>c[y]-c[x])[0]; })();
       let k=L.findIndex(l=>l.from===base); if (k<0) k=0;
       const R=L.slice(k).concat(L.slice(0,k));
@@ -6637,8 +6702,8 @@ async function aiGenAlImportTTools(files){
       tours.forEach(t=>{
         if (t.some(x=>!schedByCode[x.from] || !schedByCode[x.to])) { skipped++; return; }
         const start=t[0].dep;
-        const sig=[eqpOf(ac.acNum), ((start%1440)+1440)%1440, t.map(x=>[x.from,x.to,x.fnum,x.dep-start,x.block].join(':')).join('|')].join('#');
-        if (!groups.has(sig)) groups.set(sig, { tour:t.map(x=>Object.assign({}, x, { dep:x.dep-start })), eqp:eqpOf(ac.acNum), startTod:((start%1440)+1440)%1440, occ:[] });
+        const sig=[alOf(ac), eqpOf(ac.acNum), ((start%1440)+1440)%1440, t.map(x=>[x.from,x.to,x.fnum,x.dep-start,x.block].join(':')).join('|')].join('#');
+        if (!groups.has(sig)) groups.set(sig, { tour:t.map(x=>Object.assign({}, x, { dep:x.dep-start })), eqp:eqpOf(ac.acNum), al:alOf(ac), startTod:((start%1440)+1440)%1440, occ:[] });
         groups.get(sig).occ.push({ ac, start, span, alts:t.map(x=>x.alt) });
       });
     });
@@ -6663,6 +6728,7 @@ async function aiGenAlImportTTools(files){
           const o=t[j], r=t[n-1-j], lo=loc(g,o), lr=loc(g,r);
           const L=aiGenAlEmptyLeg();
           L.eqp=g.eqp; L.dep=ap(o.from); L.arr=ap(o.to); L._editingDep=false;
+          if (aiGenMulti) L.al=g.al;
           L.flightNum=o.fnum; L.rFlightNum=r.fnum;
           L.depFixed=lo.dep; L.arrFixed=lo.arr; L.arrDayOff=lo.off;
           L.rDepFixed=lr.dep; L._custom_rDepFixed=true; L.rArrFixed=lr.arr; L.rArrDayOff=lr.off;
@@ -6674,14 +6740,15 @@ async function aiGenAlImportTTools(files){
       } else {
         const h=Math.ceil(n/2);
         const segs=t.map((x,k2)=>({ half:k2<h?'out':'ret', dep:ap(x.from), arr:ap(x.to), depFixed:loc(g,x).dep, block:dur(x.block), fnum:x.fnum }));
-        extras.push({ dep:ap(t[0].from), arr:ap(t[h-1].to), airline, aircraft:g.eqp,
+        extras.push({ dep:ap(t[0].from), arr:ap(t[h-1].to), airline:(aiGenMulti ? g.al : airline), aircraft:g.eqp,
           groundTime:String(alGroundTime(g.eqp, { groundOverride:aiGenAlMinGround })), dnOut:'any', dnRet:'any',
           exact:true, knownSegs:segs, blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block, _ttg:gid });
       }
     });
 
     // ── apply: airline, hub, Known schedule, cycle, rows ──
-    aiGenAirline=airline; aiGenAlHub=ap(hub)||aiGenAlHub;
+    if (!aiGenMulti) aiGenAirline=airline;
+    aiGenAlHub=ap(hub)||aiGenAlHub;
     aiGenAlSchedMode='known'; try { localStorage.setItem('aigen_al_schedmode','known'); } catch(e){}
     if (acs.some(a=>a.twoWeeks) && ROT_WEEKS!==2) setRotCycleWeeks(2);
     aiGenAlLegs=rows.length ? rows.slice() : [aiGenAlEmptyLeg()];
@@ -6698,7 +6765,7 @@ async function aiGenAlImportTTools(files){
     const utc={};
     validLegs.forEach(l=>{ (l.knownSegs||[{dep:l.dep,arr:l.arr}]).forEach(h=>{ utc[h.dep[0]]=getUtcOffset(h.dep); utc[h.arr[0]]=getUtcOffset(h.arr); }); });
     const regsByType={};
-    acs.forEach(a=>{ const k=airline+' '+eqpOf(a.acNum); (regsByType[k]=regsByType[k]||[]).push(a.reg); });
+    acs.forEach(a=>{ const k=alOf(a)+' '+eqpOf(a.acNum); (regsByType[k]=regsByType[k]||[]).push(a.reg); });
     const routes=validLegs.map((l,idx)=> l.knownSegs ? { r:idx+1 }
       : { r:idx+1, block_out:l.blockTime, block_in:l.rBlockTime, fnum_out:l.flightNum, fnum_in:l.rFlightNum });
     const research={ utc, routes, registrations:regsByType, _sig:alResearchSig(validLegs) };
@@ -6710,9 +6777,9 @@ async function aiGenAlImportTTools(files){
 
     const fleet=[], seenType={};
     acs.forEach(a=>{
-      const eqp=eqpOf(a.acNum), key=airline+'|'+eqp;
+      const al=alOf(a), eqp=eqpOf(a.acNum), key=al+'|'+eqp;
       seenType[key]=(seenType[key]||0);
-      fleet.push({ key, airline, eqp, reg:a.reg, regPool:regsByType[airline+' '+eqp].slice(), regIdx:seenType[key]++, assignments:rotEmptyAssignments(), _src:a,
+      fleet.push({ key, airline:al, eqp, reg:a.reg, regPool:regsByType[al+' '+eqp].slice(), regIdx:seenType[key]++, assignments:rotEmptyAssignments(), _src:a,
                    acNum:a.acNum, ttPct:a.pct, ttRules:a.rules });   // written back unchanged on export
     });
     let placed=0, lost=0;
@@ -6742,8 +6809,8 @@ async function aiGenAlImportTTools(files){
     rotApplyDailyAll();
     // Aircraft file: kept verbatim for the export (titles, passengers, AC# numbers)
     const acLines=String(acText||'').split(/\r?\n/).map(x=>x.trim()).filter(x=>/^AC#\d+\s*,/.test(x));
-    rotAcMeta = { airline, lines:acLines,
-      types: Object.keys(titles).map(n=>({ acNum:+n, key:airline+'|'+eqpOf(+n) })),
+    rotAcMeta = { airline, multi:aiGenMulti, lines:acLines,
+      types: Object.keys(titles).map(n=>({ acNum:+n, key:alOfNum(+n)+'|'+eqpOf(+n) })),
       maxAc: Math.max(0, ...Object.keys(titles).map(Number), ...acs.map(a=>a.acNum||0)) };
     aiGenAlShowImported=false;
     renderAiGenAlLegs();
@@ -6778,6 +6845,7 @@ function aiGenAlImportFiles(fileList){
 //   • B is marked "linked to row above" (leg.cont) and stands directly below A.
 function alRowContinues(a, b) {
   if (!a || !b || a===b || !a.arr || !b.dep || b.dep[0]!==a.arr[0]) return false;
+  if (aiGenMulti && alRowAl(a)!==alRowAl(b)) return false;     // AIRPORT mode: never across airlines
   const isSplit = l => Array.isArray(l.stops) && l.stops.length;
   if (isSplit(a) || isSplit(b)) return false;
   // an explicit link always means the row directly above
@@ -6835,7 +6903,7 @@ function alKnownChainLeg(rows) {
   rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }));
   alChainFillFnums(segs);
   return {
-    dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
+    dep:first.dep, arr:last.arr, airline:alRowAl(first), aircraft:first.eqp,
     groundTime:String(alGroundTime(first.eqp, first)), dnOut:'any', dnRet:'any',
     exact:true, knownSegs:segs,
     blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block,
@@ -6884,7 +6952,7 @@ function alRandomChainLeg(rows) {
   });
   alChainFillFnums(segs);
   return {
-    dep:first.dep, arr:last.arr, airline:aiGenAirline, aircraft:first.eqp,
+    dep:first.dep, arr:last.arr, airline:alRowAl(first), aircraft:first.eqp,
     groundTime:String(ground), dnOut:'any', dnRet:'any',
     exact:false, knownSegs:segs,
     blockTime:segs[0].block, rBlockTime:segs[segs.length-1].block,
@@ -6918,6 +6986,10 @@ function setAiGenAlMinGround(v) {
 }
 
 function aiGenAlEmptyLeg() {
+  if (aiGenMulti) return Object.assign(aiGenAlEmptyLegBase(), { dep:null, _editingDep:true, arr:aiGenAlHub||null, al:'' });
+  return aiGenAlEmptyLegBase();
+}
+function aiGenAlEmptyLegBase() {
   return { eqp:'', dep: aiGenAlHub || null, arr:null,
            groundOverride: aiGenAlMinGround || '',
            depFixed:'', dd1:'', dd2:'',
@@ -7022,7 +7094,9 @@ function initAiGen() {
 }
 
 function setAiGenMode(mode) {
+  if (mode!==aiGenMode) { aiGenSaveProfile(aiGenMode); aiGenLoadProfile(mode); }
   aiGenMode = mode;
+  aiGenMulti = (mode==='airport');
   try { applyAiGenTzUI(); } catch(e) {}
   const btnAp = document.getElementById('aigen-btn-airport');
   const btnAl = document.getElementById('aigen-btn-airline');
@@ -7030,10 +7104,19 @@ function setAiGenMode(mode) {
   if (btnAl) { btnAl.style.background = mode==='airline'?'var(--acc)':'transparent'; btnAl.style.color = mode==='airline'?'#fff':'var(--txt3)'; btnAl.style.borderColor = mode==='airline'?'var(--acc)':'var(--bdr)'; }
   const apPanel = document.getElementById('aigen-airport-mode');
   const alPanel = document.getElementById('aigen-airline-mode');
-  if (apPanel) apPanel.style.display = mode==='airport' ? 'flex' : 'none';
-  if (alPanel) alPanel.style.display = mode==='airline' ? 'flex' : 'none';
-  if (mode === 'airport') renderAiGenLegs();
-  if (mode === 'airline') renderAiGenAirline();
+  // the old airport page is retired: both modes use the route rows (import, Known/Random
+  // schedule, sorting, block-time lookup …). AIRPORT: one airport, the airline per row.
+  if (apPanel) apPanel.style.display = 'none';
+  if (alPanel) alPanel.style.display = 'flex';
+  const show=(id,disp)=>{ const e=document.getElementById(id); if (e) e.style.display = aiGenMulti ? 'none' : disp; };
+  show('aigen-al-logo','flex'); show('aigen-al-input','inline-block'); show('aigen-al-sep1','block');
+  const hubInp=document.getElementById('aigen-al-hub-input');
+  if (hubInp && document.activeElement!==hubInp) {
+    hubInp.placeholder = aiGenMulti ? 'Airport' : 'Hub';
+    hubInp.title = aiGenMulti ? 'The airport: routes of all airlines to and from it' : 'Hub of the airline';
+    hubInp.value = aiGenAlHub ? aiGenAlHub[0] : '';
+  }
+  renderAiGenAirline();
 }
 
 // ── Airline mode: ICAO input → fill logo box + resolved name ──────────────────
@@ -7072,7 +7155,7 @@ function setupAiGenAlHub() {
     aiGenAlHub = ap;
     inp.value = ap[0];
     inp.title = `${ap[0]}${ap[1]?' / '+ap[1]:''} — ${ap[7]||ap[2]}`;
-    aiGenAlLegs.forEach(l => { if (!l.dep) l.dep = ap; });
+    aiGenAlLegs.forEach(l => { if (aiGenMulti) { if (!l.arr) l.arr = ap; } else if (!l.dep) l.dep = ap; });
     renderAiGenAlLegs();
   });
 }
@@ -7212,6 +7295,7 @@ function alSortSnapshot(){
     if (mode==='type') return String(f.eqp||'').toUpperCase() || null;
     if (mode==='fnum') return alFnumVal(f.flightNum);
     if (mode==='leg')  return alRowsLegKey(g.rows.filter(r=>r.arr));
+    if (mode==='airline') return alRowAl(f) || null;
     return g.pos; };
   groups.forEach(g=>{ g.k=keyOf(g); g.t=alSortTime(g.rows[0]); });
   groups.sort((a,b)=> alSortCmpVal(a.k,b.k) || alSortCmpVal(a.t,b.t) || (a.pos-b.pos));
@@ -7243,7 +7327,7 @@ function buildSortControl(value, onChange, resortTitle){
   wrap.style.cssText='display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--txt3);text-transform:none;letter-spacing:0;font-weight:400;';
   const lbl=document.createElement('span'); lbl.textContent='Sort by'; wrap.appendChild(lbl);
   const sel=document.createElement('select');
-  AL_SORT_OPTS.forEach(([v,t])=>{ const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o); });
+  AL_SORT_OPTS.concat(aiGenMulti ? [['airline','Airline']] : []).forEach(([v,t])=>{ const o=document.createElement('option'); o.value=v; o.textContent=t; sel.appendChild(o); });
   sel.value=value||'';
   sel.style.cssText='font-size:11px;padding:2px 6px;border-radius:10px;border:1px solid '+(value?'var(--acc)':'var(--bdr2)')+';background:var(--bg);color:'+(value?'#c9b8ff':'var(--txt2)')+';cursor:pointer;outline:none;';
   sel.onchange=()=>onChange(sel.value);
@@ -7304,12 +7388,12 @@ function _renderAiGenAlLegsNow() {
   const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
   container.innerHTML = '';
 
-  if (!aiGenAirline || aiGenAirline.length < 3) {
+  if (!aiGenMulti && (!aiGenAirline || aiGenAirline.length < 3)) {
     container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">Enter an airline ICAO code above to start.</div>';
     return;
   }
   if (!aiGenAlHub) {
-    container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">Select a hub airport above to start adding routes.</div>';
+    container.innerHTML = '<div style="color:var(--txt3);font-size:12px;padding:20px 0;">'+(aiGenMulti ? 'Select an airport above (or import an XLS / TTools file) to start adding routes.' : 'Select a hub airport above to start adding routes.')+'</div>';
     return;
   }
   if (!aiGenAlLegs.length) aiGenAlLegs.push(aiGenAlEmptyLeg());
@@ -7361,7 +7445,7 @@ function _renderAiGenAlLegsNow() {
   let visPrev = -1, rowVisPrev = -1;          // row shown directly above (for "Link to row above")
   const renderRow = (leg, i) => {
     if (leg.ttImported && !aiGenAlShowImported) return;          // collapsed (see the line above)
-    if (!leg.dep && !leg._editingDep) leg.dep = aiGenAlHub;
+    if (!leg.dep && !leg._editingDep && !aiGenMulti) leg.dep = aiGenAlHub;
     if (!leg.dd1) leg.dd1 = mDepFrom;
     if (!leg.dd2) leg.dd2 = mDepUntil;
     if (!leg.aa1) leg.aa1 = mArrFrom;
@@ -7386,7 +7470,7 @@ function _renderAiGenAlLegsNow() {
     // ── Logo (airline) ──
     const logoCell = document.createElement('div');
     logoCell.style.cssText = 'display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border:1px solid rgba(255,255,255,.25);border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
-    logoCell.innerHTML = airlineLogoHtml(aiGenAirline);
+    logoCell.innerHTML = alRowAl(leg) ? airlineLogoHtml(alRowAl(leg)) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
 
     // ── EQP ──
     const eqpCell = document.createElement('div');
@@ -7404,6 +7488,16 @@ function _renderAiGenAlLegsNow() {
         const g=gInpRef.el; if (g) g.value=String(alGroundTime(leg.eqp, leg));
       }
     };
+    if (aiGenMulti) {
+      // AIRPORT mode: the airline of this row above the type
+      const alInp=document.createElement('input'); alInp.placeholder='Airline'; alInp.value=leg.al||''; alInp.maxLength=4;
+      alInp.title='Airline (ICAO code) of this route';
+      alInp.style.cssText='background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.2);color:#fff;font-size:15px;font-weight:700;letter-spacing:.04em;padding:0 0 2px;margin-bottom:3px;width:100%;text-align:center;text-transform:uppercase;font-family:var(--ff);outline:none;';
+      alInp.oninput=()=>{ const v=alInp.value.toUpperCase().replace(/[^A-Z0-9]/g,''); alInp.value=v; leg.al=v;
+        logoCell.innerHTML = v.length>=2 ? airlineLogoHtml(v) : '<span style="font-size:9px;color:#aaa;">Logo</span>'; };
+      eqpInp.style.fontSize='15px';
+      eqpCell.appendChild(alInp);
+    }
     eqpCell.appendChild(eqpInp);
     const gInpRef = {el:null}; // filled when the ground input is built below
 
@@ -7814,7 +7908,7 @@ function _renderAiGenAlLegsNow() {
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    addBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); };
+    addBtn.onclick=()=>{ const n=aiGenAlEmptyLeg(); if (aiGenMulti) n.al=leg.al||''; aiGenAlLegs.splice(i+1,0,n); renderAiGenAlLegs(); };
     const splitBtn=document.createElement('button'); splitBtn.textContent='⑂ Split routing';
     splitBtn.dataset.tabseq=i+'.13';
     splitBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid rgba(123,97,255,.5);background:transparent;color:#a78bfa;cursor:pointer;width:100%;box-sizing:border-box;';
@@ -8062,7 +8156,7 @@ function buildChainLeftCol(leg, i) {
   const logoEqpRow=document.createElement('div'); logoEqpRow.style.cssText='display:flex;gap:5px;';
   const logoCell=document.createElement('div');
   logoCell.style.cssText='display:flex;align-items:center;justify-content:center;width:80px;min-width:80px;min-height:54px;border:1px solid rgba(255,255,255,.25);border-radius:5px;background:#fff;flex-shrink:0;overflow:hidden;';
-  logoCell.innerHTML=airlineLogoHtml(aiGenAirline);
+  logoCell.innerHTML=alRowAl(leg) ? airlineLogoHtml(alRowAl(leg)) : '<span style="font-size:9px;color:#aaa;">Logo</span>';
   const eqpCell=document.createElement('div');
   eqpCell.style.cssText='display:flex;flex-direction:column;justify-content:center;align-items:center;border:1px solid rgba(255,255,255,.25);border-radius:5px;padding:5px 7px;min-height:54px;box-sizing:border-box;flex-shrink:0;width:90px;min-width:90px;';
   const eqpInp=document.createElement('input'); eqpInp.placeholder='EQP'; eqpInp.value=leg.eqp||''; eqpInp.maxLength=4;
@@ -8886,7 +8980,7 @@ function alBuildValidLegs() {
   const chainComplete = l => l.outHops && l.outHops.every(h=>h.dep&&h.arr&&h.blockTime)
                           && l.retHops && l.retHops.every(h=>h.dep&&h.arr&&h.blockTime);
   const knownMode = aiGenAlSchedMode==='known';
-  const src = aiGenAlLegs.filter(l => l.eqp && (
+  const src = aiGenAlLegs.filter(l => l.eqp && (!aiGenMulti || alRowAl(l).length>=2) && (
     isChain(l) ? chainComplete(l)
     : (l.dep && l.arr && (knownMode ? (alKnownBlock(l,'out') && alKnownBlock(l,'ret')) : (l.blockTime && l.rBlockTime)))
   ));
@@ -8914,7 +9008,7 @@ function alBuildValidLegs() {
         firstOfRow: (idx === 0) || (idx === l.outHops.length), // first segment of outbound / of return row
       }));
       return {
-        dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
+        dep: l.dep, arr: l.arr, airline: alRowAl(l), aircraft: l.eqp,
         groundTime: String(alGroundTime(l.eqp, l)), dnOut:'any', dnRet:'any',
         startFixed: (l.startFixed && /^\d{1,2}:\d{2}$/.test(l.startFixed)) ? l.startFixed : null,
         hops, // <-- presence of hops triggers chain bar building
@@ -8926,7 +9020,7 @@ function alBuildValidLegs() {
     const outFixed = (knownMode && okT(l.depFixed))  ? l.depFixed  : null;
     const retFixed = (knownMode && okT(l.rDepFixed)) ? l.rDepFixed : null;
     return {
-      dep: l.dep, arr: l.arr, airline: aiGenAirline, aircraft: l.eqp,
+      dep: l.dep, arr: l.arr, airline: alRowAl(l), aircraft: l.eqp,
       blockTime:  knownMode ? alKnownBlock(l,'out') : l.blockTime,
       rBlockTime: knownMode ? alKnownBlock(l,'ret') : l.rBlockTime,
       groundTime: String(alGroundTime(l.eqp, l)),
@@ -8957,17 +9051,17 @@ function alResearchSig(validLegs) {
 // + registrations (keeps under the input-token limit and respects manual overrides).
 async function createRotationsAirline(mode) {
   let keep = (mode==='keep');
-  if (!aiGenAirline || aiGenAirline.length < 3) { alert('Please enter an airline ICAO code first.'); return; }
-  if (!aiGenAlHub) { alert('Please select a hub airport first.'); return; }
+  if (!aiGenMulti && (!aiGenAirline || aiGenAirline.length < 3)) { alert('Please enter an airline ICAO code first.'); return; }
+  if (!aiGenAlHub) { alert(aiGenMulti ? 'Please select the airport first.' : 'Please select a hub airport first.'); return; }
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;   // only needed for new research
-  rotAdoptAirline(aiGenAirline);
+  if (!aiGenMulti) rotAdoptAirline(aiGenAirline);
 
   const built = alBuildValidLegs();
   const extras = alExtraValidLegs();                 // irregular rotations from a TTools import
   if (!built.src.length && !extras.length) {
     alert(built.knownMode
-      ? 'Please complete at least one route: airports, EQP, and DEP + ARR times for outbound and return.'
-      : 'Please complete at least one route (all airports, EQP, and block times).');
+      ? 'Please complete at least one route: '+(aiGenMulti?'airline, ':'')+'airports, EQP, and DEP + ARR times for outbound and return.'
+      : 'Please complete at least one route ('+(aiGenMulti?'airline, ':'')+'all airports, EQP, and block times).');
     return;
   }
   const validLegs = built.validLegs.concat(extras);
@@ -9068,9 +9162,10 @@ async function createRotationsAirline(mode) {
     ? l.knownSegs.filter(x=>x.half==='out').map(x=>x.dep[0]).concat([l.arr[0]]).join('->')   // multi-stop: one number out, one back
     : l.dep[0]+'->'+l.arr[0];
   const routeList=askIdx.map(i=>{ const l=validLegs[i]; return `R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} (and return)`; }).join('\n') || '(none)';
-  const researchPrompt = `Research real aviation data for one airline. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
+  const alList = aiGenMulti ? [...new Set(validLegs.map(l=>l.airline))].join(', ') : aiGenAirline;
+  const researchPrompt = `Research real aviation data for ${aiGenMulti ? 'the airlines below (each route has its airline)' : 'one airline'}. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
 
-AIRLINE: ${aiGenAirline}
+AIRLINE${aiGenMulti?'S':''}: ${alList}
 ROUTES (outbound and return each):
 ${routeList}
 AIRCRAFT TYPES (need 8 registrations each): ${combos.map(c=>c.airline+' '+c.eqp).join('; ') || '(none)'}
@@ -9733,6 +9828,7 @@ function renderRotationBars() {
     if (rotSort==='type') return String(f.eqp||'').toUpperCase();
     if (rotSort==='fnum') return alFnumVal(f.fnum);
     if (rotSort==='leg')  { let m=null; bars.forEach(b=>{ if (b.legNo!=null && (m==null||b.legNo<m)) m=b.legNo; }); return m; }
+    if (rotSort==='airline') return String(f.airline||'');
     return null;
   };
   const firstDep = li => { const b=byLeg[li].slice().sort(rotBarOrder)[0]; return b ? b.depLocal : null; };
@@ -9764,10 +9860,11 @@ function renderRotationBars() {
 
 // ── Move a rotation to another aircraft type (✈⇄) ──
 // Types to offer: every type of this airline that already flies rotations or has aircraft.
-function rotAirlineTypes(){
+function rotAirlineTypes(airline){
+  const A = airline || aiGenAirline;
   const m=new Map();
-  rotAircraft.forEach(a=>{ if (a.airline===aiGenAirline || !aiGenAirline) m.set(a.eqp,(m.get(a.eqp)||0)+1); });
-  rotBars.forEach(b=>{ if (!m.has(b.eqp)) m.set(b.eqp,0); });
+  rotAircraft.forEach(a=>{ if (a.airline===A || !A) m.set(a.eqp,(m.get(a.eqp)||0)+1); });
+  rotBars.forEach(b=>{ if ((!aiGenMulti || !A || b.airline===A) && !m.has(b.eqp)) m.set(b.eqp,0); });
   return [...m.entries()].sort((x,y)=>String(x[0]).localeCompare(String(y[0])));
 }
 function showTypeSwapPopup(legIdx, anchor){
@@ -9783,7 +9880,7 @@ function showTypeSwapPopup(legIdx, anchor){
   menu.onclick=e=>e.stopPropagation();
   const path=bars.slice().sort(rotBarOrder).filter(b=>b.dir==='out').map(b=>b.depIcao).concat([bars.slice().sort(rotBarOrder).filter(b=>b.dir==='out').slice(-1)[0].arrIcao]).join('–');
   menu.innerHTML='<div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">Fly <b style="color:#fff;">'+path+'</b> ('+cur+') with:</div>';
-  rotAirlineTypes().forEach(([eqp,n])=>{
+  rotAirlineTypes(bars[0].airline).forEach(([eqp,n])=>{
     const b=document.createElement('button');
     const isCur = eqp===cur;
     b.innerHTML='<b>'+eqp+'</b><span style="color:var(--txt3);font-weight:400;margin-left:8px;">'+n+' aircraft'+(isCur?' · current':'')+'</span>';
@@ -9862,7 +9959,7 @@ function showAircraftSwapPopup(acIdx, anchor){
   menu.onclick=e=>e.stopPropagation();
   const nFl = Object.values(ac.assignments||{}).reduce((n,l)=>n+(l||[]).length,0);
   menu.innerHTML='<div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">Replace <b style="color:#fff;">'+ac.reg+'</b> ('+ac.eqp+', '+nFl+' rotation'+(nFl===1?'':'s')+') by a new:</div>';
-  rotAirlineTypes().forEach(([eqp,n])=>{
+  rotAirlineTypes(ac.airline).forEach(([eqp,n])=>{
     const b=document.createElement('button');
     const isCur = eqp===ac.eqp;
     b.innerHTML='<b>'+eqp+'</b><span style="color:var(--txt3);font-weight:400;margin-left:8px;">'+n+' aircraft'+(isCur?' · current':'')+'</span>';
@@ -10664,7 +10761,7 @@ function buildTToolsData(acNumStart) {
   let aircraftLines = types.map(t=>`AC#${acNumOf[t.key]},${paxFor(t.eqp)},"AIGAIM_${t.airline} ${t.eqp} NCv2"`);
   // After a TTools import of this airline: write its Aircraft file back unchanged (titles,
   // passengers, AC# numbers) and give only new aircraft types the next free numbers.
-  const meta = (acNumStart===1 && rotAcMeta && rotAcMeta.airline===aiGenAirline) ? rotAcMeta : null;
+  const meta = (acNumStart===1 && rotAcMeta && (aiGenMulti ? rotAcMeta.multi : (!rotAcMeta.multi && rotAcMeta.airline===aiGenAirline))) ? rotAcMeta : null;
   let acNumOfAc = ac => acNumOf[ac.key];
   if (meta) {
     const orig = {}; meta.types.forEach(t=>{ if (orig[t.key]==null) orig[t.key]=t.acNum; });
@@ -10697,6 +10794,7 @@ function buildTToolsData(acNumStart) {
 function generateTToolsFromRotations() {
   if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
   const icao = (aiGenMode==='airline' && aiGenAirline) ? aiGenAirline
+             : (aiGenMulti && aiGenAlHub) ? aiGenAlHub[0]
              : (aiGenTarget && aiGenTarget[0]) ? aiGenTarget[0]
              : 'XXXX';
   const data = buildTToolsData(1);
