@@ -7455,6 +7455,13 @@ function _renderAiGenAlLegsNow() {
     if (!leg.rdd2) leg.rdd2 = mDepUntil;
     if (!leg.raa1) leg.raa1 = mArrFrom;
     if (!leg.raa2) leg.raa2 = mArrUntil;
+    // Random schedule: both airports set → both block times exist; a missing one (e.g. the
+    // return when only the departure was picked, then reversed) is estimated (grey)
+    if (aiGenAlSchedMode!=='known' && leg.dep && leg.arr && !(Array.isArray(leg.stops) && leg.stops.length)) {
+      const estB=(a,b)=>{ const e=alEstimateEffectiveBlock(a,b); return e!=null ? Math.floor(e/60)+':'+String(e%60).padStart(2,'0') : ''; };
+      if (!String(leg.blockTime||'').trim())  { leg.blockTime=estB(leg.dep, leg.arr); leg.blockTimeReal=false; }
+      if (!String(leg.rBlockTime||'').trim()) { leg.rBlockTime=estB(leg.arr, leg.dep); leg.rBlockTimeReal=false; }
+    }
 
     // Split (multi-stop chain) legs render with their own two-row builder.
     if (Array.isArray(leg.stops) && leg.stops.length) {
@@ -9065,6 +9072,18 @@ async function createRotationsAirline(mode) {
     return;
   }
   const validLegs = built.validLegs.concat(extras);
+  // rows that were started but are incomplete → named in the status line
+  const skipWhy = l => {
+    if (!l.eqp) return 'no aircraft type';
+    if (aiGenMulti && alRowAl(l).length<2) return 'no airline';
+    if (Array.isArray(l.stops) && l.stops.length) return 'split routing incomplete';
+    if (!l.dep || !l.arr) return 'airport missing';
+    if (built.knownMode) return 'DEP/ARR times incomplete';
+    return 'block time missing';
+  };
+  const skipped = aiGenAlLegs.filter(l=> (l.eqp || (l.dep && l.arr)) && !built.src.includes(l) && !l.ttImported);
+  const skipNote = skipped.length ? ' · ⚠ '+skipped.length+' route'+(skipped.length>1?'s':'')+' left out: '
+      + skipped.slice(0,3).map(l=>((l.dep&&l.dep[0])||'?')+'–'+((l.arr&&l.arr[0])||'?')+' ('+skipWhy(l)+')').join(', ')+(skipped.length>3?' …':'') : '';
 
   // Full regeneration throws the planner away — ask first when rotations are assigned.
   if (keep && !(rotLegKeys && rotHasAssignments())) keep = false;      // nothing to keep
@@ -9135,7 +9154,7 @@ async function createRotationsAirline(mode) {
     }
     renderRotationLanes();
     if (rotDailyAll) { rotApplyDailyAll(); renderRotationBars(); }
-    setStatus('✓ '+rotBars.length+' bars ready'+msg+' · drag onto aircraft below'+(note||''));
+    setStatus('✓ '+rotBars.length+' bars ready'+msg+' · drag onto aircraft below'+(note||'')+skipNote);
   };
 
   if (cachedOk) {
@@ -10232,10 +10251,21 @@ function renderRotationLanes() {
     const idInfo=document.createElement('div');
     idInfo.style.cssText='display:flex;align-items:center;gap:5px;overflow:hidden;';
     idInfo.innerHTML='<div style="width:38px;height:26px;border-radius:3px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;">'+(airlineLogoHtml((ac.airline||'').toUpperCase())||'')+'</div>'
-      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div style="font-size:10px;font-family:monospace;color:#9fc7ff;">'+ac.reg+'</div>'
+      +'<div><div style="font-size:11px;font-weight:700;color:#fff;">'+ac.eqp+'</div><div class="rot-reg" title="Click to change the registration — the following aircraft of this type continue the series (F-GHUN → F-GHUO, F-GHUP …)" style="font-size:10px;font-family:monospace;color:#9fc7ff;cursor:text;border-bottom:1px dashed rgba(159,199,255,.35);display:inline-block;">'+ac.reg+'</div>'
       +(function(){ const c=ROT_WEEKS>1 ? rotAircraftCycle(ac) : null; return c ? '<div style="font-size:9px;color:'+(c==='2Weeks'?'#e0b341':'var(--txt3)')+';" title="Cycle written to the TTools flight plan">'+(c==='2Weeks'?'2-weekly':'weekly')+'</div>' : ''; })()
       +'</div>';
     idc.appendChild(idInfo);
+    const regEl=idInfo.querySelector('.rot-reg');
+    if (regEl) regEl.onclick=e=>{
+      e.stopPropagation();
+      const inp=document.createElement('input'); inp.value=ac.reg; inp.maxLength=10;
+      inp.style.cssText='width:72px;font-size:10px;font-family:monospace;color:#fff;background:var(--bg);border:1px solid var(--acc);border-radius:3px;padding:1px 3px;outline:none;text-transform:uppercase;';
+      let done=false;
+      const commit=ok=>{ if (done) return; done=true; if (ok) rotSetRegSeries(acIdx, inp.value); else renderRotationLanes(); };
+      inp.onkeydown=ev=>{ if (ev.key==='Enter') { ev.preventDefault(); commit(true); } else if (ev.key==='Escape') commit(false); };
+      inp.onblur=()=>commit(true);
+      regEl.replaceWith(inp); inp.focus(); inp.select();
+    };
     row.appendChild(idc);
 
     // timeline track
@@ -10642,6 +10672,29 @@ function removeAssignment(acIdx, uid) {
   renderRotationLanes();
 }
 
+// A registration typed on the planner: this aircraft gets it, the following aircraft of the
+// same type continue the series (F-GHUN, F-GHUO, F-GHUP …), and so do new ones ("+ Additional
+// aircraft"). Registrations other aircraft already carry are skipped.
+function rotSetRegSeries(acIdx, reg){
+  const ac=rotAircraft[acIdx];
+  reg=String(reg||'').trim().toUpperCase().replace(/\s+/g,'');
+  if (!ac || !reg || reg===String(ac.reg||'').toUpperCase()) { renderRotationLanes(); return; }
+  const same=rotAircraft.filter(a=>a.key===ac.key), from=same.indexOf(ac);
+  const taken=new Set(rotAircraft.filter(a=>!(a.key===ac.key && same.indexOf(a)>=from)).map(a=>String(a.reg||'').toUpperCase()));
+  let r=reg; const set=[];
+  same.slice(from).forEach((a,k)=>{
+    if (k>0) r=rotRegIncrement(r);
+    for (let g=0; g<500 && taken.has(r); g++) r=rotRegIncrement(r);
+    a.reg=r; taken.add(r); set.push(r);
+  });
+  const more=[]; let x=r; for (let k=0;k<20;k++){ x=rotRegIncrement(x); if (!taken.has(x)) more.push(x); }
+  const pool=same.map(a=>a.reg).concat(more);
+  same.forEach(a=>{ a.regPool=pool.slice(); });
+  if (rotResearch) { rotResearch.registrations=rotResearch.registrations||{}; rotResearch.registrations[ac.airline+' '+ac.eqp]=pool.slice(); }
+  renderRotationLanes();
+  const st=document.getElementById('rot-status');
+  if (st) st.textContent='✓ '+ac.eqp+(aiGenMulti?' ('+ac.airline+')':'')+': '+set.join(', ')+(set[0]!==reg?' (registration '+reg+' was taken)':'');
+}
 function addAircraftOfType(key) {
   let proto = rotAircraft.find(a=>a.key===key);
   // If none of this type exist anymore, reconstruct from research/legs
