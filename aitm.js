@@ -1455,8 +1455,8 @@ function aitmAfterApEdit() {
 }
 // Rotation Map (runs on this PC, http://127.0.0.1:47815): open the airport, or the airline of this flight plan.
 // #ap=ICAO and #a=<airline id> are what Rotation Map reads when its page loads; the id of an airline from traffic BGL
-// files is "B:" + the operator name in lower case (Air France -> "B:air france"). #file / #find name the BGL and the
-// code for a Rotation Map that matches by file. The changing "t" makes an open Rotation Map tab load the new link.
+// files is "B:" + the operator name in lower case (Air France -> "B:air france"). Rotation Map 4.11 and later also
+// find it by #file (the traffic BGL), #find (ICAO code) and #name. The changing "t" makes an open tab load the link.
 var AITM_RM_URL = 'http://127.0.0.1:47815/';
 function aitmRotationMap(icao) {
   var h, enc = encodeURIComponent;
@@ -1464,7 +1464,7 @@ function aitmRotationMap(icao) {
   else {
     var file = /\.bgl$/i.test(aitm.source || '') ? aitm.source : (aitm.outName || '');
     var nm = String(aitm.name || '').trim();
-    h = '#' + (nm ? 'a=' + enc('B:' + nm.toLowerCase()) + '&' : '') + 'file=' + enc(file) + '&find=' + enc(aitm.code || nm);
+    h = '#' + (nm ? 'a=' + enc('B:' + nm.toLowerCase()) + '&' : '') + 'file=' + enc(file) + '&find=' + enc(aitm.code || '') + '&name=' + enc(nm);
   }
   var w = window.open(AITM_RM_URL + '?from=msfs-manager&t=' + Date.now() + h, 'rotationmap');
   if (w) { try { w.focus(); } catch (e) {} }
