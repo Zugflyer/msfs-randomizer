@@ -565,14 +565,15 @@ function aitmKvGet(k) { return aitmIdb().then(function (db) { return new Promise
 function aitmKvSet(k, v) { return aitmIdb().then(function (db) { return new Promise(function (res) { var t = db.transaction('kv', 'readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = function () { res(true); }; t.onerror = function () { res(false); }; }); }).catch(function () { return false; }); }
 
 // ── airports ──
-function aitmAp(icao) {
+function aitmAp(icao) { return aitmApWith(aitm.apx || {})(icao); }
+function aitmApWith(apx) { return function (icao) {
   var r = (typeof lookupAirport === 'function') ? lookupAirport(String(icao || '')) : null;
   if (r && r[0] !== String(icao).toUpperCase()) r = null;
-  var x = aitm.apx[String(icao || '').toUpperCase()];
+  var x = apx[String(icao || '').toUpperCase()];
   if (r) return { lat: r[3], lon: r[4], altFt: x ? x.altFt : 0, city: r[7] || r[2] || '', name: r[2] || '', row: r };
   if (x) return { lat: x.lat, lon: x.lon, altFt: x.altFt || 0, city: '', name: '', row: null };
   return null;
-}
+}; }
 function aitmTzDate() {
   var d = new Date();
   if (aitm.tmode === 'eusummer') return d.getFullYear() + '-07-15';
@@ -929,15 +930,17 @@ function aitmOpenBgl() {
   inp.type = 'file'; inp.accept = '.bgl';
   inp.onchange = async function () {
     var f = inp.files && inp.files[0]; if (!f) return;
-    try {
-      var d = AITM_CODEC.readBGL(await f.arrayBuffer());
-      var sb = aitmSplitBase(f.name);
-      aitmLoad({ aircraft: d.aircraft.map(function (a, i) { return { n: i + 1, title: a.title, speed: a.speed }; }), plans: d.plans, apx: d.airports,
-                 base: sb.base, name: sb.name, period: sb.period, source: f.name });
-      aitm.outName = f.name; aitmSave(); aitmRenderBottom();
-    } catch (e) { aitmToast(f.name + ': ' + e.message, true); }
+    try { aitmLoadBgl(await f.arrayBuffer(), f.name); } catch (e) { aitmToast(f.name + ': ' + e.message, true); }
   };
   inp.click();
+}
+function aitmLoadBgl(buf, name) {
+  var d = AITM_CODEC.readBGL(buf);
+  var sb = aitmSplitBase(name);
+  aitmLoad({ aircraft: d.aircraft.map(function (a, i) { return { n: i + 1, title: a.title, speed: a.speed }; }), plans: d.plans, apx: d.airports,
+             base: sb.base, name: sb.name, period: sb.period, source: name });
+  aitm.outName = name; aitmSave(); aitmRenderBottom();
+  aitmToast(name + ' loaded (' + d.plans.length + ' flight plans).');
 }
 // from the Rotation Planner (AI Generator page 2)
 function aitmFromGenerator() {
@@ -1287,7 +1290,7 @@ function aitmModal(title, body, buttons, wide) {
   pop.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);';
   pop.addEventListener('mousedown', function (e) { if (e.target === pop) aitmCloseModal(); });
   var card = document.createElement('div');
-  card.style.cssText = 'background:var(--surf);border:1px solid var(--bdr2);border-radius:12px;padding:18px 22px;min-width:340px;max-width:' + (wide ? '900px' : '520px') + ';width:' + (wide ? '90vw' : 'auto') + ';box-shadow:0 8px 32px rgba(0,0,0,.6);';
+  card.style.cssText = 'background:var(--surf);border:1px solid var(--bdr2);border-radius:12px;padding:18px 22px;min-width:340px;max-width:' + (wide === 'xl' ? '1280px' : wide ? '900px' : '520px') + ';width:' + (wide ? (wide === 'xl' ? '95vw' : '90vw') : 'auto') + ';box-shadow:0 8px 32px rgba(0,0,0,.6);';
   card.innerHTML = '<div style="font-size:15px;font-weight:700;color:#fff;margin-bottom:12px;">' + title + '</div><div>' + body + '</div>'
     + '<div id="aitm-modal-btns" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;"></div>';
   pop.appendChild(card); document.body.appendChild(pop);
@@ -1398,13 +1401,16 @@ function aitmMoveAirports() {
 }
 
 // ── checks + compile ──
-function aitmCheck() {
-  var errs = [], warns = [];
-  if (!aitm.plans.length) errs.push('No flight plan loaded.');
-  var missingAp = aitmUsedAirports().filter(function (c) { return !aitmAp(c); });
+function aitmCheck() { return aitmCheckData({ ac: aitm.ac, plans: aitm.plans, ap: aitmAp }); }
+function aitmCheckData(d) {
+  var errs = [], warns = [], byN = {}, seen = {}, used = [];
+  d.ac.forEach(function (a) { byN[a.n] = a; });
+  d.plans.forEach(function (p) { p.legs.forEach(function (l) { if (!seen[l.to]) { seen[l.to] = 1; used.push(l.to); } }); });
+  if (!d.plans.length) errs.push('No flight plan loaded.');
+  var missingAp = used.sort().filter(function (c) { return !d.ap(c); });
   if (missingAp.length) errs.push('Unknown airport' + (missingAp.length > 1 ? 's' : '') + ' (no coordinates): ' + missingAp.join(', ') + ' — use Move airports, or load the Airports_….txt with the flight plans.');
-  aitm.plans.forEach(function (p) {
-    if (!aitmAcByN(p.ac)) errs.push(p.reg + ': AC#' + p.ac + ' does not exist.');
+  d.plans.forEach(function (p) {
+    if (!byN[p.ac]) errs.push(p.reg + ': AC#' + p.ac + ' does not exist.');
     if (String(p.reg).length > 7) warns.push(p.reg + ': registration longer than 7 characters is cut to ' + String(p.reg).slice(0, 7) + '.');
     var P = AITM_CODEC.periodOf(p.period)[1];
     p.legs.forEach(function (l, j) {
@@ -1419,8 +1425,8 @@ function aitmCheck() {
       }
     });
   });
-  var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = 1; });
-  aitm.ac.forEach(function (a, i) {
+  var use = {}; d.plans.forEach(function (p) { use[p.ac] = 1; });
+  d.ac.forEach(function (a, i) {
     if (!use[a.n]) return;
     if (aitm.fleet.length && !aitmInstalled(a.title)) warns.push('AC#' + a.n + ' “' + a.title + '” is not among your installed aircraft — the simulator will not show it.');
     if (!a.speed) warns.push('AC#' + a.n + ': no cruise speed — 450 kts is used.');
@@ -1436,14 +1442,19 @@ function aitmShowCheck() {
     + (c.warns.length ? '<div style="font-weight:700;color:#f0b400;margin:10px 0 4px;">' + c.warns.length + ' warning' + (c.warns.length > 1 ? 's' : '') + '</div>' + li(c.warns, 'var(--txt2)') : '')
     + '</div>', [], true);
 }
-function aitmModel() {
-  var arr = []; aitm.ac.forEach(function (a) { arr[a.n - 1] = { title: a.title, speed: a.speed || 450 }; });
-  return { aircraft: arr, plans: aitm.plans };
+function aitmModel() { return aitmModelOf(aitm.ac, aitm.plans); }
+function aitmModelOf(ac, plans) {
+  var arr = []; ac.forEach(function (a) { arr[a.n - 1] = { title: a.title, speed: a.speed || 450 }; });
+  return { aircraft: arr, plans: plans };
 }
 // bigger aircraft first — the simulator hands out parking first come, first served
-function aitmOrder(plans) {
-  var wing = function (p) { var a = aitmAcByN(p.ac); if (!a) return 0; var e = aitmInstalled(a.title); return (e && e.wing) || a.wing || 0; };
-  return plans.map(function (p, i) { return { p: p, i: i, w: wing(p) }; }).sort(function (x, y) { return (y.w - x.w) || (x.i - y.i); }).map(function (x) { return x.p; });
+function aitmOrder(plans) { return aitmOrderFor(aitm.ac)(plans); }
+function aitmOrderFor(ac) {
+  var byN = {}; ac.forEach(function (a) { byN[a.n] = a; });
+  var wing = function (p) { var a = byN[p.ac]; if (!a) return 0; var e = aitmInstalled(a.title); return (e && e.wing) || a.wing || 0; };
+  return function (plans) {
+    return plans.map(function (p, i) { return { p: p, i: i, w: wing(p) }; }).sort(function (x, y) { return (y.w - x.w) || (x.i - y.i); }).map(function (x) { return x.p; });
+  };
 }
 async function aitmPickOut() {
   if (!window.showDirectoryPicker) { aitmToast('This browser cannot write into folders — the BGL is downloaded instead.', true); return null; }
@@ -1477,7 +1488,8 @@ async function aitmCompile() {
   aitmToast('✓ ' + name + ' downloaded (' + info + ').');
 }
 // package root (has layout.json): write Scenery/World/Traffic/<name> and update layout.json; else write into the folder
-async function aitmWriteBgl(dir, name, bytes) {
+async function aitmWriteBgl(dir, name, bytes, opt) {
+  opt = opt || {};
   var hasLayout = false, layoutH = null;
   try { layoutH = await dir.getFileHandle('layout.json'); hasLayout = true; } catch (e) {}
   var target = dir, rel = name;
@@ -1487,29 +1499,36 @@ async function aitmWriteBgl(dir, name, bytes) {
   }
   var exists = null; try { exists = await target.getFileHandle(name); } catch (e) {}
   if (exists) {
-    if (!confirm(name + ' already exists in ' + (hasLayout ? dir.name + '\\Scenery\\World\\Traffic' : dir.name) + '.\n\nReplace it? (A copy of the old file is kept in the Backups folder.)')) throw new Error('cancelled');
+    if (opt.ask !== false && !confirm(name + ' already exists in ' + (hasLayout ? dir.name + '\\Scenery\\World\\Traffic' : dir.name) + '.\n\nReplace it? (A copy of the old file is kept in the Backups folder.)')) throw new Error('cancelled');
     var bdir = await dir.getDirectoryHandle('Backups', { create: true });
     var stamp = new Date().toISOString().replace(/[-:]/g, '').replace('T', '_').slice(0, 15);
     var old = await (await exists.getFile()).arrayBuffer();
-    var bw = await (await bdir.getFileHandle(name.replace(/\.bgl$/i, '') + '_' + stamp + '.bgl', { create: true })).createWritable();
+    var bw = await (await bdir.getFileHandle(name.replace(/\.bgl$/i, '') + '_' + stamp + '.bgl.bak', { create: true })).createWritable();
     await bw.write(old); await bw.close();
   }
   var fh = await target.getFileHandle(name, { create: true });
   var w = await fh.createWritable(); await w.write(bytes); await w.close();
   if (hasLayout) {
-    var raw = (await (await layoutH.getFile()).text()).replace(/^\uFEFF/, '');
-    var lay = JSON.parse(raw.replace(/("date"\s*:\s*)(\d+)/g, '$1"$2"'));
-    var f = await fh.getFile();
-    var ticks = ((BigInt(f.lastModified) + BigInt(11644473600000)) * BigInt(10000)).toString();
-    var content = lay.content || [], hit = false;
-    content.forEach(function (x) { if (x.path === rel) { x.size = f.size; x.date = ticks; hit = true; } });
-    if (!hit) content.push({ path: rel, size: f.size, date: ticks });
-    lay.content = content;
-    var txt = JSON.stringify(lay, null, 2).replace(/("date": )"(\d+)"/g, '$1$2');
-    var lw = await layoutH.createWritable(); await lw.write(txt); await lw.close();
+    await aitmLayoutSet(layoutH, rel, fh);
     return dir.name + '\\Scenery\\World\\Traffic (layout.json updated)';
   }
   return dir.name;
+}
+// layout.json of the package: add/update the entry of rel (file handle fh), or remove it (fh = null)
+async function aitmLayoutSet(layoutH, rel, fh) {
+  var raw = (await (await layoutH.getFile()).text()).replace(/^\uFEFF/, '');
+  var lay = JSON.parse(raw.replace(/("date"\s*:\s*)(\d+)/g, '$1"$2"'));
+  var low = rel.toLowerCase();
+  var content = (lay.content || []).filter(function (x) { return fh || String(x.path).toLowerCase() !== low; });
+  if (fh) {
+    var f = await fh.getFile(), hit = false;
+    var ticks = ((BigInt(f.lastModified) + BigInt(11644473600000)) * BigInt(10000)).toString();
+    content.forEach(function (x) { if (String(x.path).toLowerCase() === low) { x.size = f.size; x.date = ticks; hit = true; } });
+    if (!hit) content.push({ path: rel, size: f.size, date: ticks });
+  }
+  lay.content = content;
+  var txt = JSON.stringify(lay, null, 2).replace(/("date": )"(\d+)"/g, '$1$2');
+  var lw = await layoutH.createWritable(); await lw.write(txt); await lw.close();
 }
 function aitmDownload(data, name, type) {
   var url = URL.createObjectURL(new Blob([data], { type: type || 'text/plain' }));
@@ -1992,8 +2011,15 @@ async function aitmInstallManager(force) {
       }]], true);
     return;
   }
-  aitmModal('Installation Manager', '<div id="aitm-im" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>', [], true);
-  // flight plans (with their Aircraft_ and Airports_ files), grouped by folder + name
+  aitmModal('Installation Manager', '<div id="aitm-im" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>', [], 'xl');
+  await aitmImScan();
+}
+var AITM_REMOVED = 'Removed BGLs';     // "Remove from BGL" keeps the file here as <name>.bgl.off — the simulator ignores it
+// rows: every flight plan (with its Aircraft_/Airports_ files) + every BGL of the Traffic folder without a flight plan
+// + every removed BGL without a flight plan
+async function aitmImScan(msg) {
+  var fpRoot = await aitmKvGet('fpRoot'), out = await aitmKvGet('outFolder');
+  if (!fpRoot || !out) return;
   var plans = {};
   async function walk(d, path, depth) {
     for await (var e of d.values()) {
@@ -2005,59 +2031,181 @@ async function aitmInstallManager(force) {
     }
   }
   await walk(fpRoot, [], 4);
-  // traffic BGLs
-  var tdir = out, bgls = {};
-  try { await out.getFileHandle('layout.json'); tdir = await (await (await out.getDirectoryHandle('Scenery')).getDirectoryHandle('World')).getDirectoryHandle('Traffic'); } catch (e) {}
-  for await (var b of tdir.values()) if (b.kind === 'file' && /\.bgl$/i.test(b.name)) bgls[b.name.toLowerCase()] = b;
+  var isPkg = false, tdir = out;
+  try { await out.getFileHandle('layout.json'); isPkg = true; } catch (e) {}
+  if (isPkg) { try { tdir = await (await (await out.getDirectoryHandle('Scenery')).getDirectoryHandle('World')).getDirectoryHandle('Traffic'); } catch (e) { tdir = null; } }
+  var bgls = {}, removed = {}, rdir = null;
+  if (tdir) for await (var b of tdir.values()) if (b.kind === 'file' && /\.bgl$/i.test(b.name)) bgls[b.name.toLowerCase()] = b;
+  try { rdir = await out.getDirectoryHandle(AITM_REMOVED); } catch (e) {}
+  if (rdir) for await (var b2 of rdir.values()) if (b2.kind === 'file' && /\.bgl\.off$/i.test(b2.name)) removed[b2.name.slice(0, -4).toLowerCase()] = b2;
   var norm = function (t) { return String(t).toLowerCase().replace(/[^a-z0-9]/g, ''); };
-  var bglNorm = {}; Object.keys(bgls).forEach(function (k) { bglNorm[norm(k.replace(/^traffic_/, '').replace(/\.bgl$/, ''))] = bgls[k]; });
+  var bare = function (fname) { return String(fname).replace(/\.off$/i, '').replace(/\.bgl$/i, '').replace(/^traffic_/i, ''); };
+  var finder = function (map) {
+    var byNorm = {}; Object.keys(map).forEach(function (k) { byNorm[norm(bare(k))] = k; });
+    return function (name) { var k = ('traffic_' + name + '.bgl').toLowerCase(); return map[k] ? k : (byNorm[norm(name)] || null); };
+  };
+  var findB = finder(bgls), findR = finder(removed), usedB = {}, usedR = {};
   var rows = Object.keys(plans).map(function (k) { return plans[k]; }).filter(function (x) { return x.fp; });
-  var used = {};
+  rows.forEach(function (r) {
+    var kb = findB(r.name), kr = findR(r.name);
+    r.bgl = kb ? bgls[kb] : null; r.removed = kr ? removed[kr] : null;
+    if (kb) usedB[kb] = 1; if (kr) usedR[kr] = 1;
+  });
+  Object.keys(bgls).forEach(function (k) {
+    if (usedB[k]) return;
+    rows.push({ name: bare(bgls[k].name), path: [], fp: null, ac: null, ap: null, bgl: bgls[k], removed: removed[k] || null });
+    usedR[k] = 1;
+  });
+  Object.keys(removed).forEach(function (k) {
+    if (!usedR[k]) rows.push({ name: bare(removed[k].name), path: [], fp: null, ac: null, ap: null, bgl: null, removed: removed[k] });
+  });
   for (var i = 0; i < rows.length; i++) {
-    var r = rows[i];
-    r.bgl = bgls[('traffic_' + r.name + '.bgl').toLowerCase()] || bglNorm[norm(r.name)] || null;
-    if (r.bgl) used[r.bgl.name.toLowerCase()] = 1;
-    r.fpDate = (await r.fp.getFile()).lastModified;
-    r.bglDate = r.bgl ? (await r.bgl.getFile()).lastModified : 0;
+    rows[i].fpDate = rows[i].fp ? (await rows[i].fp.getFile()).lastModified : 0;
+    rows[i].bglDate = rows[i].bgl ? (await rows[i].bgl.getFile()).lastModified : 0;
   }
-  rows.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
-  var lone = Object.keys(bgls).filter(function (k) { return !used[k]; }).map(function (k) { return bgls[k].name; }).sort();
-  aitm.imRows = rows;
-  var fmtD = function (t) { return t ? new Date(t).toLocaleDateString() : ''; };
-  var tick = function (on, tip) { return on ? '<span style="color:#3fb950;font-weight:700;font-size:14px;" title="' + aitmEsc(tip || '') + '">✓</span>' : '<span style="color:var(--txt3);">—</span>'; };
-  var nInst = rows.filter(function (r) { return r.bgl; }).length;
-  var el = document.getElementById('aitm-im'); if (!el) return;
+  rows.sort(function (a, b) { var x = a.name.toLowerCase(), y = b.name.toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; });
+  aitm.im = { rows: rows, fpRoot: fpRoot, out: out, tdir: tdir, isPkg: isPkg };
+  aitmImRender(msg);
+}
+function aitmImCss() {
+  if (document.getElementById('aitm-im-css')) return;
+  var st = document.createElement('style'); st.id = 'aitm-im-css';
+  st.textContent =
+    '.aitm-pill{display:inline-block;padding:3px 9px;margin:0 2px;border-radius:5px;font-size:11px;font-weight:700;color:#fff;white-space:nowrap;cursor:default;}'
+    + '.aitm-pill.on{background:#238636;}.aitm-pill.off{background:#a4262c;}'
+    + '.aitm-imb{font-size:11px;font-weight:600;padding:4px 10px;margin-left:4px;border-radius:5px;cursor:pointer;white-space:nowrap;border:1px solid var(--bdr);background:transparent;color:var(--txt2);}'
+    + '.aitm-imb.t{border-color:#2ea043;color:#3fb950;}.aitm-imb.r{border-color:#da3633;color:#ff7b72;}'
+    + '.aitm-imb:hover:not(:disabled){background:rgba(255,255,255,.07);}'
+    + '.aitm-imb:disabled{opacity:.22;cursor:default;}'
+    + '.aitm-im-row:hover{background:rgba(255,255,255,.035);}'
+    + '.aitm-im-row td{padding:6px 8px;vertical-align:middle;}';
+  document.head.appendChild(st);
+}
+function aitmImRender(msg) {
+  var im = aitm.im, el = document.getElementById('aitm-im'); if (!el || !im) return;
+  aitmImCss();
+  var sc = document.getElementById('aitm-im-scroll'), top = sc ? sc.scrollTop : 0;
+  var rows = im.rows, fmtD = function (t) { return t ? new Date(t).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : ''; };
+  var pill = function (on, label, tip) { return '<span class="aitm-pill ' + (on ? 'on' : 'off') + '" title="' + aitmEsc(tip) + '">' + label + '</span>'; };
+  var nFp = rows.filter(function (r) { return r.fp; }).length, nB = rows.filter(function (r) { return r.bgl; }).length;
+  var nLone = rows.filter(function (r) { return r.bgl && !r.fp; }).length, nRem = rows.filter(function (r) { return r.removed && !r.bgl; }).length;
+  var tPath = im.isPkg ? im.out.name + '\\Scenery\\World\\Traffic' : im.out.name;
+  var f = aitm.imF || 'all', opt = function (v, t) { return '<option value="' + v + '"' + (f === v ? ' selected' : '') + '>' + t + '</option>'; };
   el.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap;">'
-    + '<span>Flight plans in <b style="color:#fff;">' + aitmEsc(fpRoot.name) + '</b>: ' + rows.length + ' · installed in <b style="color:#fff;">' + aitmEsc(out.name) + '</b>: <b style="color:#3fb950;">' + nInst + '</b></span>'
-    + '<input id="aitm-im-q" class="aitm-in" placeholder="🔍 filter" style="margin-left:auto;width:200px;padding:3px 8px;" oninput="aitmImFilter(this.value)">'
+    + '<span><b style="color:#fff;">' + nFp + '</b> flight plans in <b style="color:#fff;">' + aitmEsc(im.fpRoot.name) + '</b> · <b style="color:#3fb950;">' + nB + '</b> BGLs in the Traffic folder'
+    + (nLone ? ' (' + nLone + ' without txt)' : '') + (nRem ? ' · ' + nRem + ' removed' : '') + '</span>'
+    + '<select class="aitm-in" style="margin-left:auto;padding:3px 6px;" onchange="aitm.imF=this.value;aitmImFilter()">'
+    + opt('all', 'All') + opt('in', 'BGL in the Traffic folder') + opt('out', 'BGL not in the Traffic folder') + opt('notxt', 'BGL without txt') + '</select>'
+    + '<input class="aitm-in" placeholder="🔍 filter" style="width:190px;padding:3px 8px;" value="' + aitmEsc(aitm.imQ || '') + '" oninput="aitm.imQ=this.value;aitmImFilter()">'
     + '<button class="aitm-btn" style="padding:3px 10px;" onclick="aitmKvSet(\'fpRoot\', null).then(function(){aitmInstallManager();})">Other folders…</button></div>'
-    + '<div style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px;">'
+    + '<div id="aitm-im-msg" style="min-height:18px;margin-bottom:6px;line-height:1.5;">' + (msg ? (msg.warn ? '<span style="color:#f0b400;">' : '<span style="color:#3fb950;">') + msg.html + '</span>' : '<span style="color:var(--txt3);">Green = there, red = missing. Transfer to BGL compiles the txt into the Traffic folder; Remove from BGL takes the BGL out (a copy stays in ' + aitmEsc(im.out.name) + '\\' + AITM_REMOVED + '). Restart the simulator afterwards.</span>') + '</div>'
+    + '<div id="aitm-im-scroll" style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px;">'
     + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
-    + '<thead><tr style="position:sticky;top:0;background:var(--surf2);color:var(--txt3);text-align:left;">'
-    + '<th style="padding:6px 10px;">Flight plan</th><th style="padding:6px;">Folder</th><th style="padding:6px;text-align:center;">Aircraft</th><th style="padding:6px;text-align:center;">Airports</th>'
-    + '<th style="padding:6px;text-align:center;">BGL installed</th><th style="padding:6px;">Note</th><th></th></tr></thead><tbody>'
+    + '<thead><tr style="position:sticky;top:0;z-index:1;background:var(--surf2);color:var(--txt3);text-align:left;">'
+    + '<th style="padding:7px 10px;">Flight plan</th><th style="padding:7px 8px;">Folder</th><th style="padding:7px 8px;text-align:center;">Files</th><th style="padding:7px 10px;text-align:right;">Actions</th></tr></thead><tbody>'
     + rows.map(function (r, i) {
-        var stale = r.bgl && r.fpDate > r.bglDate + 60000;
-        return '<tr class="aitm-im-row" data-q="' + aitmEsc((r.name + ' ' + r.path.join(' ')).toLowerCase()) + '" style="border-top:1px solid var(--bdr);">'
-          + '<td style="padding:5px 10px;color:#fff;font-weight:600;">' + aitmEsc(r.name) + '</td>'
-          + '<td style="padding:5px 6px;color:var(--txt3);">' + aitmEsc(r.path.join(' \\ ')) + '</td>'
-          + '<td style="text-align:center;">' + tick(!!r.ac, r.ac && r.ac.name) + '</td><td style="text-align:center;">' + tick(!!r.ap, r.ap && r.ap.name) + '</td>'
-          + '<td style="text-align:center;">' + tick(!!r.bgl, r.bgl ? r.bgl.name + ' · ' + fmtD(r.bglDate) : '') + '</td>'
-          + '<td style="padding:5px 6px;color:#f0b400;">' + (stale ? 'flight plan newer than the BGL (' + fmtD(r.fpDate) + ' / ' + fmtD(r.bglDate) + ')' : (r.bgl && r.bgl.name.toLowerCase() !== ('traffic_' + r.name + '.bgl').toLowerCase() ? '<span style="color:var(--txt3);">' + aitmEsc(r.bgl.name) + '</span>' : '')) + '</td>'
-          + '<td style="padding:4px 8px;text-align:right;"><button class="aitm-btn" style="padding:2px 10px;font-size:11px;" onclick="aitmImOpen(' + i + ')">Open</button></td></tr>';
+        var stale = r.bgl && r.fp && r.fpDate > r.bglDate + 60000;
+        var canT = r.fp ? !!r.ac : (!r.bgl && !!r.removed);
+        var note = '';
+        if (r.fp && !r.ac) note = '<span style="color:#ff7b72;">Aircraft_' + aitmEsc(r.name) + '.txt is missing — cannot compile</span>';
+        else if (stale) note = '<span style="color:#f0b400;">⚠ txt changed after the BGL was made (' + fmtD(r.fpDate) + ' / ' + fmtD(r.bglDate) + ') — Transfer to BGL updates it</span>';
+        else if (!r.bgl && r.removed && !r.fp) note = '<span style="color:var(--txt3);">removed — Transfer to BGL puts it back</span>';
+        else if (r.bgl && r.fp && r.bgl.name.toLowerCase() !== ('traffic_' + r.name + '.bgl').toLowerCase()) note = '<span style="color:var(--txt3);">' + aitmEsc(r.bgl.name) + '</span>';
+        var tTip = r.fp ? (!r.ac ? 'Aircraft_' + r.name + '.txt is missing' : r.bgl ? 'Compile the txt again and replace ' + r.bgl.name + ' (the old one goes to Backups)' : 'Compile the txt and put the BGL into ' + tPath)
+                        : r.bgl ? 'Already in the Traffic folder (no txt to compile)' : r.removed ? 'Put ' + r.removed.name.replace(/\.off$/i, '') + ' back into ' + tPath : '';
+        var rTip = r.bgl ? 'Take ' + r.bgl.name + ' out of ' + tPath + ' — a copy stays in ' + im.out.name + '\\' + AITM_REMOVED : 'Not in the Traffic folder';
+        return '<tr class="aitm-im-row" data-i="' + i + '" data-q="' + aitmEsc((r.name + ' ' + r.path.join(' ')).toLowerCase()) + '" style="border-top:1px solid var(--bdr);">'
+          + '<td style="padding-left:10px;"><div style="color:#fff;font-weight:600;">' + aitmEsc(r.name) + '</div>' + (note ? '<div style="font-size:11px;margin-top:2px;">' + note + '</div>' : '') + '</td>'
+          + '<td style="color:var(--txt3);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + aitmEsc(r.path.join(' \\ ')) + '">' + (r.path.length ? aitmEsc(r.path.join(' \\ ')) : (r.fp ? aitmEsc(im.fpRoot.name) : '—')) + '</td>'
+          + '<td style="text-align:center;white-space:nowrap;">'
+          + pill(!!r.fp, 'Flightplans.txt', r.fp ? r.fp.name + ' · ' + fmtD(r.fpDate) : 'No Flightplans_' + r.name + '.txt in ' + im.fpRoot.name)
+          + pill(!!r.ac, 'Aircraft.txt', r.ac ? r.ac.name : 'No Aircraft_' + r.name + '.txt')
+          + pill(!!r.bgl, 'BGL', r.bgl ? r.bgl.name + ' · ' + fmtD(r.bglDate) : 'Not in ' + tPath + (r.removed ? ' (a removed copy exists)' : ''))
+          + '</td><td style="text-align:right;white-space:nowrap;padding-right:10px;">'
+          + '<button class="aitm-imb" onclick="aitmImAct(\'o\',' + i + ')" title="Open in the AI Traffic Manager">Open</button>'
+          + '<button class="aitm-imb t" onclick="aitmImAct(\'t\',' + i + ')" title="' + aitmEsc(tTip) + '"' + (canT ? '' : ' disabled') + '>Transfer to BGL</button>'
+          + '<button class="aitm-imb r" onclick="aitmImAct(\'r\',' + i + ')" title="' + aitmEsc(rTip) + '"' + (r.bgl ? '' : ' disabled') + '>Remove from BGL</button>'
+          + '</td></tr>';
       }).join('')
-    + '</tbody></table></div>'
-    + (lone.length ? '<details style="margin-top:8px;"><summary style="cursor:pointer;color:var(--txt3);">' + lone.length + ' BGL file' + (lone.length === 1 ? '' : 's') + ' in the Traffic folder without a flight plan in ' + aitmEsc(fpRoot.name) + '</summary>'
-      + '<div style="columns:2;margin-top:6px;color:var(--txt2);font-family:monospace;font-size:11px;">' + lone.map(aitmEsc).join('<br>') + '</div></details>' : '');
+    + '</tbody></table></div>';
+  aitmImFilter();
+  sc = document.getElementById('aitm-im-scroll'); if (sc) sc.scrollTop = top;
 }
-function aitmImFilter(q) {
-  var toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-  document.querySelectorAll('.aitm-im-row').forEach(function (tr) { var h = tr.dataset.q; tr.style.display = toks.every(function (t) { return h.indexOf(t) >= 0; }) ? '' : 'none'; });
+function aitmImFilter() {
+  var im = aitm.im; if (!im) return;
+  var toks = String(aitm.imQ || '').toLowerCase().split(/\s+/).filter(Boolean), f = aitm.imF || 'all';
+  document.querySelectorAll('.aitm-im-row').forEach(function (tr) {
+    var r = im.rows[+tr.dataset.i]; if (!r) return;
+    var okF = f === 'all' || (f === 'in' && r.bgl) || (f === 'out' && !r.bgl) || (f === 'notxt' && r.bgl && !r.fp);
+    tr.style.display = okF && toks.every(function (t) { return tr.dataset.q.indexOf(t) >= 0; }) ? '' : 'none';
+  });
 }
-function aitmImOpen(i) {
-  var r = aitm.imRows && aitm.imRows[i]; if (!r) return;
-  aitmCloseModal(); aitmLoadTxtHandles(r.fp, r.ac, r.ap);
+function aitmImMsg(html, warn) {
+  var el = document.getElementById('aitm-im-msg'); if (el) el.innerHTML = '<span style="color:' + (warn ? '#f0b400' : 'var(--txt2)') + ';">' + html + '</span>';
+}
+async function aitmImAct(act, i) {
+  var im = aitm.im, r = im && im.rows[i]; if (!r) return;
+  if (act === 'o') { aitmImOpen(i); return; }
+  if (aitm.imBusy) return;
+  if (!(await aitmPermOk(im.out, true))) { aitmImMsg('Chrome did not allow changes in “' + aitmEsc(im.out.name) + '”. Click again and allow it (“Save changes” / “Edit files”).', true); return; }
+  aitm.imBusy = true;
+  document.querySelectorAll('.aitm-imb').forEach(function (b) { b.disabled = true; });
+  aitmImMsg(act === 't' ? (r.fp ? 'Compiling ' : 'Putting back ') + aitmEsc(r.name) + ' …' : 'Removing ' + aitmEsc(r.name) + ' …');
+  await new Promise(function (res) { setTimeout(res, 20); });
+  var res;
+  try { res = act === 't' ? await aitmImTransfer(r, i) : await aitmImRemove(r); }
+  catch (e) {
+    var busy = e && /NoModificationAllowed|InvalidModification|InvalidState/.test(e.name);
+    res = { warn: true, keep: true, html: aitmEsc(r.name) + ': ' + aitmEsc(e && e.message || e) + (busy ? ' — the file is probably in use: close the simulator and try again.' : '') };
+  }
+  aitm.imBusy = false;
+  if (res.keep) aitmImRender(res); else await aitmImScan(res);
+}
+async function aitmImTransfer(r, i) {
+  var im = aitm.im;
+  if (r.fp) {
+    if (!r.ac) throw new Error('Aircraft_' + r.name + '.txt is missing — without it the BGL would have no aircraft.');
+    var fp = AITM_CODEC.parseFlightplansTxt(await aitmReadText(await r.fp.getFile()));
+    var list = aitmAcList(AITM_CODEC.parseAircraftTxt(await aitmReadText(await r.ac.getFile())), fp.plans);
+    var ap = aitmApWith(r.ap ? AITM_CODEC.parseAirportsTxt(await aitmReadText(await r.ap.getFile())) : {});
+    var c = aitmCheckData({ ac: list, plans: fp.plans, ap: ap });
+    if (fp.errors.length) c.errs.unshift(fp.errors.length + ' line(s) of the Flightplans file could not be read: ' + fp.errors.slice(0, 2).join('; '));
+    if (c.errs.length) return { warn: true, keep: true, html: '<b>' + aitmEsc(r.name) + ' was not compiled</b> — ' + c.errs.length + ' error' + (c.errs.length > 1 ? 's' : '') + ': '
+      + c.errs.slice(0, 3).map(aitmEsc).join(' · ') + (c.errs.length > 3 ? ' · …' : '') + ' — <a href="#" style="color:#58a6ff;" onclick="aitmImAct(\'o\',' + i + ');return false;">open it</a> to fix.' };
+    var res = AITM_CODEC.writeBGL(aitmModelOf(list, fp.plans), ap, { halve: true, order: aitmOrderFor(list) });
+    if (res.errors) throw new Error(res.errors.join('; '));
+    var name = r.bgl ? r.bgl.name : r.removed ? r.removed.name.replace(/\.off$/i, '') : 'Traffic_' + r.name + '.bgl';
+    await aitmWriteBgl(im.out, name, res.bytes, { ask: false });
+    var notInst = c.warns.filter(function (w) { return /not among your installed/.test(w); }).length;
+    return { html: '✓ <b>' + aitmEsc(name) + '</b> ' + (r.bgl ? 'compiled again and replaced (old one in Backups)' : 'compiled and put into the Traffic folder') + ' — ' + res.plans + ' flight plans, ' + res.aircraft + ' aircraft, ' + res.airports + ' airports.'
+      + (notInst ? ' <span style="color:#f0b400;">⚠ ' + notInst + ' aircraft not installed — the simulator will not show them.</span>' : '') + ' Restart the simulator to see it.' };
+  }
+  if (r.removed && !r.bgl) {
+    var nm = r.removed.name.replace(/\.off$/i, '');
+    var bytes = await (await r.removed.getFile()).arrayBuffer();
+    await aitmWriteBgl(im.out, nm, bytes, { ask: false });
+    await (await im.out.getDirectoryHandle(AITM_REMOVED)).removeEntry(r.removed.name);
+    return { html: '✓ <b>' + aitmEsc(nm) + '</b> is back in the Traffic folder. Restart the simulator to see it.' };
+  }
+  throw new Error('nothing to transfer.');
+}
+async function aitmImRemove(r) {
+  var im = aitm.im; if (!r.bgl || !im.tdir) throw new Error('not in the Traffic folder.');
+  var name = r.bgl.name, bytes = await (await r.bgl.getFile()).arrayBuffer();
+  var rdir = await im.out.getDirectoryHandle(AITM_REMOVED, { create: true });
+  var w = await (await rdir.getFileHandle(name + '.off', { create: true })).createWritable(); await w.write(bytes); await w.close();
+  if ((await (await rdir.getFileHandle(name + '.off')).getFile()).size !== bytes.byteLength) throw new Error('the copy could not be written — nothing was removed.');
+  await im.tdir.removeEntry(name);
+  if (im.isPkg) await aitmLayoutSet(await im.out.getFileHandle('layout.json'), 'Scenery/World/Traffic/' + name, null);
+  return { html: '✓ <b>' + aitmEsc(name) + '</b> taken out of the Traffic folder' + (im.isPkg ? ' and layout.json' : '') + ' — kept in ' + aitmEsc(im.out.name) + '\\' + AITM_REMOVED + ', Transfer to BGL puts it back. Restart the simulator.' };
+}
+async function aitmImOpen(i) {
+  var r = aitm.im && aitm.im.rows[i]; if (!r) return;
+  aitmCloseModal();
+  if (r.fp) { aitmLoadTxtHandles(r.fp, r.ac, r.ap); return; }
+  var h = r.bgl || r.removed; if (!h) return;
+  try { aitmLoadBgl(await (await h.getFile()).arrayBuffer(), h.name.replace(/\.off$/i, '')); } catch (e) { aitmToast(h.name + ': ' + e.message, true); }
 }
 
 if (typeof module !== 'undefined') module.exports.ui = { aitmTypeSig: aitmTypeSig, aitmSplitBase: aitmSplitBase, aitmCfgEntries: aitmCfgEntries };
