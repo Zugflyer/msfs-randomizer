@@ -622,120 +622,56 @@ function aitmCfgEntries(cfgText, fmText, folder, src) {
   });
   return out;
 }
-var AITM_SKIP_DIR = /^(texture|model|sound|panel|effects|scenery|traffic files|airports|scripts|ocI-configuration|oci-configuration|verify|texture\..*|model\..*|soundai)$/i;
-async function aitmWalk(dir, src, depth, out, rep, prog) {
-  var names = {}, kids = [];
-  rep.dirs++;
-  try {
-    for await (var ent of dir.values()) {
-      if (ent.kind === 'file') names[ent.name.toLowerCase()] = ent;
-      else kids.push(ent);
-    }
-  } catch (e) { if (rep.errors.length < 20) rep.errors.push(dir.name + ': ' + (e.name || '') + ' ' + (e.message || e)); return; }
-  if (rep.dirs === 1) rep.top = Object.keys(names).concat(kids.map(function (k) { return k.name + '\\'; })).slice(0, 14);
-  if (names['aircraft.cfg']) {
-    try {
-      var cfg = await (await names['aircraft.cfg'].getFile()).text();
-      var fm = names['flight_model.cfg'] ? await (await names['flight_model.cfg'].getFile()).text() : '';
-      var es = aitmCfgEntries(cfg, fm, dir.name, src);
-      es.forEach(function (e) { out.push(e); });
-      rep.cfg++; rep.liveries += es.length;
-      if (prog) prog(dir.name);
-    } catch (e) { if (rep.errors.length < 20) rep.errors.push(dir.name + '\\aircraft.cfg: ' + (e.name || '') + ' ' + (e.message || e)); }
-    return;
-  }
-  if (depth <= 0) return;
-  var simo = kids.filter(function (k) { return /^simobjects$/i.test(k.name); });
-  var airp = kids.filter(function (k) { return /^airplanes$/i.test(k.name); });
-  var go = simo.length ? simo : airp.length ? airp : kids.filter(function (k) { return !AITM_SKIP_DIR.test(k.name) && !/^(texture|model)\./i.test(k.name); });
-  for (var i = 0; i < go.length; i++) await aitmWalk(go[i], src, depth - 1, out, rep, prog);
-}
-async function aitmFolders() { return (await aitmKvGet('acFolders')) || []; }
-async function aitmAddFolder() {
-  if (!window.showDirectoryPicker) { aitmPickFallback(); return; }
-  try {
-    var h = await window.showDirectoryPicker({ id: 'aitm-aircraft', mode: 'read' });
-    var list = await aitmFolders();
-    for (var i = 0; i < list.length; i++) if (await list[i].isSameEntry(h)) { aitmToast('This folder is already connected.'); return; }
-    list.push(h); await aitmKvSet('acFolders', list);
-    await aitmRescan();
-  } catch (e) { if (e && e.name !== 'AbortError') aitmToast('Folder not connected: ' + e.message, true); }
-}
-async function aitmRemoveFolder(i) {
-  var list = await aitmFolders(); list.splice(i, 1); await aitmKvSet('acFolders', list);
-  await aitmRescan();
-}
+// Chrome treats *.cfg as a "dangerous" file type on Windows and hides it from folder access
+// (showDirectoryPicker). The classic folder upload of the browser still hands them over —
+// nothing is sent anywhere, the page only reads aircraft.cfg / flight_model.cfg locally.
 async function aitmPermOk(h, write) {
   var opt = { mode: write ? 'readwrite' : 'read' };
   if ((await h.queryPermission(opt)) === 'granted') return true;
   try { return (await h.requestPermission(opt)) === 'granted'; } catch (e) { return false; }
 }
-async function aitmRescan() {
-  var list = await aitmFolders();
-  if (!list.length) { aitmToast('No aircraft folder connected yet — Folders → + Aircraft folder.', true); return; }
-  // ask for all folders first, while the click still counts as the user's
-  var perms = await Promise.all(list.map(function (h) { return aitmPermOk(h).catch(function () { return false; }); }));
-  var all = [], report = [];
-  var st = document.getElementById('aitm-status');
-  for (var i = 0; i < list.length; i++) {
-    var h = list[i], rep = { name: h.name, dirs: 0, cfg: 0, liveries: 0, errors: [], top: [] };
-    report.push(rep);
-    if (!perms[i]) { rep.errors.push('Chrome did not allow reading this folder.'); continue; }
-    var src = /aig/i.test(h.name) ? 'AIG' : 'Own';
-    if (st) { st.style.color = 'var(--txt2)'; st.textContent = 'Reading ' + h.name + ' …'; }
-    try {
-      await aitmWalk(h, src, 6, all, rep, function (name) {
-        if (st && rep.cfg % 10 === 0) st.textContent = 'Reading ' + h.name + ' … ' + rep.cfg + ' aircraft.cfg (' + name + ')';
-      });
-    } catch (e) { rep.errors.push((e.name || '') + ' ' + (e.message || e)); }
-    console.log('[AI Traffic Manager] scan', JSON.stringify(rep));
-  }
-  aitm.scanReport = report;
-  aitm.fleet = all;
-  await aitmKvSet('fleetCache', { at: Date.now(), list: all, report: report });
-  aitmFleetIndex();
-  aitmRenderAll();
-  aitm.logos = null; aitmFindLogo(true);
-  var bad = report.filter(function (r) { return !r.cfg; });
-  aitmToast(report.map(function (r) { return r.name + ': ' + r.cfg + ' aircraft.cfg / ' + r.liveries + ' liveries'; }).join(' · '), bad.length > 0);
-  if (bad.length) aitmScanReport();
-}
-function aitmScanReport() {
-  var rep = aitm.scanReport || [];
-  aitmModal('Reading the aircraft folders',
-    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;max-height:60vh;overflow:auto;">'
-    + rep.map(function (r) {
-      return '<div style="padding:6px 0;border-bottom:1px solid var(--bdr);"><b style="color:' + (r.cfg ? '#3fb950' : '#f85149') + ';">' + aitmEsc(r.name) + '</b> — '
-        + r.cfg + ' aircraft.cfg, ' + r.liveries + ' liveries, ' + r.dirs + ' folders looked at'
-        + (r.top.length ? '<br><span style="color:var(--txt3);">Chrome sees in it: ' + aitmEsc(r.top.join(', ')) + '</span>' : '')
-        + (r.errors.length ? '<br><span style="color:#f0b400;">' + r.errors.map(aitmEsc).join('<br>') + '</span>' : '') + '</div>';
-    }).join('')
-    + '<div style="margin-top:10px;color:var(--txt3);">Pick the package folder (e.g. aig-aitraffic-oci), its SimObjects\\Airplanes, or a single aircraft folder — all work. If nothing is found, try “Read via upload…”, which uses the classic folder upload of the browser instead.</div></div>',
-    [['Read via upload…', function () { aitmCloseModal(); aitmPickFallback(); }, true]], true);
-}
-function aitmPickFallback() {
+function aitmReadAircraftFolder() {
   var inp = document.createElement('input');
   inp.type = 'file'; inp.webkitdirectory = true; inp.multiple = true;
   inp.onchange = async function () {
     var files = Array.prototype.slice.call(inp.files || []);
-    var byDir = {};
-    files.forEach(function (f) {
-      var p = (f.webkitRelativePath || f.name).split('/'); var n = p.pop().toLowerCase();
-      if (n === 'aircraft.cfg' || n === 'flight_model.cfg') { var d = p.join('/'); (byDir[d] = byDir[d] || {})[n] = f; }
-    });
-    var all = aitm.fleet.slice(), n0 = all.length;
+    if (!files.length) return;
     aitmToast('Reading ' + files.length + ' files …');
+    await new Promise(function (r) { setTimeout(r, 20); });
+    var byDir = {}, root = '';
+    files.forEach(function (f) {
+      var p = (f.webkitRelativePath || f.name).split('/');
+      if (!root) root = p[0];
+      var n = p.pop().toLowerCase();
+      if (n === 'aircraft.cfg' || n === 'flight_model.cfg' || n === 'aircraft.cfgaig') { var d = p.join('/'); (byDir[d] = byDir[d] || {})[n] = f; }
+    });
+    var src = /aig/i.test(root) || Object.keys(byDir).some(function (d) { return /aig-aitraffic/i.test(d); }) ? 'AIG' : 'Own';
+    var entries = [], ncfg = 0, errs = [];
     for (var d in byDir) {
-      if (!byDir[d]['aircraft.cfg']) continue;
-      var cfg = await byDir[d]['aircraft.cfg'].text();
-      var fm = byDir[d]['flight_model.cfg'] ? await byDir[d]['flight_model.cfg'].text() : '';
-      aitmCfgEntries(cfg, fm, d.split('/').pop(), /aig/i.test(d) ? 'AIG' : 'Own').forEach(function (e) { all.push(e); });
+      var g = byDir[d], cf = g['aircraft.cfg'] || g['aircraft.cfgaig'];
+      if (!cf) continue;
+      try {
+        var cfg = await aitmReadText(cf), fm = g['flight_model.cfg'] ? await aitmReadText(g['flight_model.cfg']) : '';
+        aitmCfgEntries(cfg, fm, d.split('/').pop(), src).forEach(function (e) { e.root = root; entries.push(e); });
+        ncfg++;
+      } catch (e) { errs.push(d + ': ' + e.message); }
     }
-    aitm.fleet = all; await aitmKvSet('fleetCache', { at: Date.now(), list: all });
+    aitm.fleet = aitm.fleet.filter(function (e) { return e.root && e.root !== root; }).concat(entries);
+    aitm.sources = (aitm.sources || []).filter(function (x) { return x.name !== root; })
+      .concat([{ name: root, src: src, cfg: ncfg, liveries: entries.length, files: files.length, at: Date.now() }]);
+    await aitmKvSet('fleetCache', { at: Date.now(), list: aitm.fleet, sources: aitm.sources });
     aitmFleetIndex(); aitmRenderAll();
-    aitmToast((all.length - n0) + ' liveries read from ' + Object.keys(byDir).length + ' aircraft.cfg (' + files.length + ' files looked at).', all.length === n0);
+    aitm.logos = null; aitmFindLogo(false);
+    aitmToast(root + ': ' + ncfg + ' aircraft.cfg, ' + entries.length + ' liveries read' + (errs.length ? ' · ' + errs.length + ' could not be read' : '') + '.', !ncfg || errs.length > 0);
+    if (document.getElementById('aitm-modal')) aitmFoldersDialog();
   };
   inp.click();
+}
+async function aitmForgetSource(name) {
+  aitm.fleet = aitm.fleet.filter(function (e) { return e.root && e.root !== name; });
+  aitm.sources = (aitm.sources || []).filter(function (x) { return x.name !== name; });
+  await aitmKvSet('fleetCache', { at: Date.now(), list: aitm.fleet, sources: aitm.sources });
+  aitmFleetIndex(); aitmRenderAll(); aitmFoldersDialog();
 }
 function aitmFleetIndex() {
   aitm.byTitle = {};
@@ -890,7 +826,10 @@ function aitmInit() {
   if (!aitm.inited) {
     aitm.inited = true;
     aitmRestore();
-    aitmKvGet('fleetCache').then(function (c) { if (c && c.list && !aitm.fleet.length) { aitm.fleet = c.list; aitm.scanReport = c.report || null; aitmFleetIndex(); aitmRenderAll(); } });
+    aitmKvGet('fleetCache').then(function (c) {
+      if (c && c.list && !aitm.fleet.length) { aitm.fleet = c.list.filter(function (e) { return e.root; }); aitm.sources = c.sources || []; aitmFleetIndex(); aitmRenderAll(); }
+    });
+    aitmKvSet('acFolders', []);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') aitmCloseModal(); });
   }
   aitmRenderAll();
@@ -910,7 +849,7 @@ function aitmRenderHeader() {
   var el = document.getElementById('aitm-head'); if (!el) return;
   var nLegs = 0; aitm.plans.forEach(function (p) { nLegs += p.legs.length; });
   var logo = aitm.logoUrl ? '<img src="' + aitm.logoUrl + '" alt="" style="max-height:46px;max-width:170px;object-fit:contain;">'
-    : '<div title="No logo found — connect your logo folders (e.g. the Rotation Map folder) with the button on the right" style="font-size:22px;font-weight:800;letter-spacing:.12em;color:#fff;">' + aitmEsc(aitm.code || '—') + '</div>';
+    : '<div onclick="aitm.logos=null;aitmFindLogo(true);" title="No logo found — click to look again (Chrome may ask for the logo folders). Logo folders: Folders, top right of the fleet list." style="cursor:pointer;font-size:22px;font-weight:800;letter-spacing:.12em;color:#fff;">' + aitmEsc(aitm.code || '—') + '</div>';
   var stat = function (k, v, click, tip) {
     return '<div style="display:flex;flex-direction:column;gap:2px;' + (click ? 'cursor:pointer;' : '') + '"' + (click ? ' onclick="' + click + '"' : '') + (tip ? ' title="' + tip + '"' : '') + '>'
       + '<span style="font-size:10px;color:var(--txt3);font-weight:600;text-transform:uppercase;letter-spacing:.06em;">' + k + '</span>'
@@ -1042,9 +981,10 @@ function aitmRenderFleet() {
   var st = document.getElementById('aitm-fleet-status');
   if (!aitm.fleet.length) {
     el.innerHTML = '<div style="padding:16px 12px;color:var(--txt3);font-size:12px;line-height:1.7;">No installed aircraft read yet.<br>'
-      + '<button class="aitm-btn" style="margin:6px 0;border-color:#3fb950;color:#3fb950;" onclick="aitmRescan()">↻ Read connected folders now</button><br>'
-      + 'Click <b>Folders</b> and connect<br>· your AIG folder <span style="font-family:monospace;font-size:11px;">C:\\MSFS\\Microsoft Flight Simulator Add-ons\\AIG AI Manager\\aig-aitraffic-oci</span><br>'
-      + '· your own aircraft <span style="font-family:monospace;font-size:11px;">OneDrive …\\AI Traffic by CRE\\AI Traffic Aircraft</span></div>';
+      + '<button class="aitm-btn" style="margin:6px 0;border-color:#3fb950;color:#3fb950;" onclick="aitmReadAircraftFolder()">Read aircraft folder…</button><br>'
+      + 'Once for each folder:<br>· AIG <span style="font-family:monospace;font-size:11px;">C:\\MSFS\\Microsoft Flight Simulator Add-ons\\AIG AI Manager\\aig-aitraffic-oci</span><br>'
+      + '· your own <span style="font-family:monospace;font-size:11px;">OneDrive …\\AI Traffic by CRE\\AI Traffic Aircraft</span><br>'
+      + 'Chrome then asks whether to “upload” the files — nothing leaves your PC, the page only reads the aircraft.cfg files. The result is kept until you read a folder again.</div>';
     if (st) st.textContent = '';
     aitm.fleetShown = []; return;
   }
@@ -1436,24 +1376,26 @@ async function aitmSaveTxt() {
   files.forEach(function (f, k) { setTimeout(function () { aitmDownload(f[1], f[0]); }, k * 400); });
 }
 async function aitmFoldersDialog() {
-  var list = await aitmFolders(), logos = (await aitmKvGet('logoFolders')) || [], out = await aitmKvGet('outFolder'), txt = await aitmKvGet('txtFolder');
-  var row = function (label, name, rm) { return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);"><span style="flex:1;color:#fff;">' + aitmEsc(name) + '</span><span style="color:var(--txt3);font-size:11px;">' + label + '</span>' + (rm ? '<button onclick="' + rm + '" style="font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">Remove</button>' : '') + '</div>'; };
+  var logos = (await aitmKvGet('logoFolders')) || [], out = await aitmKvGet('outFolder'), txt = await aitmKvGet('txtFolder');
+  var btn = function (label, on) { return '<button onclick="' + on + '" style="font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">' + label + '</button>'; };
+  var row = function (name, info, btns) { return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);"><span style="flex:1;color:#fff;">' + aitmEsc(name) + '</span><span style="color:var(--txt3);font-size:11px;">' + info + '</span>' + (btns || '') + '</div>'; };
+  var srcs = aitm.sources || [];
   aitmModal('Folders',
     '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">'
     + '<div style="font-weight:700;color:var(--txt);margin-bottom:4px;">Installed AI aircraft</div>'
-    + (list.length ? list.map(function (h, i) {
-        var r = (aitm.scanReport || []).find(function (x) { return x.name === h.name; });
-        return row(r ? (r.cfg + ' aircraft.cfg · ' + r.liveries + ' liveries') : 'aircraft', h.name, 'aitmRemoveFolder(' + i + ').then(aitmFoldersDialog)');
-      }).join('') : '<div style="color:var(--txt3);">none yet</div>')
-    + '<div style="font-size:11px;color:var(--txt3);margin:4px 0 12px;">AIG: <span style="font-family:monospace;">C:\\MSFS\\Microsoft Flight Simulator Add-ons\\AIG AI Manager\\aig-aitraffic-oci</span> (the folder in Community is only a link that Chrome blocks).<br>Own: <span style="font-family:monospace;">OneDrive\\…\\AI Traffic by CRE\\AI Traffic Aircraft</span></div>'
+    + (srcs.length ? srcs.map(function (x) {
+        return row(x.name, x.src + ' · ' + x.cfg + ' aircraft.cfg · ' + x.liveries + ' liveries · read ' + new Date(x.at).toLocaleDateString(),
+          btn('Read again', 'aitmReadAircraftFolder()') + ' ' + btn('Remove', "aitmForgetSource('" + aitmEsc(x.name).replace(/'/g, "\\'") + "')"));
+      }).join('') : '<div style="color:var(--txt3);">none read yet</div>')
+    + '<div style="font-size:11px;color:var(--txt3);margin:4px 0 12px;">AIG: <span style="font-family:monospace;">C:\\MSFS\\Microsoft Flight Simulator Add-ons\\AIG AI Manager\\aig-aitraffic-oci</span> · own: <span style="font-family:monospace;">OneDrive\\…\\AI Traffic by CRE\\AI Traffic Aircraft</span><br>'
+    + 'Chrome hides *.cfg files from folder access, so these folders are read with the browser’s folder upload (Chrome calls it “upload”, but nothing leaves your PC). Read a folder again after installing new aircraft.</div>'
     + '<div style="font-weight:700;color:var(--txt);margin-bottom:4px;">Logos</div>'
-    + (logos.length ? logos.map(function (h, i) { return row('logos', h.name, 'aitmRemoveLogoFolder(' + i + ')'); }).join('') : '<div style="color:var(--txt3);">none yet — e.g. your Rotation Map folder (it has “Logos” and “AI Companion\\logos”)</div>')
+    + (logos.length ? logos.map(function (h, i) { return row(h.name, 'logos', btn('Remove', 'aitmRemoveLogoFolder(' + i + ')')); }).join('') : '<div style="color:var(--txt3);">none yet — e.g. your Rotation Map folder (it has “Logos” and “AI Companion\\logos”)</div>')
     + '<div style="font-weight:700;color:var(--txt);margin:12px 0 4px;">Output</div>'
-    + row('BGL', out ? out.name : 'not chosen', '') + row('txt', txt ? txt.name : 'not chosen (asked on first save)', '')
+    + row(out ? out.name : 'not chosen', 'BGL (package folder with layout.json)') + row(txt ? txt.name : 'not chosen (asked on first save)', 'txt')
     + '</div>',
-    [['+ Aircraft folder', function () { aitmAddFolder().then(aitmFoldersDialog); }], ['+ Logo folder', function () { aitmAddLogoFolder(); }],
-     ['BGL folder…', function () { aitmPickOut().then(aitmFoldersDialog); }], ['txt folder…', async function () { try { var h = await window.showDirectoryPicker({ id: 'aitm-txt', mode: 'readwrite' }); await aitmKvSet('txtFolder', h); aitmFoldersDialog(); } catch (e) {} }],
-     ['↻ Rescan', function () { aitmCloseModal(); aitmRescan(); }, false, '#3fb950']], true);
+    [['+ Read aircraft folder…', function () { aitmReadAircraftFolder(); }, false, '#3fb950'], ['+ Logo folder', function () { aitmAddLogoFolder(); }],
+     ['BGL folder…', function () { aitmPickOut().then(aitmFoldersDialog); }], ['txt folder…', async function () { try { var h = await window.showDirectoryPicker({ id: 'aitm-txt', mode: 'readwrite' }); await aitmKvSet('txtFolder', h); aitmFoldersDialog(); } catch (e) {} }]], true);
 }
 
 // ── logos (like Rotation Map: logo folders, file named after the traffic file, the callsign or the airline) ──
