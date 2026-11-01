@@ -1453,17 +1453,20 @@ function aitmAfterApEdit() {
   var v = document.getElementById('view-aitm');
   if (v && v.style.display !== 'none' && aitm.plans && aitm.plans.length) { aitmRenderHeader(); aitmRenderLegs(); aitmRenderAirports(); }
 }
-// Rotation Map (runs on this PC, http://127.0.0.1:47815): open the airport, or the airline of this flight plan
-// (#file = its traffic BGL, #find = its ICAO code or name — understood by Rotation Map 4.11 and later)
+// Rotation Map (runs on this PC, http://127.0.0.1:47815): open the airport, or the airline of this flight plan.
+// #ap=ICAO and #a=<airline id> are what Rotation Map reads when its page loads; the id of an airline from traffic BGL
+// files is "B:" + the operator name in lower case (Air France -> "B:air france"). #file / #find name the BGL and the
+// code for a Rotation Map that matches by file. The changing "t" makes an open Rotation Map tab load the new link.
 var AITM_RM_URL = 'http://127.0.0.1:47815/';
 function aitmRotationMap(icao) {
-  var h;
-  if (icao || aitm.kind === 'airport') h = '#ap=' + encodeURIComponent(icao || aitm.apIcao || '');
+  var h, enc = encodeURIComponent;
+  if (icao || aitm.kind === 'airport') h = '#ap=' + enc(icao || aitm.apIcao || '');
   else {
     var file = /\.bgl$/i.test(aitm.source || '') ? aitm.source : (aitm.outName || '');
-    h = '#file=' + encodeURIComponent(file) + '&find=' + encodeURIComponent(aitm.code || aitm.name || '');
+    var nm = String(aitm.name || '').trim();
+    h = '#' + (nm ? 'a=' + enc('B:' + nm.toLowerCase()) + '&' : '') + 'file=' + enc(file) + '&find=' + enc(aitm.code || nm);
   }
-  var w = window.open(AITM_RM_URL + h, 'rotationmap');
+  var w = window.open(AITM_RM_URL + '?from=msfs-manager&t=' + Date.now() + h, 'rotationmap');
   if (w) { try { w.focus(); } catch (e) {} }
   else aitmToast('The browser blocked the new tab — allow pop-ups for this page.', true);
 }
