@@ -840,8 +840,10 @@ async function aitmOpenTxt() {
   var suffix = anyH.name.replace(/^(flightplans|aircraft|airports)/i, '');
   if (fpH && acH && apH) { aitmLoadTxtHandles(fpH, acH, apH); return; }
   var dirs = (await aitmKvGet('txtDirs')) || [];
+  var fpRoot = await aitmKvGet('fpRoot');           // the Installation Manager's flight plan folder counts too
+  var cands = fpRoot ? [fpRoot].concat(dirs) : dirs;
   var known = null, path = null;
-  for (var i = 0; i < dirs.length && !known; i++) { try { path = await dirs[i].resolve(anyH); if (path) known = dirs[i]; } catch (e) {} }
+  for (var i = 0; i < cands.length && !known; i++) { try { path = await cands[i].resolve(anyH); if (path) known = cands[i]; } catch (e) {} }
   var go = async function (dir) {
     var sib = await aitmSiblings(dir, path || (await dir.resolve(anyH)) || [anyH.name], ['flightplans' + suffix.toLowerCase(), 'aircraft' + suffix.toLowerCase(), 'airports' + suffix.toLowerCase()]);
     var f = fpH || sib[0];
@@ -849,10 +851,13 @@ async function aitmOpenTxt() {
     aitmLoadTxtHandles(f, acH || sib[1], apH || sib[2]);
   };
   if (known && (await known.queryPermission({ mode: 'read' })) === 'granted') { await go(known); return; }
-  aitmModal('Find the Aircraft and Airports files',
-    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">The page takes <b>Flightplans' + aitmEsc(suffix) + '</b>, <b>Aircraft' + aitmEsc(suffix) + '</b> and <b>Airports' + aitmEsc(suffix) + '</b> from the folder of <b>' + aitmEsc(anyH.name) + '</b>.<br>'
-    + (known ? 'Chrome needs your OK to look into “' + aitmEsc(known.name) + '” again.' : 'Allow it once for this folder: click the button and confirm the folder Chrome shows (it is already selected).') + '</div>',
-    [[known ? 'Allow' : 'Choose folder…', async function () {
+  aitmModal('One more click: allow the folder',
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome lets the page read only the file you picked (<b>' + aitmEsc(anyH.name) + '</b>). '
+    + 'To load <b>Flightplans' + aitmEsc(suffix) + '</b>, <b>Aircraft' + aitmEsc(suffix) + '</b> and <b>Airports' + aitmEsc(suffix) + '</b> together, '
+    + (known ? 'Chrome must allow the page to look into “' + aitmEsc(known.name) + '” again — click <b>Allow folder</b>.'
+             : 'Chrome must allow the page to look into their folder — <b>once</b>:<br>click <b>Allow folder</b>, then in Chrome’s window click <b>Select folder</b> and <b>View files</b>. '
+               + 'The folder is already selected.<br><span style="color:var(--txt3);">Tip: go up and pick “CRE flightplans” — then it works for all your flight plans in its sub folders at once.</span>') + '</div>',
+    [['Allow folder', async function () {
       try {
         var dir = known;
         if (dir) { if (!(await aitmPermOk(dir))) return; }
