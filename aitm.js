@@ -525,7 +525,7 @@ function aitmSave() {
   clearTimeout(aitm._saveT);
   aitm._saveT = setTimeout(function () {
     try {
-      localStorage.setItem(AITM_KEY, JSON.stringify({ name: aitm.name, code: aitm.code, period: aitm.period, fileBase: aitm.fileBase,
+      localStorage.setItem(AITM_KEY, JSON.stringify({ kind: aitm.kind || 'airline', apIcao: aitm.apIcao || '', name: aitm.name, code: aitm.code, period: aitm.period, fileBase: aitm.fileBase,
         source: aitm.source, ac: aitm.ac, plans: aitm.plans, apx: aitm.apx, tmode: aitm.tmode, outName: aitm.outName || '' }));
     } catch (e) {}
   }, 300);
@@ -534,7 +534,7 @@ function aitmRestore() {
   try {
     var s = JSON.parse(localStorage.getItem(AITM_KEY) || 'null');
     if (!s) return;
-    ['name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
+    ['kind', 'apIcao', 'name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
   } catch (e) {}
 }
 
@@ -710,6 +710,34 @@ function aitmAcTypeName(a) {
   return aitmTypeName(aitmAcSig(a)) || a.hint || '';
 }
 
+// airline of an AC# entry: set by the planner, of the installed livery, from the title, or the plan's airline
+var AITM_MAKERS = /\s(Airbus|Boeing|Embraer|Bombardier|McDonnell|Douglas|ATR|De Havilland|DHC|Fokker|Canadair|Saab|Antonov|Lockheed|BAe|British Aerospace|Avro|Dornier|Sukhoi|COMAC|Comac|Ilyushin|Tupolev|Cessna|Beechcraft|Pilatus|Gulfstream|Dassault|Learjet|Hawker|Concorde|Aerospatiale|Vickers|Convair|Mitsubishi)\b/;
+// airline of an AC# entry: {code, name} — set by the planner, of the installed livery, or from the title
+function aitmAcAirlineInfo(a) {
+  var t = String(a.title || ''), out = { code: '', name: '' };
+  if (a.al) out.code = a.al;
+  var inst = aitmInstalled(t); if (inst && inst.airline && !out.code) out.code = inst.airline;
+  var m = /^AIGAIM_([A-Z0-9]{2,3})\s+\S+\s+NCv2$/.exec(t);           // planner placeholder
+  if (m) { if (!out.code) out.code = m[1]; return out; }
+  m = /^AIGAIM_(.+?)\s*$/.exec(t);
+  if (m) { var mk = AITM_MAKERS.exec(' ' + m[1]); if (mk) out.name = (' ' + m[1]).slice(0, mk.index).trim(); }
+  if (!out.code && !/^AIGAIM_/.test(t)) out.code = aitmAirlineOf({}, t);
+  if (!out.code && !out.name && aitm.kind !== 'airport') out.code = aitm.code || '';
+  return out;
+}
+// search term for the first AC# whose aircraft is not installed (red dot): airline + type, else type, else airline
+function aitmDefaultQuery() {
+  if (!aitm.fleet.length) return '';
+  for (var i = 0; i < aitm.ac.length; i++) {
+    var a = aitm.ac[i];
+    if (aitmInstalled(a.title)) continue;
+    var sig = aitmAcSig(a), inf = aitmAcAirlineInfo(a), al = inf.name || inf.code;
+    var cands = [[al, sig].filter(Boolean).join(' '), sig, al].filter(Boolean);
+    for (var k = 0; k < cands.length; k++) if (aitmFleetMatches(cands[k]).length) return cands[k];
+    return cands[0] || '';
+  }
+  return '';
+}
 // ── matching: which installed livery fits which AC# best ──
 function aitmMatchScore(a, e, code) {
   var s = 0, sig = aitmAcSig(a);
@@ -717,8 +745,10 @@ function aitmMatchScore(a, e, code) {
   if (sig && e.sig === sig) s += 100;
   else if (sig && e.sig && e.sig.slice(0, 3) === sig.slice(0, 3)) s += 40;
   else if (sig && e.sig) return s;
-  if (code && (e.airline === code || (' ' + e.codes.toUpperCase() + ',').indexOf(code) >= 0)) s += 50;
-  var nm = String(aitm.name || '').toLowerCase();
+  var inf = aitmAcAirlineInfo(a), al = inf.code || (inf.name ? '' : code), an = inf.name.toLowerCase();
+  if (al && (e.airline === al || (' ' + e.codes.toUpperCase() + ',').indexOf(al) >= 0)) s += 50;
+  else if (an && (e.title.toLowerCase().indexOf('aigaim_' + an + ' ') === 0 || e.uiVar.toLowerCase().indexOf(an) === 0)) s += 50;
+  var nm = aitm.kind === 'airport' ? '' : String(aitm.name || '').toLowerCase();
   if (nm && (e.uiVar.toLowerCase().indexOf(nm) >= 0 || e.title.toLowerCase().indexOf(nm) >= 0)) s += 30;
   var regs = String(a.title || '').match(/\b[A-Z0-9]{1,2}-[A-Z0-9]{3,5}\b|\bN\d{1,5}[A-Z]{0,2}\b/g) || [];
   regs.forEach(function (r) { if (e.title.indexOf(r) >= 0) s += 20; });
@@ -762,6 +792,17 @@ function aitmLoad(d) {
   aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {};
   aitm.fileBase = d.base || ''; aitm.source = d.source || '';
   aitm.name = d.name || ''; aitm.period = d.period || ''; aitm.code = d.code || '';
+  // an airport plan (file named after an ICAO code, or AIRPORT mode of the AI Generator): many airlines
+  var ic = String(d.airport || d.name || '').replace(/\s+/g, '').toUpperCase();
+  aitm.kind = d.kind || (/^[A-Z0-9]{4}$/.test(ic) && aitmAp(ic) ? 'airport' : 'airline');
+  aitm.apIcao = aitm.kind === 'airport' ? ic : '';
+  if (aitm.kind === 'airport') {
+    var ap = aitmAp(ic); aitm.code = ''; aitm.name = ap ? (ap.city || ap.name || ic) : ic;
+    aitm.outName = 'Traffic_' + (aitm.fileBase || ('CRE_' + ic)) + '.bgl';
+    aitm.sel = []; aitm.fleetQ = null; aitm.fleetSel = [];
+    if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; }
+    aitmSave(); aitmRenderAll(); return;
+  }
   if (!aitm.code) aitm.code = aitmGuessCode();
   if (!aitm.code && aitm.name && typeof AIRLINE_NAMES !== 'undefined') {
     var nm = aitm.name.toLowerCase().replace(/\s+/g, '');
@@ -779,35 +820,39 @@ async function aitmOpenTxt() {
   var hs;
   try { hs = await window.showOpenFilePicker({ id: 'aitm-open-txt', multiple: true, types: [{ description: 'TTools flight plan', accept: { 'text/plain': ['.txt'] } }] }); }
   catch (e) { return; }
-  var fpH = hs.find(function (h) { return /^flightplans/i.test(h.name); }) || hs[0];
+  var fpH = hs.find(function (h) { return /^flightplans/i.test(h.name); }) || null;
   var acH = hs.find(function (h) { return /^aircraft/i.test(h.name); }) || null;
   var apH = hs.find(function (h) { return /^airports/i.test(h.name); }) || null;
-  var suffix = fpH.name.replace(/^flightplans/i, '');
-  if (!/^flightplans/i.test(fpH.name) || (acH && apH)) { aitmLoadTxtHandles(fpH, acH, apH); return; }
+  var anyH = fpH || acH || apH;
+  if (!anyH) { aitmLoadTxtHandles(hs[0], null, null); return; }   // not named the TTools way
+  var suffix = anyH.name.replace(/^(flightplans|aircraft|airports)/i, '');
+  if (fpH && acH && apH) { aitmLoadTxtHandles(fpH, acH, apH); return; }
   var dirs = (await aitmKvGet('txtDirs')) || [];
   var known = null, path = null;
-  for (var i = 0; i < dirs.length && !known; i++) { try { path = await dirs[i].resolve(fpH); if (path) known = dirs[i]; } catch (e) {} }
+  for (var i = 0; i < dirs.length && !known; i++) { try { path = await dirs[i].resolve(anyH); if (path) known = dirs[i]; } catch (e) {} }
   var go = async function (dir) {
-    var sib = await aitmSiblings(dir, path || (await dir.resolve(fpH)) || [fpH.name], ['aircraft' + suffix.toLowerCase(), 'airports' + suffix.toLowerCase()]);
-    aitmLoadTxtHandles(fpH, acH || sib[0], apH || sib[1]);
+    var sib = await aitmSiblings(dir, path || (await dir.resolve(anyH)) || [anyH.name], ['flightplans' + suffix.toLowerCase(), 'aircraft' + suffix.toLowerCase(), 'airports' + suffix.toLowerCase()]);
+    var f = fpH || sib[0];
+    if (!f) { aitmToast('Flightplans' + suffix + ' not found next to ' + anyH.name + '.', true); return; }
+    aitmLoadTxtHandles(f, acH || sib[1], apH || sib[2]);
   };
   if (known && (await known.queryPermission({ mode: 'read' })) === 'granted') { await go(known); return; }
   aitmModal('Find the Aircraft and Airports files',
-    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">The page takes <b>Aircraft' + aitmEsc(suffix) + '</b> and <b>Airports' + aitmEsc(suffix) + '</b> from the folder of <b>' + aitmEsc(fpH.name) + '</b>.<br>'
+    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">The page takes <b>Flightplans' + aitmEsc(suffix) + '</b>, <b>Aircraft' + aitmEsc(suffix) + '</b> and <b>Airports' + aitmEsc(suffix) + '</b> from the folder of <b>' + aitmEsc(anyH.name) + '</b>.<br>'
     + (known ? 'Chrome needs your OK to look into “' + aitmEsc(known.name) + '” again.' : 'Allow it once for this folder: click the button and confirm the folder Chrome shows (it is already selected).') + '</div>',
     [[known ? 'Allow' : 'Choose folder…', async function () {
       try {
         var dir = known;
         if (dir) { if (!(await aitmPermOk(dir))) return; }
         else {
-          dir = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read', startIn: fpH });
-          path = await dir.resolve(fpH);
-          if (!path) { aitmToast(fpH.name + ' is not inside “' + dir.name + '” — choose the folder that holds it.', true); return; }
+          dir = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read', startIn: anyH });
+          path = await dir.resolve(anyH);
+          if (!path) { aitmToast(anyH.name + ' is not inside “' + dir.name + '” — choose the folder that holds it.', true); return; }
           dirs.push(dir); await aitmKvSet('txtDirs', dirs);
         }
         aitmCloseModal(); await go(dir);
       } catch (e) { if (e && e.name !== 'AbortError') aitmToast(e.message, true); }
-    }], ['Load without them', function () { aitmCloseModal(); aitmLoadTxtHandles(fpH, acH, apH); }, true]]);
+    }]].concat(fpH ? [['Load without them', function () { aitmCloseModal(); aitmLoadTxtHandles(fpH, acH, apH); }, true]] : []));
 }
 // files whose lower-case names are in `want`, in the folder of path (path = parts from dir, file last)
 async function aitmSiblings(dir, path, want) {
@@ -828,7 +873,7 @@ async function aitmLoadTxtHandles(fpH, acH, apH) {
 async function aitmLoadTxt(fpFile, acFile, apFile) {
   var fpText = await aitmReadText(fpFile), acText = acFile ? await aitmReadText(acFile) : null, apText = apFile ? await aitmReadText(apFile) : null;
   var fp = AITM_CODEC.parseFlightplansTxt(fpText);
-  if (!fp.plans.length) { aitmToast(fpFile.name + ' contains no flight plan lines (AC#…).', true); return; }
+  if (!fp.plans.length || !fp.plans.some(function (p) { return p.legs.length; })) { aitmToast(fpFile.name + ' contains no flight plan lines with legs — is it a Flightplans_ file?', true); return; }
   var acs = acText ? AITM_CODEC.parseAircraftTxt(acText) : [];
   var maxAc = 0; fp.plans.forEach(function (p) { maxAc = Math.max(maxAc, p.ac); }); acs.forEach(function (a) { maxAc = Math.max(maxAc, a.n); });
   var list = []; for (var k = 1; k <= maxAc; k++) { var a = acs.find(function (x) { return x.n === k; }); list.push(a ? { title: a.title, speed: a.speed } : { title: 'AC#' + k, speed: 0 }); }
@@ -886,20 +931,23 @@ function aitmFromGenerator() {
   var acs = AITM_CODEC.parseAircraftTxt(data.aircraftLines.join('\n'));
   var fp = AITM_CODEC.parseFlightplansTxt(data.fpLines.join('\n'));
   // AC# -> aircraft type of the planner (fpLines are written in rotAircraft order)
-  var hints = {}, withPlan = rotAircraft.filter(function (ac) { return rotAircraftCycle(ac); });
-  fp.plans.forEach(function (p, i) { var ac = withPlan[i]; if (ac && !hints[p.ac]) hints[p.ac] = ac.eqp || ''; });
+  var hints = {}, als = {}, withPlan = rotAircraft.filter(function (ac) { return rotAircraftCycle(ac); });
+  fp.plans.forEach(function (p, i) { var ac = withPlan[i]; if (ac && !hints[p.ac]) { hints[p.ac] = ac.eqp || ''; als[p.ac] = ac.airline || ''; } });
   var maxAc = 0; fp.plans.forEach(function (p) { maxAc = Math.max(maxAc, p.ac); }); acs.forEach(function (a) { maxAc = Math.max(maxAc, a.n); });
   var list = [];
   for (var k = 1; k <= maxAc; k++) {
     var a = acs.find(function (x) { return x.n === k; });
     var placeholder = a && /^AIGAIM_\S+ \S+ NCv2$/.test(a.title);
-    list.push({ title: a ? a.title : 'AC#' + k, speed: placeholder ? 0 : (a ? a.speed : 0), hint: hints[k] || '' });
+    list.push({ title: a ? a.title : 'AC#' + k, speed: placeholder ? 0 : (a ? a.speed : 0), hint: hints[k] || '', al: als[k] || '' });
   }
-  var code = (aiGenMode === 'airline' && aiGenAirline) ? aiGenAirline : '';
+  var hub = (typeof aiGenMulti !== 'undefined' && aiGenMulti && typeof aiGenAlHub !== 'undefined' && aiGenAlHub) ? aiGenAlHub[0]
+          : (aiGenMode === 'airport' && typeof aiGenTarget !== 'undefined' && aiGenTarget) ? aiGenTarget[0] : '';
+  var code = (aiGenMode === 'airline' && aiGenAirline && !hub) ? aiGenAirline : '';
   var period = '';
   try { var tz = (typeof aiGenTzDateNow === 'function') ? aiGenTzDateNow() : ''; if (tz) { var mo = parseInt(tz.slice(5, 7), 10); period = (mo >= 4 && mo <= 10 ? 'Summer ' : 'Winter ') + tz.slice(0, 4); } } catch (e) {}
   var name = (code && typeof AIRLINE_NAMES !== 'undefined' && AIRLINE_NAMES[code]) || code;
-  aitmLoad({ aircraft: list, plans: fp.plans, apx: {}, base: 'CRE_' + String(name || code || 'Airline').replace(/\s+/g, ''), name: name, period: period, code: code, source: 'AI Generator' });
+  if (hub) aitmLoad({ aircraft: list, plans: fp.plans, apx: {}, base: 'CRE_' + hub, name: hub, airport: hub, kind: 'airport', period: period, source: 'AI Generator' });
+  else aitmLoad({ aircraft: list, plans: fp.plans, apx: {}, base: 'CRE_' + String(name || code || 'Airline').replace(/\s+/g, ''), name: name, period: period, code: code, source: 'AI Generator' });
   switchView('aitm');
 }
 
@@ -930,7 +978,10 @@ function aitmUsedAirports() {
 function aitmRenderHeader() {
   var el = document.getElementById('aitm-head'); if (!el) return;
   var nLegs = 0; aitm.plans.forEach(function (p) { nLegs += p.legs.length; });
-  var logo = aitm.logoUrl ? '<img src="' + aitm.logoUrl + '" alt="" style="max-height:46px;max-width:170px;object-fit:contain;">'
+  var logo = aitm.kind === 'airport'
+    ? '<div title="Airport plan — airport location sign" style="display:inline-flex;background:#0a0a0a;border-radius:4px;padding:5px;box-shadow:0 0 0 1px #2a2a2a;">'
+      + '<span style="border:3px solid #f7c600;border-radius:2px;color:#f7c600;font:700 30px/1 \'Arial Narrow\',\'Roboto Condensed\',Arial,sans-serif;letter-spacing:.1em;padding:6px 12px 5px;">' + aitmEsc(aitm.apIcao) + '</span></div>'
+    : aitm.logoUrl ? '<img src="' + aitm.logoUrl + '" alt="" style="max-height:46px;max-width:170px;object-fit:contain;">'
     : '<div onclick="aitm.logos=null;aitmFindLogo(true);" title="No logo found — click to look again (Chrome may ask for the logo folders). Logo folders: Folders, top right of the fleet list." style="cursor:pointer;font-size:22px;font-weight:800;letter-spacing:.12em;color:#fff;">' + aitmEsc(aitm.code || '—') + '</div>';
   var stat = function (k, v, click, tip) {
     return '<div style="display:flex;flex-direction:column;gap:2px;' + (click ? 'cursor:pointer;' : '') + '"' + (click ? ' onclick="' + click + '"' : '') + (tip ? ' title="' + tip + '"' : '') + '>'
@@ -940,7 +991,9 @@ function aitmRenderHeader() {
   el.innerHTML =
     '<div style="display:flex;align-items:center;gap:30px;flex-wrap:wrap;">'
     + '<div style="min-width:120px;display:flex;align-items:center;">' + logo + '</div>'
-    + stat('Airline', aitmEsc(aitm.name || '—') + (aitm.code ? ' <span style="font-size:11px;color:var(--txt2);font-weight:600;">' + aitmEsc(aitm.code) + '</span>' : ''), 'aitmEditHead()', 'Click to change name and code')
+    + (aitm.kind === 'airport'
+      ? stat('Airport', aitmEsc(aitm.name || aitm.apIcao) + ' <span style="font-size:11px;color:var(--txt2);font-weight:600;">' + aitmEsc(aitm.apIcao) + '</span>', 'aitmEditHead()', 'Click to change')
+      : stat('Airline', aitmEsc(aitm.name || '—') + (aitm.code ? ' <span style="font-size:11px;color:var(--txt2);font-weight:600;">' + aitmEsc(aitm.code) + '</span>' : ''), 'aitmEditHead()', 'Click to change name and code'))
     + stat('Period', aitmEsc(aitm.period || '—'), 'aitmEditHead()', 'Click to change')
     + stat('Fleet', aitm.plans.length + ' aircraft')
     + stat('Legs', nLegs + ' legs')
@@ -954,15 +1007,20 @@ function aitmRenderHeader() {
 }
 function aitmSetTmode(m) { aitm.tmode = m; aitmSave(); aitmRenderHeader(); aitmRenderLegs(); aitmRenderAirports(); }
 function aitmEditHead() {
-  aitmModal('Airline',
+  var isAp = aitm.kind === 'airport';
+  aitmModal('Flight plan of',
     '<div style="display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;">'
+    + '<label style="font-size:12px;color:var(--txt2);">Kind</label><select id="aitm-h-kind" class="aitm-in" style="width:140px;"><option value="airline"' + (isAp ? '' : ' selected') + '>Airline</option><option value="airport"' + (isAp ? ' selected' : '') + '>Airport</option></select>'
     + '<label style="font-size:12px;color:var(--txt2);">Name</label><input id="aitm-h-name" class="aitm-in" value="' + aitmEsc(aitm.name) + '">'
-    + '<label style="font-size:12px;color:var(--txt2);">ICAO code</label><input id="aitm-h-code" class="aitm-in" style="width:90px;text-transform:uppercase;" value="' + aitmEsc(aitm.code) + '">'
+    + '<label style="font-size:12px;color:var(--txt2);">ICAO code</label><input id="aitm-h-code" class="aitm-in" style="width:90px;text-transform:uppercase;" value="' + aitmEsc(isAp ? aitm.apIcao : aitm.code) + '">'
     + '<label style="font-size:12px;color:var(--txt2);">Period</label><input id="aitm-h-period" class="aitm-in" value="' + aitmEsc(aitm.period) + '" placeholder="e.g. Summer 2026">'
     + '</div>',
     [['Save', function () {
+      aitm.kind = document.getElementById('aitm-h-kind').value;
       aitm.name = document.getElementById('aitm-h-name').value.trim();
-      aitm.code = document.getElementById('aitm-h-code').value.trim().toUpperCase();
+      var cd = document.getElementById('aitm-h-code').value.trim().toUpperCase();
+      if (aitm.kind === 'airport') { aitm.apIcao = cd; aitm.code = ''; if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; } }
+      else { aitm.code = cd; aitm.apIcao = ''; }
       aitm.period = document.getElementById('aitm-h-period').value.trim();
       aitmSave(); aitmCloseModal(); aitmRenderAll(); aitmFindLogo();
     }]]);
@@ -1039,7 +1097,7 @@ function aitmRenderAircraft() {
   var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
   el.innerHTML = aitm.ac.map(function (a, i) {
     var inst = aitmInstalled(a.title);
-    var dot = inst ? '#3fb950' : (aitm.fleet.length ? '#f0b400' : 'var(--txt3)');
+    var dot = inst ? '#3fb950' : (aitm.fleet.length ? '#f85149' : 'var(--txt3)');
     var tip = inst ? 'Installed (' + inst.src + ' · ' + inst.folder + ')' : (aitm.fleet.length ? 'Not found among your installed aircraft — drag one from the right' : 'Connect your aircraft folders on the right to check');
     return '<div class="aitm-ac" data-i="' + i + '" title="' + aitmEsc(tip) + ' · double-click for more">'
       + '<span style="font-family:monospace;color:var(--txt3);width:22px;flex-shrink:0;">' + (i + 1) + '</span>'
@@ -1058,7 +1116,7 @@ function aitmFleetMatches(q) {
 }
 function aitmRenderFleet() {
   var el = document.getElementById('aitm-fleet'); if (!el) return;
-  var q = aitm.fleetQ == null ? (aitm.code || '') : aitm.fleetQ;
+  var q = aitm.fleetQ == null ? aitmDefaultQuery() : aitm.fleetQ;
   var inp = document.getElementById('aitm-fleet-q'); if (inp && document.activeElement !== inp) inp.value = q;
   var st = document.getElementById('aitm-fleet-status');
   if (!aitm.fleet.length) {
@@ -1073,7 +1131,7 @@ function aitmRenderFleet() {
   var hits = aitmFleetMatches(q);
   // the best fitting livery for each AC# first, in AC# order — select them all and drag them over at once
   var best = aitmBestMatches(), top = [], seen = {};
-  best.forEach(function (e, i) { if (e && hits.indexOf(e) >= 0 && !seen[e.i]) { seen[e.i] = 1; top.push({ e: e, ac: i + 1 }); } });
+  best.forEach(function (e, i) { if (e && !seen[e.i]) { seen[e.i] = 1; top.push({ e: e, ac: i + 1 }); } });
   var rest = hits.filter(function (e) { return !seen[e.i]; }).sort(function (a, b) { return (a.sig || 'ZZZ').localeCompare(b.sig || 'ZZZ') || a.title.localeCompare(b.title); });
   var shown = top.map(function (x) { return x.e; }).concat(rest.slice(0, 1500));
   aitm.fleetShown = shown;
@@ -1184,7 +1242,7 @@ function aitmAssign(i, ks) {
     a.title = e.title; if (e.speed) a.speed = e.speed; a.wing = e.wing || 0; done.push(targets[j] + 1);
   });
   if (!done.length) return;
-  aitm.fleetSel = [];
+  aitm.fleetSel = []; aitm.fleetQ = null;
   aitmSave(); aitmRenderAircraft(); aitmRenderLegs(); aitmRenderFleet();
   aitmToast(done.length === 1 ? 'AC#' + done[0] + ' replaced.' : done.length + ' aircraft replaced: AC#' + done.sort(function (a, b) { return a - b; }).join(', #') + '.');
 }
@@ -1513,7 +1571,7 @@ async function aitmLogoIndex(ask) {
 }
 async function aitmFindLogo(ask) {
   try {
-    if (!window.showDirectoryPicker) return;
+    if (!window.showDirectoryPicker || aitm.kind === 'airport') return;
     var ix = await aitmLogoIndex(ask);
     var keys = [];
     if (aitm.outName) keys.push(aitm.outName.replace(/\.bgl$/i, ''));
