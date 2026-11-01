@@ -9555,6 +9555,7 @@ function rotBarOrder(a,b){
 function renderRotationBars() {
   const container = document.getElementById('rot-bars-container');
   if (!container) return;
+  try { rotTipHide(); } catch(e) {}
   applyRotDailyAllUI();
   applyAiGenTzUI();
   container.innerHTML = '';
@@ -9691,8 +9692,12 @@ function renderRotationBars() {
     arrAp.style.cssText='font-size:11px;font-weight:700;color:#9fc7ff;letter-spacing:.03em;line-height:1.1;margin-top:1px;';
     arrAp.textContent=bar.arrIcao; right.appendChild(arrAp);
     barEl.appendChild(left); barEl.appendChild(mid); barEl.appendChild(right);
-    barEl.addEventListener('click', e=>{ if(e.target.tagName!=='INPUT'){ e.stopPropagation(); showBarPopup(bar); } });
-    barEl.addEventListener('dragstart', e=>{ e.dataTransfer.setData('text/plain', legIdx+'|'+dragKind); barEl.style.opacity='0.5'; });
+    // hover → the same info window as on the aircraft lanes below (no click needed)
+    barEl.addEventListener('mouseenter', e=>rotTipShow(e, rotBarTipHtml(bar)));
+    barEl.addEventListener('mousemove', rotTipMove);
+    barEl.addEventListener('mouseleave', rotTipHide);
+    barEl.addEventListener('focusin', rotTipHide);          // typing a time: get out of the way
+    barEl.addEventListener('dragstart', e=>{ rotTipHide(); e.dataTransfer.setData('text/plain', legIdx+'|'+dragKind); barEl.style.opacity='0.5'; });
     barEl.addEventListener('dragend', e=>{ barEl.style.opacity='1'; });
     return barEl;
   };
@@ -10134,6 +10139,53 @@ function rotTipMove(e){
 function rotTipShow(e, html){ const t=rotTipEl(); t.innerHTML=html; t.style.display='block'; rotTipMove(e); }
 // Details of one placed flight: which flight, when (local + UTC, weekday), block/ground,
 // and the whole rotation it belongs to (the hovered flight highlighted).
+// Info window for a time bar of the upper half (not placed on an aircraft): same look as
+// rotLaneTipHtml — flight, route with cities, local and UTC times, block, ground, Daily, the
+// whole rotation with this flight highlighted, and where it is placed already.
+function rotBarTipHtml(bar){
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const hm=m=>{ m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+  const dur=m=>Math.floor(m/60)+'h '+String(m%60).padStart(2,'0');
+  const apName=code=>{ const r=lookupAirport(String(code||'')); return r ? (r[7]||r[2]||'') : ''; };
+  const al=String(bar.airline||'').toUpperCase(), fn=String(bar.fnum||'');
+  const depUTC=bar.depLocal-(bar.depOff||0)*60, arrUTC=depUTC+bar.block;
+  const dep=esc(bar.depIcao), arr=esc(bar.arrIcao), depN=esc(apName(bar.depIcao)), arrN=esc(apName(bar.arrIcao));
+  const legBars=rotBars.filter(b=>b.legIdx===bar.legIdx).sort(rotBarOrder);
+  const split=rotSplitLegs.has(bar.legIdx);
+  const which = (split && bar.dir==='ret') ? 'ret' : 'out';
+  const days=legDepartureDays(bar.legIdx, which);
+  const dayList=[...days.keys()].sort((a,b)=>a-b).map(d=>ROT_DAYS[d%7].slice(0,3)+(ROT_WEEKS>1?(d<7?'¹':'²'):'')+(days.get(d)>1?' ×'+days.get(d):''));
+  const row=(k,v)=>'<span style="color:var(--txt3);">'+k+'</span><span style="color:#fff;">'+v+'</span>';
+  let html =
+    '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">'
+    +'<span style="font-size:14px;font-weight:700;color:#fff;">'+esc((al && fn.toUpperCase().indexOf(al)!==0 ? al+' ' : '')+fn)+'</span>'
+    +'<span style="font-size:11px;color:#9fc7ff;font-family:monospace;">'+esc(bar.eqp)+' · '+(bar.dir==='ret'?'return':'outbound')+'</span>'
+    +(rotIsNewLeg(+bar.legIdx)?'<span style="font-size:9px;font-weight:800;color:#0d1117;background:#3fb950;border-radius:3px;padding:0 4px;">NEW</span>':'')
+    +'</div>'
+    +'<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">'
+    + row('Route', '<b>'+dep+' → '+arr+'</b>'+(depN||arrN?'<div style="font-size:11px;color:var(--txt2);">'+(depN||dep)+' → '+(arrN||arr)+'</div>':''))
+    + row('Departure', '<span style="font-family:monospace;">'+hm(bar.depLocal)+'</span> local<span style="color:var(--txt3);font-family:monospace;"> · '+hm(depUTC)+' UTC</span>')
+    + row('Arrival', '<span style="font-family:monospace;">'+hm(bar.arrLocal)+'</span> local'+(bar.dayCross>=1?' <span style="color:#f0b400;">+'+bar.dayCross+'d</span>':'')+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(arrUTC)+' UTC</span>')
+    + (bar.legNo!=null ? row('Leg #', '<span style="font-family:monospace;color:#e0b341;">'+bar.legNo+'</span>') : '')
+    + row('Block time', '<span style="font-family:monospace;">'+dur(bar.block)+'</span>')
+    + row('Ground after', '<span style="font-family:monospace;">'+(bar.ground||0)+' min</span>')
+    + row('Daily', rotDailyLegs.has(+bar.legIdx)?'<span style="color:var(--acc);">✓ yes</span>':'no')
+    + row('Placed', dayList.length ? '<span style="color:#3fb950;">'+dayList.join(', ')+'</span>' : '<span style="color:var(--txt3);">not yet</span>')
+    +'</div>';
+  if (legBars.length>1) {
+    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+legBars.length+' flights'+(split?' · split':'')+')</div>'
+      +'<div style="margin-top:3px;font-family:monospace;font-size:11px;line-height:1.5;">';
+    legBars.forEach(b=>{
+      const cur = b===bar;
+      html += '<div style="'+(cur?'color:#fff;font-weight:700;background:rgba(88,166,255,.18);border-radius:3px;padding:0 4px;margin:0 -4px;':'color:var(--txt2);')+'">'
+        +(cur?'▶ ':'&nbsp;&nbsp;')+hm(b.depLocal)+' '+esc(b.depIcao)+'→'+esc(b.arrIcao)+' '+hm(b.arrLocal)+(b.dayCross>=1?'+'+b.dayCross:'')+' · '+esc(b.fnum)+'</div>';
+    });
+    html += '</div>';
+  }
+  if (!bar.ok) html += '<div style="margin-top:8px;font-size:11px;color:#f85149;">⚠ '+esc(bar.reason||'Could not satisfy all time windows / day-night for this leg.')+'</div>';
+  html += '<div style="margin-top:8px;font-size:10px;color:var(--txt3);">Drag onto an aircraft below · click a time to change it</div>';
+  return html;
+}
 function rotLaneTipHtml(ac, asg, segIdx){
   const seg=asg.segs[segIdx]; if(!seg) return '';
   const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
