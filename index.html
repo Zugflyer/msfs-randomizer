@@ -7,6 +7,7 @@
 <link rel="apple-touch-icon" href="favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MSFS Flight Randomizer</title>
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.min.js"}}</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
@@ -378,6 +379,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .aitm-fl:hover{background:var(--surf2);}
 .aitm-fl.sel{background:rgba(125,94,232,.25);border-color:var(--acc);}
 .aitm-hint{font-family:monospace;font-size:10px;color:#3fb950;width:24px;flex-shrink:0;}
+.aitm-3d{font-size:10px;font-weight:700;padding:1px 5px;border:1px solid var(--bdr2);border-radius:4px;color:var(--txt2);cursor:pointer;flex-shrink:0;}
+.aitm-3d:hover{background:var(--acc);border-color:var(--acc);color:#fff;}
 .aitm-in{font-size:12px;padding:5px 8px;border-radius:5px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);}
 </style>
 </head>
@@ -1301,7 +1304,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <!-- ═══ AI TRAFFIC MANAGER ═══ -->
     <div id="view-aitm" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--bg);">
       <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;">
-        <button class="aitm-btn" onclick="aitmOpenTxt()" title="Select Flightplans_….txt and Aircraft_….txt together (Airports_….txt optional)">📄 Open txt</button>
+        <button class="aitm-btn" onclick="aitmOpenTxt()" title="Select Flightplans_….txt — Aircraft_….txt and Airports_….txt with the same name are taken from the same folder">📄 Open txt</button>
         <button class="aitm-btn" onclick="aitmOpenBgl()" title="Open a compiled traffic BGL">📦 Open BGL</button>
         <button class="aitm-btn" onclick="aitmFromGenerator()" title="Take over the rotations of the Rotation Planner (AI Generator, page 2)">⇦ From AI Generator</button>
         <div style="width:1px;height:22px;background:var(--bdr2);margin:0 4px;"></div>
