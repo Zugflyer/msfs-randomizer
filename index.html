@@ -1308,7 +1308,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="aitm-btn" onclick="aitmOpenBgl()" title="Open a compiled traffic BGL">📦 Open BGL</button>
         <button class="aitm-btn" onclick="aitmFromGenerator()" title="Take over the rotations of the Rotation Planner (AI Generator, page 2)">⇦ From AI Generator</button>
         <div style="width:1px;height:22px;background:var(--bdr2);margin:0 4px;"></div>
-        <button class="aitm-btn" onclick="aitmMoveAirports()" title="Replace an airport by another one — in all flight plans, in those of one aircraft, or in the selected ones">Move airports</button>
+        <button class="aitm-btn" onclick="aitmMoveAirports()" title="Replace an airport by another one — in all flights, in those of one aircraft, or in the flights selected in Legs (Shift / Ctrl)">Replace airport</button>
         <button class="aitm-btn" onclick="aitmShowCheck()" title="Errors and warnings before compiling">Check</button>
         <div id="aitm-status" style="font-size:12px;margin-left:8px;flex:1;min-width:200px;"></div>
       </div>
@@ -5246,6 +5246,7 @@ function openApEditor() {
 function closeApEditor() {
   var modal = document.getElementById('ap-editor-modal');
   if (modal) modal.style.display = 'none';
+  if (typeof aitmAfterApEdit === 'function') aitmAfterApEdit();
 }
 
 // Suggestions of the airport editor. The list is built from DOM elements with their own
@@ -5453,6 +5454,7 @@ async function apEdSave() {
     await saveApOverrides();
     var msg = '✓ Saved ' + changed + ' change(s) for ' + ap[0] + ' — active on all devices immediately.';
     document.getElementById('ap-ed-result-msg').textContent = msg;
+    if (typeof aitmAfterApEdit === 'function') aitmAfterApEdit();
     document.getElementById('ap-ed-result').style.display = 'block';
   } catch(e) {
     document.getElementById('ap-ed-result-msg').textContent = '⚠ Save failed: ' + e.message;
@@ -5533,6 +5535,7 @@ async function apEdSaveNew() {
   try {
     await saveApOverrides();
     document.getElementById('ap-ed-result-msg').textContent = '✓ Created new airport ' + icao + ' — available everywhere immediately.';
+    if (typeof aitmAfterApEdit === 'function') aitmAfterApEdit();
     document.getElementById('ap-ed-result-msg').style.color = '#3fb950';
     document.getElementById('ap-ed-result').style.display = 'block';
   } catch(e) {
