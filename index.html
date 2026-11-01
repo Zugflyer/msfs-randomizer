@@ -1307,6 +1307,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <button class="aitm-btn" onclick="aitmOpenTxt()" title="Select Flightplans_….txt — Aircraft_….txt and Airports_….txt with the same name are taken from the same folder">📄 Open txt</button>
         <button class="aitm-btn" onclick="aitmOpenBgl()" title="Open a compiled traffic BGL">📦 Open BGL</button>
         <button class="aitm-btn" onclick="aitmFromGenerator()" title="Take over the rotations of the Rotation Planner (AI Generator, page 2)">⇦ From AI Generator</button>
+        <button class="aitm-btn" onclick="aitmToGenerator()" title="Open this flight plan in the AI Generator: its routes on page 1, every rotation on its aircraft and day in the Rotation Planner — to add or delete legs and rotations">To AI Generator ⇨</button>
         <div style="width:1px;height:22px;background:var(--bdr2);margin:0 4px;"></div>
         <button class="aitm-btn" onclick="aitmMoveAirports()" title="Replace an airport by another one — in all flights, in those of one aircraft, or in the flights selected in Legs (Shift / Ctrl)">Replace airport</button>
         <button class="aitm-btn" onclick="aitmShowCheck()" title="Errors and warnings before compiling">Check</button>
@@ -6703,7 +6704,10 @@ function ttIsMirror(t){
   const n=t.length;
   return n>=2 && n%2===0 && t.every((x,i)=> i>=n/2 || (x.from===t[n-1-i].to && x.to===t[n-1-i].from));
 }
-async function aiGenAlImportTTools(files){
+// opts (from the AI Traffic Manager): info {acNum: {airline, eqp}} instead of reading them from the titles,
+// airline (airline mode), hub (ICAO of the hub / the airport; null = the most frequent departure), confirmText
+async function aiGenAlImportTTools(files, opts){
+  opts = opts || {};
   const st=document.getElementById('aigen-al-import-status');
   const say=(txt,col)=>{ if(st){ st.textContent=txt; st.style.color=col||'var(--txt3)'; } };
   try {
@@ -6717,18 +6721,19 @@ async function aiGenAlImportTTools(files){
     const acs=ttParseFlightplans(fpText);
     if (!acs.length) { say('No TTools flight plan found. Select the Flightplans_CRE_….txt file (and the Aircraft_CRE_….txt file).','#f85149'); return; }
     const titles=ttParseAircraftTitles(acText);
+    const info=opts.info||{};
     const notes=[];
     if (!acText) notes.push('Aircraft file missing — types shown as AC1, AC2 … (select both files)');
 
     // airline: file name (…_CRE_ITF.txt) → aircraft titles → the code already entered
     const fromName=(fpName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||acName.match(/CRE_([A-Z0-9]{3})(?![A-Z0-9])/i)||[])[1];
-    const tAir={}; Object.values(titles).forEach(t=>{ const a=ttTitleInfo(t).airline; if (a) tAir[a]=(tAir[a]||0)+1; });
+    const tAir={}; Object.keys(titles).forEach(n=>{ const a=(info[n] && info[n].airline) || ttTitleInfo(titles[n]).airline; if (a) tAir[a]=(tAir[a]||0)+1; });
     const fromTitle=(aiGenAirline && tAir[aiGenAirline]) ? aiGenAirline : Object.keys(tAir).sort((x,y)=>tAir[y]-tAir[x])[0];
-    const airline=aiGenMulti ? '' : String(fromName||fromTitle||aiGenAirline||'').toUpperCase();
+    const airline=aiGenMulti ? '' : String(opts.airline||fromName||fromTitle||aiGenAirline||'').toUpperCase();
     if (!aiGenMulti && (!airline || airline.length<3)) { say('Airline code unknown — enter it above and import again.','#f85149'); return; }
-    const eqpOf=n=> (titles[n] && ttTitleInfo(titles[n]).eqp) || ('AC'+n);
+    const eqpOf=n=> (info[n] && info[n].eqp) || (titles[n] && ttTitleInfo(titles[n]).eqp) || ('AC'+n);
     // AIRPORT mode: every aircraft flies for the airline in its title ("AIGAIM_SWR A320 …", "… A320 SWR")
-    const alOfNum=n=> aiGenMulti ? String((titles[n] && ttTitleInfo(titles[n]).airline) || fromName || '').toUpperCase() : airline;
+    const alOfNum=n=> aiGenMulti ? String((info[n] && info[n].airline) || (titles[n] && ttTitleInfo(titles[n]).airline) || fromName || '').toUpperCase() : airline;
     const alOf=a=> alOfNum(a.acNum);
 
     // continuity: each flight departs where the previous one (cyclically) arrived
@@ -6737,7 +6742,8 @@ async function aiGenAlImportTTools(files){
       ac.legs.forEach(l=>{ [l.from,l.to].forEach(c=>{ if(!schedByCode[c]) unknown.add(c); }); }); });
     // base: the hub entered above if the plan uses it, else the most frequent departure airport
     const depCount={}; acs.forEach(ac=>ac.legs.forEach(l=>{ depCount[l.from]=(depCount[l.from]||0)+1; }));
-    let hub = (aiGenAlHub && depCount[aiGenAlHub[0]]) ? aiGenAlHub[0]
+    const hubPref = ('hub' in opts) ? opts.hub : (aiGenAlHub && aiGenAlHub[0]);
+    let hub = (hubPref && depCount[hubPref]) ? hubPref
             : Object.keys(depCount).sort((x,y)=>depCount[y]-depCount[x])[0];
     // AIRPORT mode: the airport = the one set above if the plan uses it, else the one most
     // flights touch. Each airline's aircraft start from the airline's base (where its flights
@@ -6745,7 +6751,7 @@ async function aiGenAlImportTTools(files){
     const alBase={};
     if (aiGenMulti) {
       const touch={}; acs.forEach(ac=>ac.legs.forEach(l=>{ touch[l.from]=(touch[l.from]||0)+1; touch[l.to]=(touch[l.to]||0)+1; }));
-      hub = (aiGenAlHub && touch[aiGenAlHub[0]]) ? aiGenAlHub[0] : Object.keys(touch).sort((x,y)=>touch[y]-touch[x])[0];
+      hub = (hubPref && touch[hubPref]) ? hubPref : Object.keys(touch).sort((x,y)=>touch[y]-touch[x])[0];
       const byAl={};
       acs.forEach(ac=>{ const a=alOf(ac); (byAl[a]=byAl[a]||[]);
         ac.legs.slice().sort((x,y)=>x.dep-y.dep).forEach((l,k)=>byAl[a].push({ fln:String(l.fnum||''), from:[l.from], to:[l.to], row:byAl[a].length })); });
@@ -6755,7 +6761,7 @@ async function aiGenAlImportTTools(files){
       L.forEach((l,k)=>{ const pv=L[(k-1+L.length)%L.length]; const g=((l.dep-pv.arr)%span+span)%span; if (g>gap) { gap=g; best=l.from; } }); return best; };
 
     const hasContent = aiGenAlLegs.some(l=>l.arr || l.depFixed || l.flightNum) || rotHasAssignments() || aiGenAlExtraLegs.length;
-    if (hasContent && !confirm('Replace the current routes and the rotation planner with the TTools files?')) { say('Import cancelled.'); return; }
+    if (hasContent && !confirm(opts.confirmText || 'Replace the current routes and the rotation planner with the TTools files?')) { say('Import cancelled.'); return; }
 
     // ── cut every aircraft's plan into rotations (base → … → base) ──
     const groups=new Map();           // signature → {tour, eqp, occ:[{ac, start}]}
@@ -6831,6 +6837,7 @@ async function aiGenAlImportTTools(files){
     aiGenAlHub=ap(hub)||aiGenAlHub;
     aiGenAlSchedMode='known'; try { localStorage.setItem('aigen_al_schedmode','known'); } catch(e){}
     if (acs.some(a=>a.twoWeeks) && ROT_WEEKS!==2) setRotCycleWeeks(2);
+    else if (opts.info && !acs.some(a=>a.twoWeeks) && ROT_WEEKS!==1) setRotCycleWeeks(1);
     aiGenAlLegs=rows.length ? rows.slice() : [aiGenAlEmptyLeg()];
     aiGenAlExtraLegs=extras.map(x=>{ const c=Object.assign({}, x); delete c._ttg; return c; });
     renderAiGenAirline();

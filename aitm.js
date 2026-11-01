@@ -942,6 +942,53 @@ function aitmLoadBgl(buf, name) {
   aitm.outName = name; aitmSave(); aitmRenderBottom();
   aitmToast(name + ' loaded (' + d.plans.length + ' flight plans).');
 }
+// to the AI Generator: the loaded plan goes through its TTools import (routes on page 1, every rotation on its
+// aircraft and day in the Rotation Planner), so legs and rotations can be added or deleted there. The import reads
+// airline and type from the titles; real AIG titles ("AIGAIM_Aer Lingus Airbus A330-300") it would misread, so both
+// are handed over per AC#. Plans shorter than a week (24Hr …) become weekly plans - the planner plans weeks.
+function aitmToGenerator() {
+  if (!aitm.plans.length) { aitmToast('Load a flight plan first.', true); return; }
+  if (typeof aiGenAlImportTTools !== 'function') { aitmToast('The AI Generator is not available on this page.', true); return; }
+  var unknown = aitmUsedAirports().filter(function (c) { return typeof schedByCode === 'undefined' || !schedByCode[c]; });
+  if (!unknown.length) { aitmToGeneratorGo(); return; }
+  aitmModal('Airports unknown to the AI Generator',
+    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">' + unknown.length + ' airport' + (unknown.length === 1 ? ' is' : 's are') + ' not in the airport database: <b style="color:#fff;font-family:monospace;">' + unknown.map(aitmEsc).join(', ') + '</b>.<br>'
+    + 'The AI Generator leaves out the rotations that use ' + (unknown.length === 1 ? 'it' : 'them') + '. Add ' + (unknown.length === 1 ? 'it' : 'them') + ' first (right-click the airport → Airport Data), or transfer without those rotations.</div>',
+    [['Transfer anyway', function () { aitmCloseModal(); aitmToGeneratorGo(); }]]);
+}
+async function aitmToGeneratorGo() {
+  var maps = aitmAirlineMaps(), info = {}, isAp = aitm.kind === 'airport';
+  aitm.ac.forEach(function (a) {
+    var inf = aitmAcAirlineInfo(a), inst = aitmInstalled(a.title);
+    var code = inf.code || aitmCodeByName(inf.name, maps) || (isAp ? '' : aitm.code) || '';
+    info[a.n] = { airline: String(code).toUpperCase(), eqp: (inst && inst.icaoType) || aitmAcSig(a) || '' };
+  });
+  var conv = 0;
+  var plans = aitm.plans.map(function (p) {
+    var P = AITM_CODEC.periodOf(p.period)[1];
+    if (P >= 10080) return p;
+    conv++;
+    var legs = [];
+    for (var r = 0; r < Math.floor(10080 / P); r++) p.legs.forEach(function (l) {
+      var d = l.dep + r * P, blk = l.arr == null ? null : ((l.arr - l.dep) % P + P) % P;
+      legs.push(Object.assign({}, l, { dep: d, arr: blk == null ? null : d + blk }));
+    });
+    return Object.assign({}, p, { period: 'WEEK', legs: legs });
+  });
+  var base = aitm.fileBase || ('CRE_' + (isAp ? aitm.apIcao : (aitm.code || 'Airline')));
+  var fpTxt = '//FSXDAYS=False\n' + plans.map(AITM_CODEC.planToTxt).join('\n') + '\n';
+  var acTxt = AITM_CODEC.aircraftToTxt(aitm.ac) + '\n';
+  var what = isAp ? 'the flight plan of ' + aitm.apIcao : (aitm.name || aitm.code || 'this flight plan');
+  switchView('aigen');
+  setAiGenMode(isAp ? 'airport' : 'airline');
+  await aiGenAlImportTTools([new File([fpTxt], 'Flightplans_' + base + '.txt'), new File([acTxt], 'Aircraft_' + base + '.txt')], {
+    info: info, airline: isAp ? '' : aitm.code, hub: isAp ? aitm.apIcao : null,
+    confirmText: 'Replace the current routes and the rotation planner of the AI Generator with ' + what + ' from the AI Traffic Manager?'
+  });
+  var rs = document.getElementById('rot-status');
+  if (conv && rs && currentView === 'rotations') rs.textContent += ' · ' + conv + ' plan' + (conv === 1 ? '' : 's') + ' shorter than a week turned into weekly plans';
+}
+
 // from the Rotation Planner (AI Generator page 2)
 function aitmFromGenerator() {
   if (typeof buildTToolsData !== 'function' || !rotAircraft || !rotAircraft.length) { alert('No rotations yet. Create rotations and assign them to aircraft first.'); return; }
