@@ -355,6 +355,30 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
   color:#1a2233; font-family:var(--ff); font-size:30px; font-weight:800; line-height:1.2; letter-spacing:-.01em; padding:6px 8px; border-radius:6px; }
 .fleet-big::placeholder { color:#c3cbd8; font-weight:700; }
 .fleet-big:focus { background:rgba(123,97,255,.07); }
+/* ── AI Traffic Manager ── */
+.aitm-btn{font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;white-space:nowrap;}
+.aitm-btn:hover{background:var(--surf2);color:var(--txt);}
+.aitm-col{display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--bdr);min-height:0;}
+.aitm-col:last-child{border-right:none;}
+.aitm-colh{padding:8px 12px 6px;font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;gap:8px;flex-shrink:0;border-bottom:1px solid var(--bdr);min-height:28px;}
+.aitm-colh .aitm-sub{font-weight:500;text-transform:none;letter-spacing:0;color:var(--txt3);}
+.aitm-body{flex:1;overflow:auto;padding:4px 6px 12px;min-height:0;}
+.aitm-pl{white-space:nowrap;font-family:monospace;font-size:11.5px;color:var(--txt2);padding:3px 6px;border-radius:5px;cursor:default;user-select:none;}
+.aitm-pl:hover{background:var(--surf2);}
+.aitm-pl.sel{background:rgba(125,94,232,.22);}
+.aitm-tn{display:inline-block;width:150px;overflow:hidden;text-overflow:ellipsis;vertical-align:bottom;color:#c9d1d9;font-family:var(--ff);font-size:11.5px;margin-right:6px;}
+.aitm-chip{display:inline-block;padding:0 5px;border-radius:4px;border:1px solid var(--bdr2);color:#fff;cursor:pointer;}
+.aitm-chip:hover{border-color:var(--acc);background:var(--acc);}
+.aitm-ap{display:flex;align-items:center;gap:8px;font-size:12px;padding:3px 6px;border-radius:5px;}
+.aitm-ap:hover{background:var(--surf2);}
+.aitm-ac{display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 9px;margin:4px 2px;border:1px solid var(--bdr);border-radius:8px;background:var(--surf);cursor:default;user-select:none;}
+.aitm-ac:hover{border-color:var(--bdr2);}
+.aitm-ac.drop{border-color:#3fb950;background:rgba(63,185,80,.15);}
+.aitm-fl{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 7px;margin:2px 2px;border:1px solid transparent;border-radius:6px;color:var(--txt);cursor:grab;user-select:none;}
+.aitm-fl:hover{background:var(--surf2);}
+.aitm-fl.sel{background:rgba(125,94,232,.25);border-color:var(--acc);}
+.aitm-hint{font-family:monospace;font-size:10px;color:#3fb950;width:24px;flex-shrink:0;}
+.aitm-in{font-size:12px;padding:5px 8px;border-radius:5px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);}
 </style>
 </head>
 <body>
@@ -409,6 +433,10 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <button class="topnav-tab topnav-secondary" id="t-aigen" onclick="switchView('aigen')">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
       AI Generator
+    </button>
+    <button class="topnav-tab topnav-secondary" id="t-aitm" onclick="switchView('aitm')">
+      <svg viewBox="0 0 24 24" fill="none" stroke-width="2"><path d="M21 16v-2l-8-5V3.5a1.5 1.5 0 0 0-3 0V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5z"/></svg>
+      AI Traffic Manager
     </button>
   </div>
   <div class="topnav-right" style="font-size:11px;color:#484f58;display:flex;align-items:center;gap:8px;padding:0 4px;white-space:nowrap;">
@@ -1129,6 +1157,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
         <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
         <button onclick="openMergeDialog()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;white-space:nowrap;">+ Merge into Flightplan</button>
+        <button onclick="aitmFromGenerator()" title="Open these rotations in the AI Traffic Manager: assign your installed aircraft and compile the traffic BGL" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap;">→ AI Traffic Manager</button>
         <button id="rot-daily-all" onclick="toggleRotDailyAll()" title="Daily for all rotations: when on, every rotation is set to Daily — dragging it onto an aircraft fills all 7 days of week 1. Single rotations can still be switched off with their own Daily button."
           style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:#c9b8ff;cursor:pointer;white-space:nowrap;">Daily for all</button>
         <span id="rot-tz-label" style="font-size:11px;font-weight:600;white-space:nowrap;" title="Date whose time zones (summer / winter time) this planner uses — change it top right on the routes page"></span>
@@ -1269,6 +1298,49 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     </div>
 
     <!-- ═══ DEP/ARR CALCULATOR ═══ -->
+    <!-- ═══ AI TRAFFIC MANAGER ═══ -->
+    <div id="view-aitm" style="display:none;flex:1;flex-direction:column;overflow:hidden;background:var(--bg);">
+      <div style="padding:8px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;">
+        <button class="aitm-btn" onclick="aitmOpenTxt()" title="Select Flightplans_….txt and Aircraft_….txt together (Airports_….txt optional)">📄 Open txt</button>
+        <button class="aitm-btn" onclick="aitmOpenBgl()" title="Open a compiled traffic BGL">📦 Open BGL</button>
+        <button class="aitm-btn" onclick="aitmFromGenerator()" title="Take over the rotations of the Rotation Planner (AI Generator, page 2)">⇦ From AI Generator</button>
+        <div style="width:1px;height:22px;background:var(--bdr2);margin:0 4px;"></div>
+        <button class="aitm-btn" onclick="aitmMoveAirports()" title="Replace an airport by another one — in all flight plans, in those of one aircraft, or in the selected ones">Move airports</button>
+        <button class="aitm-btn" onclick="aitmShowCheck()" title="Errors and warnings before compiling">Check</button>
+        <div id="aitm-status" style="font-size:12px;margin-left:8px;flex:1;min-width:200px;"></div>
+      </div>
+      <div id="aitm-head" style="padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:16px;border-bottom:1px solid var(--bdr);flex-shrink:0;flex-wrap:wrap;"></div>
+      <div style="flex:1;display:grid;grid-template-columns:minmax(0,2.3fr) minmax(0,0.95fr) minmax(0,1.15fr) minmax(0,1.35fr);overflow:hidden;min-height:0;">
+        <div class="aitm-col">
+          <div class="aitm-colh">Legs <span id="aitm-legs-count" class="aitm-sub"></span><span class="aitm-sub" style="margin-left:auto;">click = select · double-click = edit · AC# = change aircraft</span></div>
+          <div id="aitm-legs" class="aitm-body"></div>
+        </div>
+        <div class="aitm-col">
+          <div class="aitm-colh">Airports <span id="aitm-aps-count" class="aitm-sub"></span></div>
+          <div id="aitm-aps" class="aitm-body"></div>
+        </div>
+        <div class="aitm-col">
+          <div class="aitm-colh">Aircraft <span class="aitm-sub" style="margin-left:auto;">drop here · double-click</span></div>
+          <div id="aitm-acs" class="aitm-body"></div>
+        </div>
+        <div class="aitm-col">
+          <div class="aitm-colh" style="gap:6px;">AI aircraft fleet
+            <input id="aitm-fleet-q" class="aitm-in" style="flex:1;min-width:60px;padding:3px 7px;" placeholder="🔍 search" oninput="aitm.fleetQ=this.value;aitmRenderFleet();">
+            <button class="aitm-btn" style="padding:3px 9px;font-size:11px;" onclick="aitmFoldersDialog()" title="Aircraft, logo and output folders">Folders</button>
+          </div>
+          <div id="aitm-fleet-status" style="font-size:10px;color:var(--txt3);padding:3px 12px;flex-shrink:0;"></div>
+          <div id="aitm-fleet" class="aitm-body"></div>
+        </div>
+      </div>
+      <div style="padding:8px 16px;border-top:1px solid var(--bdr);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
+        <button onclick="aitmCompile()" style="font-size:13px;font-weight:700;padding:7px 22px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;">Compile BGL</button>
+        <span style="font-size:11px;color:var(--txt3);">into</span>
+        <span id="aitm-out-folder" onclick="aitmPickOut()" title="Choose the package folder “AI Traffic BGL” (the one with layout.json) — the BGL goes to Scenery\World\Traffic and layout.json is updated" style="font-size:12px;color:var(--txt);border:1px solid var(--bdr2);border-radius:5px;padding:4px 9px;cursor:pointer;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+        <input id="aitm-out-name" class="aitm-in" style="width:320px;" onchange="aitm.outName=this.value;aitmSave();aitmFindLogo();" title="File name of the traffic BGL">
+        <button class="aitm-btn" onclick="aitmSaveTxt()" title="Save Aircraft_, Flightplans_ and Airports_….txt (TTools format)">Save txt</button>
+      </div>
+    </div>
+
     <div id="view-calc" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
       <div style="padding:10px 14px 6px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:10px;flex-shrink:0;">
         <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.08em;">DEP / ARR Time Calculator</div>
@@ -2958,7 +3030,7 @@ function prefillDepartFromLogbook() {
 function switchView(view) {
   currentView = view;
   // Show/hide all views
-  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','operations','settings','sceneries','fleet'].forEach(v => {
+  ['dashboard','categories','roster','logbook','calc','data','aigen','rotations','aitm','operations','settings','sceneries','fleet'].forEach(v => {
     const el = document.getElementById('view-'+v);
     if (el) el.style.display = (v === view) ? 'flex' : 'none';
     const tab = document.getElementById('t-'+v);
@@ -2969,7 +3041,7 @@ function switchView(view) {
 
   // Full-screen mode for roster/logbook/tovisit: hide the map column entirely
   const mapCol = document.querySelector('.map-col');
-  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'operations' || view === 'settings' || view === 'sceneries' || view === 'fleet');
+  const isFullScreen = (view === 'roster' || view === 'calc' || view === 'logbook' || view === 'aigen' || view === 'rotations' || view === 'aitm' || view === 'operations' || view === 'settings' || view === 'sceneries' || view === 'fleet');
   if (mapCol) mapCol.style.display = isFullScreen ? 'none' : '';
 
   // View-specific init
@@ -2989,6 +3061,7 @@ function switchView(view) {
   if (view === 'aigen') {
     initAiGen();
   }
+  if (view === 'aitm' && typeof aitmInit === 'function') { aitmInit(); aitmBind(); }
   if (view === 'tovisit') {
     setTimeout(() => {
       if (tovisitMap) tovisitMap.invalidateSize();
@@ -11864,5 +11937,6 @@ function fleetAddRow() {
 })();
 
 </script>
+<script src="aitm.js"></script>
 </body>
 </html>
