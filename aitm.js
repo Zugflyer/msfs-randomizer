@@ -532,11 +532,12 @@ function aitmAcList(acs, plans, extra) {
 }
 function aitmEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
 function aitmSave() {
+  if (typeof aitmUpdateCompileBtn === 'function') aitmUpdateCompileBtn();
   clearTimeout(aitm._saveT);
   aitm._saveT = setTimeout(function () {
     try {
       localStorage.setItem(AITM_KEY, JSON.stringify({ kind: aitm.kind || 'airline', apIcao: aitm.apIcao || '', name: aitm.name, code: aitm.code, period: aitm.period, fileBase: aitm.fileBase,
-        source: aitm.source, ac: aitm.ac, plans: aitm.plans, apx: aitm.apx, tmode: aitm.tmode, outName: aitm.outName || '' }));
+        source: aitm.source, ac: aitm.ac, plans: aitm.plans, apx: aitm.apx, tmode: aitm.tmode, outName: aitm.outName || '', sortSig: aitm.sortSig || '' }));
     } catch (e) {}
   }, 300);
 }
@@ -544,7 +545,7 @@ function aitmRestore() {
   try {
     var s = JSON.parse(localStorage.getItem(AITM_KEY) || 'null');
     if (!s) return;
-    ['kind', 'apIcao', 'name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
+    ['kind', 'apIcao', 'name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName', 'sortSig'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
     aitmNormAc();
   } catch (e) {}
 }
@@ -801,7 +802,7 @@ function aitmGuessCode() {
   return best;
 }
 function aitmLoad(d) {
-  aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {};
+  aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {}; aitm.sortSig = '';
   aitmNormAc();
   aitm.fileBase = d.base || ''; aitm.source = d.source || '';
   aitm.name = d.name || ''; aitm.period = d.period || ''; aitm.code = d.code || '';
@@ -1216,6 +1217,7 @@ function aitmRenderFleet() {
   if (st) st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' (first ' + shown.length + ' shown)' : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
 }
 function aitmRenderBottom() {
+  aitmUpdateCompileBtn();
   var el = document.getElementById('aitm-out-name'); if (el && document.activeElement !== el) el.value = aitm.outName || '';
   aitmKvGet('outFolder').then(function (h) {
     var f = document.getElementById('aitm-out-folder');
@@ -1518,6 +1520,118 @@ function aitmRotationMap(icao) {
   else aitmToast('The browser blocked the new tab — allow pop-ups for this page.', true);
 }
 
+// ── Sort by aircraft size, Check flightplans, Compile only after sorting ──
+// wingspan in metres by ICAO type (approximate) - only for aircraft whose aircraft.cfg was not read (not installed)
+var AITM_WINGSPAN = {
+  A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, B741: 59.6, B74S: 59.6, BLCF: 64.4,
+  B778: 71.8, B779: 71.8, B77W: 64.8, B77L: 64.8, B773: 60.9, B772: 60.9, A35K: 64.8, A359: 64.8, A346: 63.5, A345: 63.5,
+  A343: 60.3, A342: 60.3, A339: 64.0, A338: 64.0, A333: 60.3, A332: 60.3, A337: 60.3, B789: 60.1, B788: 60.1, B78X: 60.1,
+  C5M: 67.9, C5: 67.9, IL96: 60.1, IL86: 48.1, IL76: 50.5, IL62: 43.2, C17: 51.8, MD11: 51.7, DC10: 50.4, L101: 47.3,
+  B764: 51.9, B763: 47.6, B762: 47.6, A306: 44.8, A30B: 44.8, A3ST: 44.8, A310: 43.9, DC86: 45.2, DC87: 45.2, DC85: 43.4, DC8: 43.4,
+  B703: 44.4, B701: 39.9, B720: 39.9, K35R: 39.9, VC10: 44.6, A400: 42.4, C130: 40.4, C30J: 40.4, AN12: 38.0, T154: 37.6,
+  B753: 38.1, B752: 38.1, CONI: 37.6, L049: 37.6, DC7: 38.9, DC6: 35.8, DC4: 35.8, IL18: 37.4, COMT: 35.0,
+  A321: 35.8, A21N: 35.8, A320: 35.8, A20N: 35.8, A319: 35.8, A19N: 35.8, A318: 34.1, C919: 35.8, BCS3: 35.1, BCS1: 35.1, E295: 35.1,
+  B39M: 35.9, B38M: 35.9, B37M: 35.9, B3XM: 35.9, B739: 35.8, B738: 35.8, B737: 35.8, B736: 34.3, B735: 28.9, B734: 28.9, B733: 28.9,
+  B732: 28.4, B731: 28.4, CRVL: 34.3, YK42: 34.9, E290: 33.7, B722: 32.9, B721: 32.9, MD90: 32.9, MD88: 32.9, MD87: 32.9, MD83: 32.9,
+  MD82: 32.9, MD81: 32.9, MD80: 32.9, CV44: 32.1, TRID: 29.9, F50: 29.0, F27: 29.0, DC3: 29.0, T134: 29.0, AN26: 29.2, AN24: 29.2,
+  E190: 28.7, E195: 28.7, E75L: 28.6, DH8D: 28.4, BA11: 28.5, DC93: 28.5, DC9: 28.5, B712: 28.4, V814: 28.6, F100: 28.1, F70: 28.1,
+  SU95: 27.8, DH8C: 27.4, AT76: 27.1, AT75: 27.1, AT72: 27.1, CRJX: 26.2, RJ1H: 26.3, RJ85: 26.3, RJ70: 26.3, B463: 26.3, B462: 26.3,
+  B461: 26.3, FA8X: 26.3, FA7X: 26.2, E170: 26.0, E175: 26.0, DH8A: 25.9, DH8B: 25.9, CONC: 25.6, F28: 25.1, CRJ9: 24.9, SB20: 24.8,
+  AT45: 24.6, AT43: 24.6, GLF4: 23.7, CRJ7: 23.2, C680: 22.0, C68A: 22.0, SF34: 21.4, CRJ2: 21.2, CRJ1: 21.2, D328: 21.0, E145: 20.0,
+  E135: 20.0, DHC6: 19.8, CL60: 19.6, F2TH: 19.3, JS41: 18.3, B350: 17.7, B190: 17.7, PC24: 17.0, C560: 16.3, PC12: 16.3, E55P: 16.2,
+  C208: 15.9, BN2P: 14.9, LJ45: 14.6, GLF5: 28.5, GLF6: 30.4, GLEX: 28.7, GL7T: 31.7
+};
+// size of an AC# entry: the real wingspan of its ICAO type; wing_span of aircraft.cfg only when the type is unknown -
+// AI models carry unusable values there (AIG A321 78 ft, AIG B77W 164 ft, IVAO B742/DC10/MD11/B721 all 50.8 ft)
+function aitmAcSize(a) {
+  var e = aitmInstalled(a.title);
+  var t = String((e && e.icaoType) || aitmAcSig(a) || '').toUpperCase(), m = AITM_WINGSPAN[t];
+  if (m) return { ft: m * 3.2808, src: 'type', type: t };
+  var w = (e && e.wing) || a.wing;
+  return w ? { ft: w, src: 'cfg', type: t } : { ft: 0, src: '', type: t };
+}
+// "sorted" = Sort by aircraft size was pressed and the aircraft list has not changed since
+function aitmSortSig() { return aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|'); }
+function aitmSortedOk() { return !!aitm.plans.length && !!aitm.sortSig && aitm.sortSig === aitmSortSig(); }
+function aitmUpdateCompileBtn() {
+  var b = document.getElementById('aitm-compile'); if (!b) return;
+  var ok = aitmSortedOk();
+  b.disabled = !ok;
+  b.style.background = ok ? '#3fb950' : '#30363d';
+  b.style.color = ok ? '#fff' : 'var(--txt3)';
+  b.style.cursor = ok ? 'pointer' : 'not-allowed';
+  b.title = ok ? 'Compile the traffic BGL'
+    : !aitm.plans.length ? 'Load a flight plan first'
+    : aitm.sortSig ? 'The aircraft changed since sorting — press “Sort by aircraft size” again'
+    : 'Press “Sort by aircraft size” first — then Compile turns green';
+}
+function aitmSortBySize() {
+  if (!aitm.plans.length || !aitm.ac.length) { aitmToast('Load a flight plan first.', true); return; }
+  var sized = aitm.ac.map(function (a, i) { return { a: a, i: i, s: aitmAcSize(a) }; });
+  sized.sort(function (x, y) { return (y.s.ft - x.s.ft) || (x.i - y.i); });
+  var map = {};
+  sized.forEach(function (x, k) { map[x.a.n] = k + 1; });
+  aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+  aitm.ac = sized.map(function (x, k) { x.a.n = k + 1; return x.a; });
+  // flight plans in the order of their aircraft (stable)
+  aitm.plans = aitm.plans.map(function (p, i) { return { p: p, i: i }; })
+    .sort(function (x, y) { return (x.p.ac - y.p.ac) || (x.i - y.i); }).map(function (x) { return x.p; });
+  aitm.sel = []; aitm.selAnchor = null;
+  aitm.sortSig = aitmSortSig();
+  aitmSave(); aitmRenderAll();
+  var m = function (x) { return x.s.ft ? Math.round(x.s.ft / 3.2808 * 10) / 10 + ' m' : 'size unknown'; };
+  var nCfg = sized.filter(function (x) { return x.s.src === 'cfg'; }).length, nUnk = sized.filter(function (x) { return !x.s.ft; }).length;
+  var lbl = function (x) { return x.a.title + ' (' + (x.s.type ? x.s.type + ', ' : '') + m(x) + ')'; };
+  aitmToast('Sorted by wingspan: AC#1 ' + lbl(sized[0]) + ' … AC#' + sized.length + ' ' + lbl(sized[sized.length - 1])
+    + (nCfg ? ' · ' + nCfg + ' of unknown type: wingspan from aircraft.cfg' : '') + (nUnk ? ' · ' + nUnk + ' of unknown size placed last' : '') + ' — Compile is ready.', nUnk > 0);
+}
+// Check flightplans: errors, warnings (click one to select its flight plan in Legs), aircraft without flights
+function aitmCheckPlans() {
+  var c = aitmCheck(), nLegs = 0;
+  aitm.plans.forEach(function (p) { nLegs += p.legs.length; });
+  var row = function (it, col) {
+    return '<div class="aitm-ck" data-pi="' + (it.pi == null ? '' : it.pi) + '" style="padding:4px 6px;border-bottom:1px solid var(--bdr);color:' + col + ';' + (it.pi == null ? '' : 'cursor:pointer;') + '"'
+      + (it.pi == null ? '' : ' title="Click: select this flight plan in Legs"') + '>' + aitmEsc(it.t) + '</div>';
+  };
+  var errs = c.items.filter(function (x) { return x.lv === 'err'; }), warns = c.items.filter(function (x) { return x.lv === 'warn'; });
+  var list = function (arr, col) { return arr.slice(0, 150).map(function (x) { return row(x, col); }).join('') + (arr.length > 150 ? '<div style="color:var(--txt3);padding:4px 6px;">… ' + (arr.length - 150) + ' more</div>' : ''); };
+  var head = function (txt, col) { return '<div style="font-weight:700;color:' + col + ';margin:10px 0 4px;">' + txt + '</div>'; };
+  var body = '<div style="font-size:12px;color:var(--txt2);">' + aitm.plans.length + ' flight plan' + (aitm.plans.length === 1 ? '' : 's') + ', ' + nLegs + ' legs, ' + aitm.ac.length + ' aircraft checked.</div>'
+    + '<div id="aitm-ck-list" style="max-height:58vh;overflow:auto;font-size:12px;margin-top:4px;">'
+    + (errs.length ? head(errs.length + ' error' + (errs.length === 1 ? '' : 's') + ' — cannot be flown / compiled', '#f85149') + list(errs, '#ffb4ab')
+                   : '<div style="color:#3fb950;font-weight:700;margin:10px 0 4px;">✓ No errors — every flight plan can be flown.</div>')
+    + (warns.length ? head(warns.length + ' warning' + (warns.length === 1 ? '' : 's'), '#f0b400') + list(warns, 'var(--txt2)') : '')
+    + (c.unused.length ? head(c.unused.length + ' aircraft without flights', '#58a6ff')
+        + '<div style="color:var(--txt2);padding:2px 6px 6px;line-height:1.6;">' + c.unused.map(function (a) { return 'AC#' + a.n + ' ' + aitmEsc(a.title); }).join('<br>')
+        + '<div style="margin-top:6px;color:var(--txt3);">Remove them from this plan’s aircraft list? Your installed aircraft are not touched.</div></div>' : '')
+    + '</div>';
+  var card = aitmModal('Check flightplans', body,
+    c.unused.length ? [['Remove ' + c.unused.length + ' aircraft without flights', function () { aitmRemoveUnused(); aitmCheckPlans(); }, false, '#da3633']] : [], true);
+  card.querySelectorAll('.aitm-ck[data-pi]').forEach(function (el) {
+    if (el.dataset.pi === '') return;
+    el.addEventListener('click', function () { aitmGoPlan(parseInt(el.dataset.pi, 10)); });
+  });
+}
+function aitmGoPlan(pi) {
+  aitmCloseModal();
+  aitm.sel = [pi]; aitm.selAnchor = pi; aitmRenderLegs();
+  var r = document.querySelector('#aitm-legs .aitm-pl[data-i="' + pi + '"]'); if (r) r.scrollIntoView({ block: 'center' });
+}
+function aitmRemoveUnused() {
+  var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = 1; });
+  var gone = aitm.ac.filter(function (a) { return !use[a.n]; });
+  if (!gone.length) return;
+  var wasSorted = aitmSortedOk();
+  aitm.ac = aitm.ac.filter(function (a) { return use[a.n]; });
+  if (wasSorted) {                                   // keep it sorted: close the gaps in the numbers
+    var map = {}; aitm.ac.forEach(function (a, k) { map[a.n] = k + 1; a.n = k + 1; });
+    aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+    aitm.sortSig = aitmSortSig();
+  }
+  aitmSave(); aitmRenderAll();
+  aitmToast(gone.length + ' aircraft without flights removed: ' + gone.map(function (a) { return a.title; }).join(', ') + '.');
+}
+
 // ── modal ──
 function aitmModal(title, body, buttons, wide) {
   aitmCloseModal();
@@ -1640,37 +1754,73 @@ function aitmMoveAirports(fromIcao) {
 // ── checks + compile ──
 function aitmCheck() { return aitmCheckData({ ac: aitm.ac, plans: aitm.plans, ap: aitmAp }); }
 function aitmCheckData(d) {
-  var errs = [], warns = [], byN = {}, seen = {}, used = [];
+  var errs = [], warns = [], items = [], byN = {}, seen = {}, used = [], regs = {};
+  var E = function (t, pi) { errs.push(t); items.push({ lv: 'err', t: t, pi: pi }); };
+  var W = function (t, pi) { warns.push(t); items.push({ lv: 'warn', t: t, pi: pi }); };
+  var DN = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+  var hm = function (m) { m = ((m % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+  var dur = function (m) { return Math.floor(m / 60) + ':' + String(Math.round(m) % 60).padStart(2, '0'); };
+  var nm = function (A, B) {
+    var r = Math.PI / 180, dLa = (B.lat - A.lat) * r, dLo = (B.lon - A.lon) * r;
+    var h = Math.sin(dLa / 2) * Math.sin(dLa / 2) + Math.cos(A.lat * r) * Math.cos(B.lat * r) * Math.sin(dLo / 2) * Math.sin(dLo / 2);
+    return 3440.065 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+  };
   d.ac.forEach(function (a) { byN[a.n] = a; });
   d.plans.forEach(function (p) { p.legs.forEach(function (l) { if (!seen[l.to]) { seen[l.to] = 1; used.push(l.to); } }); });
-  if (!d.plans.length) errs.push('No flight plan loaded.');
+  if (!d.plans.length) E('No flight plan loaded.');
   var missingAp = used.sort().filter(function (c) { return !d.ap(c); });
-  if (missingAp.length) errs.push('Unknown airport' + (missingAp.length > 1 ? 's' : '') + ' (no coordinates): ' + missingAp.join(', ') + ' — use Replace airport, or load the Airports_….txt with the flight plans.');
-  d.plans.forEach(function (p) {
-    if (!byN[p.ac]) errs.push(p.reg + ': AC#' + p.ac + ' does not exist.');
-    if (String(p.reg).length > 7) warns.push(p.reg + ': registration longer than 7 characters is cut to ' + String(p.reg).slice(0, 7) + '.');
-    var P = AITM_CODEC.periodOf(p.period)[1];
+  if (missingAp.length) E('Unknown airport' + (missingAp.length > 1 ? 's' : '') + ' (no coordinates): ' + missingAp.join(', ') + ' — use Replace airport, or add it with right-click → Airport Data.');
+  d.plans.forEach(function (p, pi) {
+    var a = byN[p.ac], who = p.reg + ' (AC#' + p.ac + ')';
+    if (!a) E(who + ': AC#' + p.ac + ' does not exist in the aircraft list.', pi);
+    if (String(p.reg).length > 7) W(who + ': registration longer than 7 characters is cut to ' + String(p.reg).slice(0, 7) + '.', pi);
+    if (regs[p.reg] != null) W(who + ': the registration ' + p.reg + ' is used by two flight plans.', pi); else regs[p.reg] = pi;
+    if (parseInt(p.pct, 10) === 0) W(who + ': 0 % — this flight plan never flies.', pi);
+    var n = p.legs.length;
+    if (!n) { E(who + ': no legs.', pi); return; }
+    var inst = a ? aitmInstalled(a.title) : null, spd = (inst && inst.speed) || (a && a.speed) || 0;
+    var P = AITM_CODEC.periodOf(p.period)[1], T = 0, gaps = [];
+    var at = function (m) { m = ((m % P) + P) % P; return (P >= 10080 ? DN[Math.floor(m / 1440) % 7] + ' ' : '') + hm(m); };
     p.legs.forEach(function (l, j) {
-      if (l.dep == null) errs.push(p.reg + ' leg ' + (j + 1) + ': no departure time.');
-      if (l.arr == null) errs.push(p.reg + ' leg ' + (j + 1) + ': no arrival time.');
-      if (parseInt(l.fnum, 10) > 16383) errs.push(p.reg + ' leg ' + (j + 1) + ': flight number ' + l.fnum + ' is too high (max. 16383).');
-      if (l.alt > 1023) errs.push(p.reg + ' leg ' + (j + 1) + ': altitude ' + l.alt + ' is too high.');
-      var nx = p.legs[(j + 1) % p.legs.length];
-      if (p.legs.length > 1 && l.arr != null && nx.dep != null) {
-        var gap = ((nx.dep - l.arr) % P + P) % P;
-        if (gap < 10) warns.push(p.reg + ': only ' + gap + ' min on the ground at ' + l.to + ' (leg ' + (j + 1) + ' → ' + ((j + 1) % p.legs.length + 1) + ').');
+      var from = p.legs[(j - 1 + n) % n].to, nx = p.legs[(j + 1) % n], L = ' leg ' + (j + 1) + ' ' + from + '→' + l.to;
+      if (l.dep == null) E(who + L + ': no departure time.', pi);
+      if (l.arr == null) E(who + L + ': no arrival time.', pi);
+      if (parseInt(l.fnum, 10) > 16383) E(who + L + ': flight number ' + l.fnum + ' is too high (max. 16383).', pi);
+      if (l.alt > 1023) E(who + L + ': altitude ' + l.alt + ' is too high.', pi);
+      if (n > 1 && from === l.to) E(who + L + ': departs from the airport it flies to — the flight before did not land somewhere else.', pi);
+      if (l.dep == null || l.arr == null) return;
+      var blk = ((l.arr - l.dep) % P + P) % P;
+      if (blk === 0) E(who + L + ': no flight time (departs and lands at ' + at(l.dep) + ').', pi);
+      else if (blk > 1440) E(who + L + ': flight time ' + dur(blk) + ' — more than 24 hours.', pi);
+      else if (from !== l.to) {
+        var A = d.ap(from), B = d.ap(l.to);
+        if (A && B && spd >= 200) { var dist = nm(A, B), need = dist / spd * 60; if (need > blk * 1.1 && need - blk > 15) W(who + L + ': ' + Math.round(dist) + ' nm in ' + dur(blk) + ' — at ' + spd + ' kts it needs at least ' + dur(need) + '.', pi); }
+      }
+      T += blk;
+      if (nx.dep != null) {
+        var gap = ((nx.dep - l.arr) % P + P) % P; T += gap; gaps.push({ j: j, gap: gap });
+        if (n > 1 && gap < 10) W(who + ': only ' + gap + ' min on the ground at ' + l.to + ' (leg ' + (j + 1) + ' → ' + ((j + 1) % n + 1) + ').', pi);
       }
     });
+    // one cycle of the legs must take exactly one period; more means a departure before the previous landing
+    if (gaps.length === n && T > P) {
+      var g = gaps.slice().sort(function (x, y) { return y.gap - x.gap; })[0], k = (g.j + 1) % n;
+      E(who + ': leg ' + (k + 1) + ' departs ' + at(p.legs[k].dep) + ' (' + p.legs[g.j].to + '), before leg ' + (g.j + 1) + ' has landed there (' + at(p.legs[g.j].arr) + ')'
+        + ' — the legs need ' + Math.round(T / P) + ' × ' + AITM_CODEC.periodName(p.period).toLowerCase() + ' instead of one.', pi);
+    }
   });
-  var use = {}; d.plans.forEach(function (p) { use[p.ac] = 1; });
-  d.ac.forEach(function (a, i) {
+  var use = {}; d.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
+  d.ac.forEach(function (a) {
     if (!use[a.n]) return;
-    if (aitm.fleet.length && !aitmInstalled(a.title)) warns.push('AC#' + a.n + ' “' + a.title + '” is not among your installed aircraft — the simulator will not show it.');
-    if (!a.speed) warns.push('AC#' + a.n + ': no cruise speed — 450 kts is used.');
+    var none = !a.title || /^AC#\d+$/i.test(a.title) || /^AIGAIM_[A-Z0-9]{2,3}\s+\S+\s+NCv2$/.test(a.title);
+    if (none) W('AC#' + a.n + ' flies ' + use[a.n] + ' flight plan' + (use[a.n] === 1 ? '' : 's') + ' but has no aircraft assigned (' + (a.title || '—') + ') — drag one from the fleet on the right.');
+    else if (aitm.fleet.length && !aitmInstalled(a.title)) W('AC#' + a.n + ' “' + a.title + '” is not among your installed aircraft — the simulator will not show it.');
+    if (!a.speed) W('AC#' + a.n + ': no cruise speed — 450 kts is used.');
   });
-  return { errs: errs, warns: warns };
+  return { errs: errs, warns: warns, items: items, unused: d.ac.filter(function (a) { return !use[a.n]; }) };
 }
-function aitmShowCheck() {
+function aitmShowCheck() { aitmCheckPlans(); }
+function aitmShowCheckOld() {
   var c = aitmCheck();
   var li = function (arr, col) { return arr.slice(0, 60).map(function (x) { return '<div style="padding:3px 0;border-bottom:1px solid var(--bdr);color:' + col + ';">' + aitmEsc(x) + '</div>'; }).join('') + (arr.length > 60 ? '<div style="color:var(--txt3);">… ' + (arr.length - 60) + ' more</div>' : ''); };
   aitmModal('Check',
@@ -1688,7 +1838,7 @@ function aitmModelOf(ac, plans) {
 function aitmOrder(plans) { return aitmOrderFor(aitm.ac)(plans); }
 function aitmOrderFor(ac) {
   var byN = {}; ac.forEach(function (a) { byN[a.n] = a; });
-  var wing = function (p) { var a = byN[p.ac]; if (!a) return 0; var e = aitmInstalled(a.title); return (e && e.wing) || a.wing || 0; };
+  var wing = function (p) { var a = byN[p.ac]; return a ? aitmAcSize(a).ft : 0; };
   return function (plans) {
     return plans.map(function (p, i) { return { p: p, i: i, w: wing(p) }; }).sort(function (x, y) { return (y.w - x.w) || (x.i - y.i); }).map(function (x) { return x.p; });
   };
@@ -1704,8 +1854,9 @@ async function aitmCompile() {
   var name = (document.getElementById('aitm-out-name') || {}).value || aitm.outName || 'Traffic_CRE_Airline.bgl';
   name = name.trim(); if (!/\.bgl$/i.test(name)) name += '.bgl';
   aitm.outName = name; aitmSave();
+  if (!aitmSortedOk()) { aitmUpdateCompileBtn(); aitmToast('Press “Sort by aircraft size” first.', true); return; }
   var c = aitmCheck();
-  if (c.errs.length) { aitmShowCheck(); return; }
+  if (c.errs.length) { aitmCheckPlans(); return; }
   aitmToast('Compiling …');
   await new Promise(function (r) { setTimeout(r, 30); });
   var t0 = Date.now();

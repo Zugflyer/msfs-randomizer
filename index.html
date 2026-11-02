@@ -1337,7 +1337,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
         </div>
       </div>
       <div style="padding:8px 16px;border-top:1px solid var(--bdr);display:flex;align-items:center;gap:10px;flex-shrink:0;flex-wrap:wrap;">
-        <button onclick="aitmCompile()" style="font-size:13px;font-weight:700;padding:7px 22px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;">Compile BGL</button>
+        <button class="aitm-btn" onclick="aitmCheckPlans()" style="padding:6px 14px;font-size:12px;" title="Can every flight plan be flown? Departures before landings, wrong airports, flight times over 24 h, aircraft without flights …">Check flightplans</button>
+        <button class="aitm-btn" onclick="aitmSortBySize()" style="padding:6px 14px;font-size:12px;" title="Largest aircraft (wingspan) becomes AC#1, then smaller and smaller; the flight plans follow their aircraft">Sort by aircraft size</button>
+        <button id="aitm-compile" onclick="aitmCompile()" disabled style="font-size:13px;font-weight:700;padding:7px 22px;border-radius:var(--r);border:none;background:#30363d;color:var(--txt3);cursor:not-allowed;" title="Press “Sort by aircraft size” first — then Compile turns green">Compile BGL</button>
         <span style="font-size:11px;color:var(--txt3);">into</span>
         <span id="aitm-out-folder" onclick="aitmPickOut()" title="Choose the package folder “AI Traffic BGL” (the one with layout.json) — the BGL goes to Scenery\World\Traffic and layout.json is updated" style="font-size:12px;color:var(--txt);border:1px solid var(--bdr2);border-radius:5px;padding:4px 9px;cursor:pointer;max-width:420px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
         <input id="aitm-out-name" class="aitm-in" style="width:320px;" onchange="aitm.outName=this.value;aitmSave();aitmFindLogo();" title="File name of the traffic BGL">
