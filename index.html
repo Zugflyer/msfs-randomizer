@@ -3411,6 +3411,7 @@ function renderLegs() {
   const container = document.getElementById('legs-container');
   if (!container) return;
   container.innerHTML = '';
+  legs.forEach(l => { if (l.blockTime && !l.blockTimeReal) l.blockTime = rnd5Hm(l.blockTime); });   // older estimates: nearest 5 minutes
 
   // Shared styles
   const BLUE = '#4a9eda';
@@ -3755,8 +3756,8 @@ async function fetchBlockTime(idx) {
         .trim();
       const m = txt.match(/\b(\d{1,2}):(\d{2})\b/);
       if (m && !txt.toUpperCase().includes('NONE')) {
-        leg.blockTime = m[0]; leg.blockTimeReal = true;
-        btEl.value = m[0];
+        leg.blockTime = rnd5Hm(m[0]); leg.blockTimeReal = true;      // nearest 5 minutes, like the AI Generator
+        btEl.value = leg.blockTime;
         btEl.style.fontStyle = 'normal';
         btEl.style.color = '#3fb950';
         btEl.style.fontWeight = '700';
@@ -3778,7 +3779,7 @@ async function fetchBlockTime(idx) {
   const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   const spd = dist<200?400:dist<500?580:dist<2000?780:870;
   const buf = dist<500?15:25;
-  const mins = Math.round(dist/spd*60)+buf;
+  const mins = Math.max(5, round5(Math.round(dist/spd*60)+buf));     // estimates: nearest 5 minutes
   leg.blockTime = Math.floor(mins/60)+':'+String(mins%60).padStart(2,'0');
   leg.blockTimeReal = false;
   leg._fetchingBT = false;
