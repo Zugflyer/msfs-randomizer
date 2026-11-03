@@ -3341,8 +3341,24 @@ function legSchedUpdateRow(idx) {
   } else if (!depEl.value) {
     leg.schedDepTime = '';
   }
-  const dayVal = parseInt(dayEl ? dayEl.value : '') || 1;
+  // leg._userDay: the day entered (or chained via the turnaround); the shown day may be later, see below
+  if (leg._userDay == null || (dayEl && document.activeElement === dayEl)) leg._userDay = parseInt(dayEl ? dayEl.value : '') || 1;
+  const dayVal = leg._userDay;
   leg.schedDepDay = (dayVal >= 1 && dayVal <= 7) ? dayVal : 1;
+  if (dayEl && document.activeElement !== dayEl) dayEl.value = leg.schedDepDay;
+  // A flight cannot leave before the flight before it has landed there: the departure day is at least the
+  // arrival day of the previous leg (the day after, when it departs earlier in the day than that arrival).
+  // A later day stays as entered.
+  const prevLeg = legs[idx - 1];
+  if (prevLeg && prevLeg.schedArrTime && prevLeg.schedArrDay && leg.schedDepTime) {
+    const [pah, pam] = prevLeg.schedArrTime.split(':').map(Number), [ldh, ldm] = leg.schedDepTime.split(':').map(Number);
+    const arrAbs = (prevLeg.schedArrDay - 1) * 1440 + pah * 60 + pam, depAbs = (leg.schedDepDay - 1) * 1440 + ldh * 60 + ldm;
+    if (depAbs < arrAbs) {
+      const d = prevLeg.schedArrDay + ((ldh * 60 + ldm) < (pah * 60 + pam) ? 1 : 0);
+      leg.schedDepDay = ((d - 1) % 7 + 7) % 7 + 1;
+      if (dayEl && document.activeElement !== dayEl) dayEl.value = leg.schedDepDay;
+    }
+  }
   if (leg.schedDepTime && leg.blockTime && leg.dep && leg.arr) {
     const [dh, dm] = leg.schedDepTime.split(':').map(Number);
     const depUtcMins = dh*60 + dm - Math.round(getUtcOffset(leg.dep)*60);
@@ -3379,12 +3395,15 @@ function legSchedUpdateRow(idx) {
     if (res) {
       nextLeg.schedDepTime = fmtTime(res.h, res.m);
       nextLeg.schedDepDay  = ((leg.schedArrDay - 1 + res.dayOffset) % 7 + 7) % 7 + 1;
+      nextLeg._userDay = nextLeg.schedDepDay;
       const nDepEl = document.getElementById('ls-dep-' + (idx+1));
       const nDayEl = document.getElementById('ls-day-' + (idx+1));
       if (nDepEl) nDepEl.value = nextLeg.schedDepTime;
       if (nDayEl) nDayEl.value = nextLeg.schedDepDay;
       legSchedUpdateRow(idx + 1);
     }
+  } else if (nextLeg) {
+    legSchedUpdateRow(idx + 1);              // the next legs follow this arrival (their day may have to move)
   }
 }
 
@@ -3624,7 +3643,10 @@ function renderLegs() {
       depTimeInput.addEventListener('blur', () => { const p = parseTime(depTimeInput.value); if (p) depTimeInput.value = fmtTime(p.h, p.m); });
     }
     const dayInput = document.getElementById('ls-day-'+i);
-    if (dayInput) dayInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legSchedUpdateRow(i); });
+    if (dayInput) {
+      dayInput.addEventListener('input', () => { legs[i]._schedDepOverride = true; legs[i]._userDay = parseInt(dayInput.value) || 1; legSchedUpdateRow(i); });
+      dayInput.addEventListener('blur', () => { legSchedUpdateRow(i); dayInput.value = legs[i].schedDepDay || 1; });   // shows a corrected day
+    }
     const taInput = document.getElementById('ls-ta-'+i);
     if (taInput) taInput.addEventListener('input', () => legSchedUpdateRow(i));
     const gateInput = document.getElementById('ls-gate-'+i);
