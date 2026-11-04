@@ -1196,13 +1196,26 @@ function aitmRenderAircraft() {
       + aitmEsc(aitmAcTypeName(a) || a.hint || '') + (a.speed ? ' · ' + a.speed + ' kts' : '') + ' · ' + (use[a.n] || 0) + ' FP</span></span></div>';
   }).join('') || '<div style="padding:12px;color:var(--txt3);font-size:12px;">—</div>';
 }
+// hits of the fleet search; aitm._fleetRank[i]: 0 = title starts with the first word, 1 = all words in the title,
+// 2 = found only in type, airline, codes, folder … (AIG's model folders are called "FAIB_…", so "FAIB" matched
+// thousands of AIG liveries before your own "FAIB B742 VRG"). aitm.fleetSrc: 'all' | 'own' | 'aig'
 function aitmFleetMatches(q) {
-  var toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
-  return aitm.fleet.filter(function (e) {
-    if (!toks.length) return true;
-    var hay = (e.title + ' ' + e.uiType + ' ' + e.uiVar + ' ' + e.airline + ' ' + e.sig + ' ' + e.icaoType + ' ' + e.codes + ' ' + e.folder + ' ' + e.atcAirline + ' ' + aitmTypeName(e.sig)).toLowerCase();
-    return toks.every(function (t) { return hay.indexOf(t) >= 0; });
+  var toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean), src = aitm.fleetSrc || 'all', rank = {};
+  var hits = aitm.fleet.filter(function (e) {
+    if (src !== 'all' && (src === 'aig') !== (e.src === 'AIG')) return false;
+    if (!toks.length) { rank[e.i] = 1; return true; }
+    var t = String(e.title || '').toLowerCase();
+    var hay = (t + ' ' + e.uiType + ' ' + e.uiVar + ' ' + e.airline + ' ' + e.sig + ' ' + e.icaoType + ' ' + e.codes + ' ' + e.folder + ' ' + e.atcAirline + ' ' + aitmTypeName(e.sig)).toLowerCase();
+    if (!toks.every(function (k) { return hay.indexOf(k) >= 0; })) return false;
+    rank[e.i] = toks.every(function (k) { return t.indexOf(k) >= 0; }) ? (t.indexOf(toks[0]) === 0 ? 0 : 1) : 2;
+    return true;
   });
+  aitm._fleetRank = rank;
+  return hits;
+}
+function aitmSetFleetSrc(v) {
+  aitm.fleetSrc = v; try { localStorage.setItem('aitm_fleet_src', v); } catch (e) {}
+  aitmRenderFleet();
 }
 function aitmRenderFleet() {
   var el = document.getElementById('aitm-fleet'); if (!el) return;
@@ -1218,11 +1231,23 @@ function aitmRenderFleet() {
     if (st) st.textContent = '';
     aitm.fleetShown = []; return;
   }
-  var hits = aitmFleetMatches(q);
+  if (aitm.fleetSrc == null) { try { aitm.fleetSrc = localStorage.getItem('aitm_fleet_src') || 'all'; } catch (e) { aitm.fleetSrc = 'all'; } }
+  var sw = document.getElementById('aitm-fleet-src');
+  if (sw) {
+    var nOwn = aitm.fleet.filter(function (e) { return e.src !== 'AIG'; }).length;
+    sw.innerHTML = [['all', 'All', aitm.fleet.length], ['own', 'Own', nOwn], ['aig', 'AIG', aitm.fleet.length - nOwn]].map(function (o) {
+      var on = aitm.fleetSrc === o[0];
+      return '<button onclick="aitmSetFleetSrc(\'' + o[0] + '\')" title="' + (o[0] === 'all' ? 'All installed liveries' : o[0] === 'own' ? 'Liveries outside AIG’s package (your own, IVAO, FSLTL …)' : 'AIG liveries') + ' — ' + o[2] + '" style="padding:2px 8px;font-size:10px;border:1px solid ' + (on ? '#58a6ff' : 'var(--bdr2)') + ';background:' + (on ? 'rgba(88,166,255,.15)' : 'transparent') + ';color:' + (on ? '#58a6ff' : 'var(--txt3)') + ';cursor:pointer;margin-left:-1px;' + (o[0] === 'all' ? 'border-radius:4px 0 0 4px;' : o[0] === 'aig' ? 'border-radius:0 4px 4px 0;' : '') + '">' + o[1] + '</button>';
+    }).join('');
+  }
+  var hits = aitmFleetMatches(q), rank = aitm._fleetRank || {};
   // the best fitting livery for each AC# first, in AC# order — select them all and drag them over at once
   var best = aitmBestMatches(), top = [], seen = {};
   best.forEach(function (e, i) { if (e && !seen[e.i]) { seen[e.i] = 1; top.push({ e: e, ac: aitm.ac[i].n }); } });
-  var rest = hits.filter(function (e) { return !seen[e.i]; }).sort(function (a, b) { return (a.sig || 'ZZZ').localeCompare(b.sig || 'ZZZ') || a.title.localeCompare(b.title); });
+  // titles that contain the search first, then your own liveries before AIG's, then by type
+  var rest = hits.filter(function (e) { return !seen[e.i]; }).sort(function (a, b) {
+    return (rank[a.i] - rank[b.i]) || ((a.src === 'AIG') - (b.src === 'AIG')) || (a.sig || 'ZZZ').localeCompare(b.sig || 'ZZZ') || a.title.localeCompare(b.title);
+  });
   var shown = top.map(function (x) { return x.e; }).concat(rest.slice(0, 1500));
   aitm.fleetShown = shown;
   aitm.fleetSel = aitm.fleetSel.filter(function (ix) { return shown.some(function (e) { return e.i === ix; }); });
@@ -1237,7 +1262,8 @@ function aitmRenderFleet() {
       + '<span style="font-size:10px;color:var(--txt3);white-space:nowrap;">' + aitmEsc(e.sig || '') + (e.speed ? ' ' + e.speed : '') + '</span>'
       + '<span class="aitm-3d" title="3D view of this livery">3D</span></div>';
   }).join('') || '<div style="padding:12px;color:var(--txt3);font-size:12px;">Nothing matches “' + aitmEsc(q) + '”.</div>';
-  if (st) st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' (first ' + shown.length + ' shown)' : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
+  if (st) st.title = hits.length > shown.length ? 'Only the first ' + shown.length + ' are listed — type more to narrow the search' : '';
+  if (st) st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' · first ' + shown.length : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
 }
 function aitmRenderBottom() {
   aitmUpdateCompileBtn();
