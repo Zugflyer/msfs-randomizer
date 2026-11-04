@@ -1041,8 +1041,9 @@ function aitmInit() {
     aitmKvGet('fleetCache').then(function (c) {
       if (c && c.list && !aitm.fleet.length) { aitm.fleet = c.list.filter(function (e) { return e.root; }); aitm.sources = c.sources || []; aitm.fleetMeta = c.meta || {}; aitmFleetIndex(); aitmRenderAll(); }
       // once Rotation Map has answered: read the installed aircraft again whenever the tab is opened
+      // (background request only - no window pops up when the tab opens; Chrome must allow it, see aitmLnaState)
       var rmOk = false; try { rmOk = localStorage.getItem('aitm_rm_ok') === '1'; } catch (e) {}
-      if (rmOk) aitmUpdateInstalled({ silent: true });
+      aitmLnaState().then(function (st) { aitm._lna = st; if (rmOk || st === 'granted') aitmUpdateInstalled({ silent: true }); });
     });
     aitmKvSet('acFolders', []);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') aitmCloseModal(); });
@@ -1668,21 +1669,68 @@ function aitmEntryFromRM(m) {
            speed: Math.round(m.speed || 0), wing: m.wing || 0, folder: m.folder || '', src: /aig/i.test(m.pkg || '') ? 'AIG' : 'Own',
            root: m.pkg || '', rel: 'SimObjects/Airplanes/' + (m.folder || ''), viaRM: true };
 }
+// Chrome (from version 142) blocks background requests of a web site to programs on this PC unless the user allowed
+// it ("Local Network Access"). A window the page opens is not blocked: Rotation Map 4.12.1 shows /msfs-bridge in a
+// small window, reads the list there (same origin), hands it to this page with postMessage and closes the window.
+// Must be called directly from the click (pop-up).
+var AITM_RM_ORIGIN = AITM_RM_URL.replace(/\/$/, '');
+function aitmBridgeInstalled(onWait) {
+  var w = null;
+  try { w = window.open(AITM_RM_URL + 'msfs-bridge?fresh=1&to=' + encodeURIComponent(location.origin), 'aitm-rm-bridge', 'popup,width=480,height=150,left=120,top=120'); } catch (e) {}
+  if (!w) return Promise.resolve({ err: 'popup' });
+  return new Promise(function (res) {
+    var done = false, t0 = Date.now(), hinted = false;
+    var fin = function (v) { if (done) return; done = true; window.removeEventListener('message', on); clearInterval(iv); res(v); };
+    var on = function (e) {
+      if (e.origin !== AITM_RM_ORIGIN || !e.data || e.data.type !== 'rm-installed') return;
+      fin(e.data.error ? { err: 'bridge', msg: String(e.data.error) } : (e.data.data || { models: [] }));
+    };
+    window.addEventListener('message', on);
+    var iv = setInterval(function () {
+      var closed = true; try { closed = w.closed; } catch (e) {}
+      if (closed) { setTimeout(function () { fin({ err: 'closed' }); }, 300); return; }   // a message may still be on its way
+      if (!hinted && Date.now() - t0 > 8000) { hinted = true; if (onWait) onWait(); }
+      if (Date.now() - t0 > 180000) { try { w.close(); } catch (e) {} fin({ err: 'timeout' }); }
+    }, 400);
+  });
+}
+// Chrome's permission for this page to reach programs on this PC ('granted' / 'prompt' / 'denied', '' = unknown).
+// Only when it is granted does the page read the list in the background (also when the tab opens).
+function aitmLnaState() {
+  if (!navigator.permissions || !navigator.permissions.query) return Promise.resolve('');
+  return ['loopback-network', 'local-network-access', 'local-network'].reduce(function (p, n) {
+    return p.then(function (st) { return st || navigator.permissions.query({ name: n }).then(function (r) { return r.state; }, function () { return ''; }); });
+  }, Promise.resolve(''));
+}
+// opt.silent: tab opened (background request only, only once it has worked); opt.bridge: use the window
 async function aitmUpdateInstalled(opt) {
   opt = opt || {};
   if (aitm._updating) return;
-  aitm._updating = true;
+  var viaFetch = false; try { viaFetch = localStorage.getItem('aitm_rm_ok') === '1'; } catch (e) {}
+  if (aitm._lna === 'granted') viaFetch = true;
+  if (opt.silent) viaFetch = true; else if (opt.bridge) viaFetch = false;
   var btn = document.getElementById('aitm-upd-btn'), lbl = btn ? btn.textContent : '';
+  // the window must open right away, still inside the click
+  var job = viaFetch ? aitmFetchInstalled(true)
+    : aitmBridgeInstalled(function () {
+        aitmToast('Still waiting for Rotation Map … Look at the small Rotation Map window: “Reading your installed aircraft” = please wait; '
+          + '“404 page not found” = your Rotation Map is older than 4.12.1; “This site can’t be reached” = Rotation Map is not running.', true);
+      });
+  aitm._updating = true;
   if (btn) { btn.disabled = true; btn.textContent = '⟳ Reading …'; }
   if (!opt.silent) aitmToast('Reading your installed aircraft (through Rotation Map) …');
   var wasInst = {}; aitm.ac.forEach(function (a) { if (aitmInstalled(a.title)) wasInst[a.n] = 1; });
   var oldTitles = {}; aitm.fleet.forEach(function (e) { oldTitles[String(e.title).toLowerCase()] = 1; });
   var hadFleet = aitm.fleet.length > 0;
-  var d = await aitmFetchInstalled(true);
+  var d = await job;
   aitm._updating = false;
   if (btn) { btn.disabled = false; btn.textContent = lbl; }
-  if (d.err) { if (!opt.silent) aitmRmProblem(d.err); return; }
-  try { localStorage.setItem('aitm_rm_ok', '1'); } catch (e) {}
+  if (d.err) {
+    if (viaFetch && !opt.silent) { try { localStorage.removeItem('aitm_rm_ok'); } catch (e) {} }   // next time: through the window
+    if (!opt.silent) aitmRmProblem(d.err, d.msg, viaFetch);
+    return;
+  }
+  if (viaFetch) { try { localStorage.setItem('aitm_rm_ok', '1'); } catch (e) {} }
   var entries = (d.models || []).filter(function (m) { return m.title; }).map(aitmEntryFromRM);
   var by = {};
   entries.forEach(function (e) { var s = by[e.root] = by[e.root] || { dirs: {}, n: 0, src: e.src }; s.dirs[e.folder] = 1; s.n++; });
@@ -1691,20 +1739,27 @@ async function aitmUpdateInstalled(opt) {
   await aitmKvSet('fleetCache', { at: Date.now(), list: aitm.fleet, sources: aitm.sources, meta: aitm.fleetMeta || {} });
   aitmFleetIndex(); aitmRenderAll();
   var lost = aitm.ac.filter(function (a) { return wasInst[a.n] && !aitmInstalled(a.title); });
+  var missing = aitm.ac.filter(function (a) { return !aitmInstalled(a.title); });
   var added = hadFleet ? entries.filter(function (e) { return !oldTitles[String(e.title).toLowerCase()]; }).length : 0;
   aitm._lastRead = { root: 'Rotation Map', at: Date.now(), liveries: entries.length, added: added, lost: lost.map(function (a) { return { n: a.n, title: a.title }; }) };
   if (opt.silent && !lost.length) return;
   aitmToast('✓ Installed aircraft updated: ' + entries.length + ' liveries in ' + aitm.sources.length + ' package' + (aitm.sources.length === 1 ? '' : 's')
     + (added ? ' · ' + added + ' new title' + (added === 1 ? '' : 's') : '')
-    + (lost.length ? ' · no longer installed (red): ' + lost.map(function (a) { return 'AC#' + a.n + ' ' + a.title; }).join(', ') : ''), lost.length > 0);
+    + (missing.length ? ' · not installed (red): ' + missing.map(function (a) { return 'AC#' + a.n + ' ' + a.title; }).join(', ') : ''), missing.length > 0);
 }
-function aitmRmProblem(err) {
-  var txt = err === 'old'
-    ? 'Your Rotation Map is older than 4.12 — that version hands the installed aircraft over to this page. Replace RotationMap.exe with 4.12, start it, and press the button again.'
-    : 'Rotation Map does not answer. It reads your installed aircraft for this page: start <b>RotationMap.exe</b> (globe icon next to the clock) and press the button again.'
-      + '<br><span style="color:var(--txt3);">If Chrome asked whether this page may use other apps and services on this device, allow it — otherwise Chrome blocks the request.</span>';
+function aitmRmProblem(err, msg, wasFetch) {
+  var not412 = 'Your Rotation Map is older than 4.12.1 — that version hands the installed aircraft over to this page. Replace RotationMap.exe with 4.12.1, start it, and press the button again.';
+  var notRun = 'start <b>RotationMap.exe</b> (globe icon next to the clock) and press the button again.';
+  var txt = err === 'old' ? not412
+    : err === 'popup' ? 'Chrome blocked the small Rotation Map window. Allow pop-ups for this page (icon at the right end of the address bar: “Always allow pop-ups”) and press the button again.'
+    : err === 'bridge' ? 'Rotation Map could not read your installed aircraft: ' + aitmEsc(msg || '') + '<br>Check the Community folders in Rotation Map’s settings.'
+    : err === 'closed' ? 'The Rotation Map window closed before it handed over the list.<br>• It said <b>“404 page not found”</b>: ' + not412
+        + '<br>• It said <b>“This site can’t be reached”</b>: Rotation Map is not running — ' + notRun
+    : err === 'timeout' ? 'Rotation Map took more than ' + (wasFetch ? '90' : '180') + ' seconds. Press the button again.'
+    : 'Rotation Map does not answer: ' + notRun
+        + (wasFetch ? '<br><span style="color:var(--txt3);">“Try again” opens a small Rotation Map window that hands the list over — Chrome blocks this page’s background requests to programs on your PC.</span>' : '');
   aitmModal('Update installed aircraft', '<div style="font-size:12px;color:var(--txt2);line-height:1.7;">' + txt + '</div>',
-    [['Try again', function () { aitmCloseModal(); aitmUpdateInstalled(); }], ['Read a folder by hand…', function () { aitmCloseModal(); aitmReadAircraftFolder(); }, true]]);
+    [['Try again', function () { aitmCloseModal(); aitmUpdateInstalled({ bridge: true }); }], ['Read a folder by hand…', function () { aitmCloseModal(); aitmReadAircraftFolder(); }, true]]);
 }
 
 // ── Check flightplans → Sort by aircraft size → Compile: red until done, green when done; Compile grey until both
