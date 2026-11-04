@@ -6604,6 +6604,14 @@ async function aiGenAlImportXls(file) {
     alGroups.forEach(segsA=>{
       let h = aiGenAlHub ? aiGenAlHub[0] : '';
       if (aiGenMulti) { const hs=alHubScores(segsA); h = hs.clear ? hs.best : ''; }
+      if (aiGenAlNoReturn) {
+        // No return flight: every flight its own row, in sheet order; a flight that leaves where
+        // the one on the line above lands (and has no flight number) is its onward leg
+        segsA.forEach((sg,k)=>{ const pr=segsA[k-1];
+          const p={ out:sg, ret:null, cont: !!(pr && !sg.fln && !pr.fln && pr.to[0]===sg.from[0] && sg.row===pr.row+1) };
+          hubOfPair.set(p,''); pairs.push(p); });
+        return;
+      }
       alPairsFromSegs(segsA, h).forEach(p=>{ hubOfPair.set(p,h); pairs.push(p); });
     });
     // Does the file contain any times? yes → Known schedule · no → Random schedule
@@ -6655,13 +6663,19 @@ async function aiGenAlImportXls(file) {
     try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
     renderAiGenAirline();                 // header (airline, logo, hub) + rows
     // a route without return only needs completing when times are typed (Known schedule)
-    const oneWay=timed ? pairs.filter(p=>!p.ret).length : 0;
+    const oneWay=(timed && !aiGenAlNoReturn) ? pairs.filter(p=>!p.ret).length : 0;
     const noTimes=timed ? parsed.segs.filter(x=>!x.dep || !x.arr).length : 0;
     let msg='✓ '+parsed.segs.length+' flights → '+legs.length+' routes';
     if (!timed) msg+=' · no times in the file → Random schedule, block times estimated';
     const nLinked=pairs.filter(p=>p.cont).length;
     if (nLinked) msg+=' · '+nLinked+' onward flight'+(nLinked>1?'s':'')+' linked (multi-stop)';
     if (oneWay) msg+=' · '+oneWay+' without return (please complete)';
+    if (aiGenAlNoReturn) msg+=' · No return flight: one row per flight';
+    // implausible block times (usually a wrong NIGHT / day offset in the sheet)
+    if (timed) {
+      const longOnes=aiGenAlLegs.filter(l=>legs.includes(l)).map(l=>({ l, b:alKnownBlock(l,'out') })).filter(x=>alBlockTooLong(x.b));
+      if (longOnes.length) msg+=' · ⚠ block time over 20 h: '+longOnes.slice(0,3).map(x=>x.l.dep[0]+'→'+x.l.arr[0]+' '+x.b+' (NIGHT '+(x.l.arrDayOff>0?'+':'')+(x.l.arrDayOff||0)+')').join(', ')+' — check the day offset';
+    }
     if (noTimes) msg+=' · '+noTimes+' without times (please complete)';
     if (parsed.problems.length) {
       const unk={}; const other=[];
@@ -7099,6 +7113,8 @@ function alRandomChainLeg(rows, noRet) {
   };
 }
 
+// a block time no airliner flies (> 20 h): almost always a wrong day offset (NIGHT +2 instead of +1)
+function alBlockTooLong(b) { const m=String(b||'').match(/^(\d+):(\d{2})$/); return !!(m && (+m[1])*60+(+m[2]) > 20*60); }
 function alKnownBlock(leg, dir) {
   const out = dir!=='ret';
   const fromAp = out ? leg.dep : leg.arr;
@@ -7989,7 +8005,9 @@ function _renderAiGenAlLegsNow() {
       const bd=document.createElement('div');
       bd.id=id; bd.textContent = kb || '--:--';
       bd.title='Block time computed from DEP and ARR (time zones and day offset considered)';
+      const tooLong = alBlockTooLong(kb);
       bd.style.cssText='width:46px;box-sizing:border-box;font-size:11px;font-family:monospace;color:'+(kb?'#3fb950':'var(--txt3)')+';font-weight:'+(kb?700:400)+';border:1px solid '+(kb?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);border-radius:4px;text-align:center;padding:2px 3px;';
+      if (tooLong) { bd.style.color='#f85149'; bd.style.borderColor='#f85149'; bd.style.background='rgba(248,81,73,.12)'; bd.title='Block time over 20 hours — check the arrival day offset (+1 / +2)'; }
       cell.appendChild(sp); cell.appendChild(bd); cell.appendChild(L);
       return cell;
     }
@@ -10500,6 +10518,7 @@ function renderRotationLanes() {
     });
 
     // render assignments as absolutely-positioned bars (draggable to move), with week wrap-around
+    const overlapIds = rotAircraftOverlaps(ac);     // flights at the same time → red frame, from the wrong airport → orange
     Object.keys(ac.assignments).forEach(di=>{
       (ac.assignments[di]||[]).forEach(asg=>{
         asg.segs.forEach((seg,segIdx)=>{
@@ -10529,6 +10548,8 @@ function renderRotationLanes() {
             el.addEventListener('mousemove', rotTipMove);
             el.addEventListener('mouseleave', rotTipHide);
             el.innerHTML = isHead ? innerHTML+groundTail : '<div style="font-size:8px;color:#9fc7ff;white-space:nowrap;opacity:.7;">⟳ '+seg.fnum+'</div>'+(isTail?groundTail:'');
+            if (overlapIds.ids.has(asg.uid+'|'+segIdx)) { el.style.outline='2px solid #f85149'; el.style.outlineOffset='-2px'; el.style.zIndex='3'; }
+            else if (overlapIds.loc.has(asg.uid+'|'+segIdx)) { el.style.outline='2px dashed #e0b341'; el.style.outlineOffset='-2px'; el.style.zIndex='3'; }
             el.addEventListener('dragstart', e=>{ rotTipHide(); e.dataTransfer.setData('text/plain','move|'+acIdx+'|'+asg.uid); el.style.opacity='0.5'; });
             el.addEventListener('dragend', e=>{ el.style.opacity='1'; });
             el.addEventListener('contextmenu', e=>{ e.preventDefault(); rotTipHide(); showTrashPopup(e.clientX, e.clientY, acIdx, asg.uid); });
@@ -10651,7 +10672,66 @@ function computePairSegs(legIdx, dropDay) {
     // typed (known) schedules only need a short minimum gap; estimated ones use the ground time
     prevAbsArr = absArr; prevGround = (s.minTurn!=null ? s.minTurn : s.ground);
   });
-  return { pair: bars, segs };
+  // span: first departure to last arrival, minutes (not folded into the timeline)
+  return { pair: bars, segs, span: (prevAbsArr!=null && rawSegs.length) ? prevAbsArr - (dropDay*1440 + rawSegs[0].depUTC) : 0 };
+}
+// A rotation longer than the planner cycle cannot be flown by one aircraft every cycle: it
+// would overlap its own start. 1-week cycle → offer the 2-week cycle. Returns false = do not place.
+function rotSpanFits(legIdx, dropDay) {
+  const res = computePairSegs(legIdx, dropDay); if (!res) return false;
+  if (res.span <= ROT_SPAN) return true;
+  const d = Math.floor(res.span/1440), h = Math.round((res.span%1440)/60);
+  const what = res.pair[0].airline+' '+res.pair[0].fnum+' ('+res.pair.map(b=>b.depIcao).concat([res.pair[res.pair.length-1].arrIcao]).join('–')+')';
+  if (ROT_WEEKS===1) {
+    if (!confirm(what+' takes '+d+' days '+h+' h — longer than the 1-week cycle, so one aircraft cannot fly it every week (it would overlap its own start).\n\n'
+      + 'OK = switch the planner to the 2-week cycle (this aircraft flies it every 2 weeks; for a weekly service place it on a second aircraft in week 2)\n'
+      + 'Cancel = do not place it (check the times on the input page — e.g. a day offset +2 instead of +1)')) return false;
+    setRotCycleWeeks(2);
+    return computePairSegs(legIdx, dropDay).span <= ROT_SPAN;
+  }
+  alert(what+' takes '+d+' days '+h+' h — longer than the 2-week cycle. Check the times on the input page.');
+  return false;
+}
+// The flights of one aircraft in flown order on a cyclic timeline of `span` minutes (the
+// planner cycle, or one week for a weekly flight plan). Problems between one flight and the
+// next: it leaves before the previous one has landed (+ 20 min minimum turn) — "time" — or
+// from another airport than where the previous one landed — "loc".
+function rotSeqIssues(list, span) {
+  const L=list.map(x=>Object.assign({}, x, { a:((x.s.absDep%span)+span)%span })).sort((p,q)=>p.a-q.a);
+  const out={ time:[], loc:[] };
+  if (L.length<2) return out;
+  L.forEach((x,k)=>{
+    const y=L[(k+1)%L.length], ya=y.a+(k===L.length-1 ? span : 0);
+    if (ya < x.a + x.s.block + KNOWN_MIN_TURN - 1) out.time.push([x,y]);
+    else if (x.s.arrIcao && y.s.depIcao && x.s.arrIcao!==y.s.depIcao) out.loc.push([x,y]);
+  });
+  return out;
+}
+function rotAcSegList(ac) {
+  const list=[];
+  Object.keys(ac.assignments).forEach(di=>(ac.assignments[di]||[]).forEach(asg=>asg.segs.forEach((sg,k)=>list.push({ s:sg, id:asg.uid+'|'+k }))));
+  return list;
+}
+// Problems of an aircraft's plan: ids "uid|segIdx" of the flights concerned (time = red,
+// loc = orange) and the first problem as text.
+function rotAircraftOverlaps(ac) {
+  const r=rotSeqIssues(rotAcSegList(ac), ROT_SPAN);
+  const ids=new Set(), loc=new Set();
+  r.time.forEach(([x,y])=>{ ids.add(x.id); ids.add(y.id); });
+  r.loc.forEach(([x,y])=>{ loc.add(x.id); loc.add(y.id); });
+  const dayT = m => { m=((m%ROT_SPAN)+ROT_SPAN)%ROT_SPAN; return ROT_DAYS[Math.floor(m/1440)%7].slice(0,3)+(ROT_WEEKS>1?' (week '+(Math.floor(m/10080)+1)+')':'')+' '+String(Math.floor(m%1440/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')+' UTC'; };
+  const f = r.time[0] ? r.time[0] : null, g = r.loc[0] ? r.loc[0] : null;
+  return { ids, loc,
+    first: f ? f[1].s.depIcao+'→'+f[1].s.arrIcao+' '+dayT(f[1].a)+' leaves before '+f[0].s.depIcao+'→'+f[0].s.arrIcao+' has landed' : '',
+    firstLoc: g ? g[0].s.depIcao+'→'+g[0].s.arrIcao+' lands in '+g[0].s.arrIcao+', the next flight ('+dayT(g[1].a)+') leaves from '+g[1].s.depIcao : '' };
+}
+// after placing: say so when an aircraft now flies two flights at the same time
+function rotWarnOverlaps(acIdx) {
+  const ac=rotAircraft[acIdx]; if (!ac) return;
+  const o=rotAircraftOverlaps(ac), el=document.getElementById('rot-status');
+  if (o.ids.size && el) { el.textContent='⚠ '+ac.reg+' would fly two flights at once: '+o.first+' — framed red. Move or remove one.'; el.style.color='#f85149'; el.dataset.ov='1'; }
+  else if (o.loc.size && el) { el.textContent='⚠ '+ac.reg+': '+o.firstLoc+' — framed orange.'; el.style.color='#e0b341'; el.dataset.ov='1'; }
+  else if (el && el.dataset.ov) { el.textContent=''; el.style.color=''; delete el.dataset.ov; }
 }
 
 // Compute a single direction's segment (split mode) starting on dropDay
@@ -10725,6 +10805,7 @@ function dropPairOnAircraft(legIdx, acIdx, dropMinAbs, kind) {
     return;
   }
   const dropDay = Math.max(0,Math.min(ROT_NDAYS-1,Math.floor(dropMinAbs/1440)));
+  if (kind==='pair' && !rotSpanFits(legIdx, dropDay)) return;
   const daily = rotDailyLegs.has(legIdx);
   // Which days to place on: just the drop day, or the 7 days of week 1 when "Daily" is on.
   const days = daily ? [0,1,2,3,4,5,6] : [dropDay];   // Daily = one week (week 1); week 2 only by manual placement
@@ -10743,6 +10824,7 @@ function dropPairOnAircraft(legIdx, acIdx, dropMinAbs, kind) {
   });
   renderRotationBars();
   renderRotationLanes();
+  rotWarnOverlaps(acIdx);
 }
 
 // Move an existing assignment to another aircraft and/or day
@@ -10763,6 +10845,7 @@ function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
   const oldArr=fromAc.assignments[fromDay];
   oldArr.splice(oldArr.findIndex(a=>a.uid===uid),1);
   const dropDay=Math.max(0,Math.min(ROT_NDAYS-1,Math.floor(dropMinAbs/1440)));
+  if ((asg.kind||'pair')==='pair' && !rotSpanFits(asg.legIdx, dropDay)) { oldArr.push(asg); renderRotationLanes(); return; }
   let segs;
   if(asg.kind==='out' || asg.kind==='ret'){
     const res=computeSingleSeg(asg.legIdx, dropDay, asg.kind); segs=[res.seg];
@@ -10772,6 +10855,7 @@ function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
   rotDayList(toAc,dropDay).push({ uid:asg.uid, legIdx:asg.legIdx, dropDay, kind:asg.kind||'pair', segs });
   renderRotationBars();
   renderRotationLanes();
+  rotWarnOverlaps(toAcIdx);
 }
 
 // When a bar's time is edited, recompute every placed copy of that leg (keep their dropDay)
@@ -10976,7 +11060,15 @@ function rotAircraftCycle(ac){
   const L=rotAsgList(ac).filter(x=>x.a.segs && x.a.segs.length);
   if(!L.length) return null;
   const w1=L.filter(x=>x.day<7), w2=L.filter(x=>x.day>=7);
-  if(!w2.length) return 'Week';
+  if(!w2.length) {
+    // a rotation longer than a week (2-week cycle) breaks apart when folded into one week
+    if (ROT_WEEKS>1) {
+      const list=[]; w1.forEach(x=>x.a.segs.forEach(s=>list.push({ s })));
+      const n = r => r.time.length + r.loc.length;
+      if (n(rotSeqIssues(list, 10080)) > n(rotSeqIssues(list, ROT_SPAN))) return '2Weeks';
+    }
+    return 'Week';
+  }
   const key=x=>[x.a.legIdx, x.a.kind, x.day%7,
     x.a.segs.map(s=>[rotNorm(s.absDep)%10080, s.block, s.depIcao, s.arrIcao, String(s.fnum||'')].join('/')).join('+')].join('|');
   if(w1.map(key).sort().join(';') === w2.map(key).sort().join(';')) return 'Week';
