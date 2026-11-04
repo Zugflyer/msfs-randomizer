@@ -1048,6 +1048,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
               <div id="aigen-al-cy-knob" style="position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;left:3px;"></div>
             </div>
             <span id="aigen-al-cy-2" onclick="setRotCycleWeeks(2)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">2 week cycle</span>
+
+            <span id="aigen-al-nr-0" onclick="setAiGenAlNoReturn(false)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;text-align:right;">Return flight</span>
+            <div onclick="setAiGenAlNoReturn(!aiGenAlNoReturn)" title="No return flight: every row is ONE flight in one direction. Rows with the same flight number (or linked to the row above) are flown one after the other as one rotation — e.g. JFK→LHR→IST→DEL→NRT→JFK — without any return segments." style="width:40px;height:20px;border-radius:10px;background:var(--acc);position:relative;cursor:pointer;">
+              <div id="aigen-al-nr-knob" style="position:absolute;top:3px;width:14px;height:14px;border-radius:50%;background:#fff;transition:left .15s;left:3px;"></div>
+            </div>
+            <span id="aigen-al-nr-1" onclick="setAiGenAlNoReturn(true)" style="font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">No return flight</span>
           </div>
 
           <!-- Import routes from Excel: with times → Known schedule, without times → Random schedule -->
@@ -6317,12 +6323,12 @@ const _aiGenProfiles = {};
 function alRowAl(l){ return aiGenMulti ? String((l && l.al) || '').toUpperCase() : aiGenAirline; }
 function aiGenSaveProfile(mode){
   _aiGenProfiles[mode] = { legs:aiGenAlLegs, airline:aiGenAirline, hub:aiGenAlHub, extras:aiGenAlExtraLegs,
-    showImp:aiGenAlShowImported, sched:aiGenAlSchedMode, minGround:aiGenAlMinGround, snap:_alSortSnap };
+    showImp:aiGenAlShowImported, sched:aiGenAlSchedMode, minGround:aiGenAlMinGround, snap:_alSortSnap, noRet:aiGenAlNoReturn };
 }
 function aiGenLoadProfile(mode){
-  const p=_aiGenProfiles[mode] || { legs:[], airline:'', hub:null, extras:[], showImp:false, sched:aiGenAlSchedMode, minGround:'', snap:null };
+  const p=_aiGenProfiles[mode] || { legs:[], airline:'', hub:null, extras:[], showImp:false, sched:aiGenAlSchedMode, minGround:'', snap:null, noRet:aiGenAlNoReturn };
   aiGenAlLegs=p.legs; aiGenAirline=p.airline; aiGenAlHub=p.hub; aiGenAlExtraLegs=p.extras; aiGenAlShowImported=p.showImp;
-  aiGenAlSchedMode=p.sched; aiGenAlMinGround=p.minGround; _alSortSnap=p.snap;
+  aiGenAlSchedMode=p.sched; aiGenAlMinGround=p.minGround; _alSortSnap=p.snap; aiGenAlNoReturn=!!p.noRet;
 }
 let aiGenAlFocusAfter = null;  // "row.pos" to focus after the next render (tab continuity)
 
@@ -6336,8 +6342,22 @@ function setAiGenAlSchedMode(m) {
   try { localStorage.setItem('aigen_al_schedmode', aiGenAlSchedMode); } catch(e){}
   renderAiGenAlLegs();
 }
+// ── No return flight (both schedule modes) ───────────────────────────────────────
+// Every row is ONE flight in one direction, no return segment. Rows that continue each
+// other (same flight number, or "linked to row above") form one rotation flown in that
+// order: JFK→LHR (100), LHR→IST (100), IST→DEL (100) … The planner places it as one bar.
+let aiGenAlNoReturn = (function(){ try{ return localStorage.getItem('aigen_al_noreturn')==='1'; }catch(e){ return false; } })();
+function setAiGenAlNoReturn(v) {
+  aiGenAlNoReturn = !!v;
+  try { localStorage.setItem('aigen_al_noreturn', aiGenAlNoReturn ? '1' : '0'); } catch(e){}
+  renderAiGenAlLegs();
+}
 function applyAiGenAlSchedModeUI() {
   const known = aiGenAlSchedMode==='known';
+  { const nr=aiGenAlNoReturn, k=document.getElementById('aigen-al-nr-knob'); if (k) k.style.left = nr ? '23px' : '3px';
+    const a=document.getElementById('aigen-al-nr-0'), b=document.getElementById('aigen-al-nr-1');
+    if (a) a.style.color = nr ? 'var(--txt3)' : '#fff';
+    if (b) b.style.color = nr ? '#fff' : 'var(--txt3)'; }
   const knob=document.getElementById('aigen-al-sm-knob'); if (knob) knob.style.left = known ? '3px' : '23px';
   try { applyRotCycleUI(); } catch(e) {}
   const lk=document.getElementById('aigen-al-sm-known'), lr=document.getElementById('aigen-al-sm-random');
@@ -6865,6 +6885,8 @@ async function aiGenAlImportTTools(files, opts){
     if (!aiGenMulti) aiGenAirline=airline;
     aiGenAlHub=ap(hub)||aiGenAlHub;
     aiGenAlSchedMode='known'; try { localStorage.setItem('aigen_al_schedmode','known'); } catch(e){}
+    // the imported rows are flights with their return (irregular rotations are kept as they are)
+    aiGenAlNoReturn=false; try { localStorage.setItem('aigen_al_noreturn','0'); } catch(e){}
     if (acs.some(a=>a.twoWeeks) && ROT_WEEKS!==2) setRotCycleWeeks(2);
     else if (opts.info && !acs.some(a=>a.twoWeeks) && ROT_WEEKS!==1) setRotCycleWeeks(1);
     aiGenAlLegs=rows.length ? rows.slice() : [aiGenAlEmptyLeg()];
@@ -7012,11 +7034,12 @@ function alChainFillFnums(segs) {
 }
 // One rotation from a chain of rows: outbound legs in row order, then the return legs
 // in reverse row order (708 SBGL→LPPT→LPPR, then 709 LPPR→LPPT→SBGL).
-function alKnownChainLeg(rows) {
+// noRet (No return flight): only the outbound legs, in row order.
+function alKnownChainLeg(rows, noRet) {
   const first=rows[0], last=rows[rows.length-1];
   const segs=[];
   rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum, leg:alLegNoVal(r.legNo) }));
-  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }));
+  if (!noRet) rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }));
   alChainFillFnums(segs);
   return {
     dep:first.dep, arr:last.arr, airline:alRowAl(first), aircraft:first.eqp,
@@ -7030,7 +7053,7 @@ function alKnownChainLeg(rows) {
 // leaves after arrival + ground time. The return starts inside the last row's return DEP
 // window and chains home the same way. Among all possible start times those that break
 // the fewest DEP/ARR windows along the way are preferred.
-function alRandomChainLeg(rows) {
+function alRandomChainLeg(rows, noRet) {
   const first=rows[0], last=rows[rows.length-1];
   const hm = s => { const m=String(s||'').match(/^\s*(\d{1,2}):(\d{2})/); return m ? (+m[1])*60+(+m[2]) : null; };
   const fmt = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
@@ -7041,7 +7064,7 @@ function alRandomChainLeg(rows) {
   const segs=[];
   rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, blk:Math.max(5, r5(hm(r.blockTime)||120)), fnum:r.flightNum, leg:alLegNoVal(r.legNo),
                                w:[hm(r.dd1),hm(r.dd2),hm(r.aa1),hm(r.aa2)] }));
-  rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo),
+  if (!noRet) rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo),
                                w:[hm(r.rdd1),hm(r.rdd2),hm(r.raa1),hm(r.raa2)] }));
   const plan = list => {
     const lo = list[0].w[0] ?? 360, hi = list[0].w[1] ?? 1350;
@@ -7063,6 +7086,7 @@ function alRandomChainLeg(rows) {
   };
   ['out','ret'].forEach(h=>{
     const list=segs.filter(x=>x.half===h);
+    if (!list.length) return;                        // No return flight: no return half
     const times=plan(list);
     list.forEach((sg,k)=>{ sg.depFixed=fmt(times[k]); sg.block=dur(sg.blk); });
   });
@@ -7988,8 +8012,8 @@ function _renderAiGenAlLegsNow() {
     gInpRef.el = gInp;
     const gUnit=document.createElement('div'); gUnit.style.cssText='font-size:11px;color:var(--txt3);'; gUnit.textContent='min';
     // ⇄ in the middle of the rotation, above the ground time: reverse the route
-    //    (A→B / B→A becomes B→A / A→B)
-    if (leg.dep && leg.arr) {
+    //    (A→B / B→A becomes B→A / A→B) — not with No return flight (one direction only)
+    if (leg.dep && leg.arr && !aiGenAlNoReturn) {
       const sw=document.createElement('button'); sw.type='button'; sw.textContent='⇄'; sw.tabIndex=-1;
       sw.title='Reverse route: start in '+leg.arr[0]+' → '+leg.dep[0]+', return '+leg.dep[0]+' → '+leg.arr[0];
       sw.style.cssText='font-size:13px;line-height:1;padding:1px 7px;border-radius:4px;border:1px solid rgba(255,255,255,.18);background:transparent;color:var(--txt3);cursor:pointer;';
@@ -8031,7 +8055,11 @@ function _renderAiGenAlLegsNow() {
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    addBtn.onclick=()=>{ const n=aiGenAlEmptyLeg(); if (aiGenMulti) n.al=leg.al||''; aiGenAlLegs.splice(i+1,0,n); renderAiGenAlLegs(); };
+    addBtn.onclick=()=>{ const n=aiGenAlEmptyLeg(); if (aiGenMulti) n.al=leg.al||'';
+      // No return flight: the next leg of the chain — leaves where this one lands, same type and flight number
+      if (aiGenAlNoReturn && leg.arr) { Object.assign(n, { dep:leg.arr, _editingDep:false, eqp:leg.eqp||'', flightNum:leg.flightNum||'' }); aiGenAlFocusAfter=(i+1)+'.3'; }
+      aiGenAlLegs.splice(i+1,0,n); renderAiGenAlLegs(); };
+    if (aiGenAlNoReturn) addBtn.title='Next leg: departs from '+(leg.arr?leg.arr[0]:'the destination')+', same type and flight number';
     const splitBtn=document.createElement('button'); splitBtn.textContent='⑂ Split routing';
     splitBtn.dataset.tabseq=i+'.13';
     splitBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid rgba(123,97,255,.5);background:transparent;color:#a78bfa;cursor:pointer;width:100%;box-sizing:border-box;';
@@ -8066,7 +8094,8 @@ function _renderAiGenAlLegsNow() {
     row.appendChild(leftCol);
     row.appendChild(outDepCol); row.appendChild(outBlock); row.appendChild(outArrCol);
     row.appendChild(groundCell);
-    row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol);
+    if (!aiGenAlNoReturn) { row.appendChild(retDepCol); row.appendChild(retBlock); row.appendChild(retArrCol); }
+    else groundCell.title='Ground time before the next leg of this flight';
     row.appendChild(delCell);
     wrapper.appendChild(row);
 
@@ -8269,7 +8298,7 @@ function renderAlChainLeg(container, leg, i, ctx) {
   }
 
   wrapper.appendChild(chainRow(leg.outHops, 'out', 'outbound'));
-  wrapper.appendChild(chainRow(leg.retHops, 'ret', 'return'));
+  if (!aiGenAlNoReturn) wrapper.appendChild(chainRow(leg.retHops, 'ret', 'return'));
   container.appendChild(wrapper);
 }
 
@@ -9100,12 +9129,13 @@ async function createRotations() {
 function alBuildValidLegs() {
   // Keep only legs that are completely specified.
   const isChain = l => Array.isArray(l.stops) && l.stops.length;
+  const noRet = aiGenAlNoReturn;                     // No return flight: only the outbound half counts
   const chainComplete = l => l.outHops && l.outHops.every(h=>h.dep&&h.arr&&h.blockTime)
-                          && l.retHops && l.retHops.every(h=>h.dep&&h.arr&&h.blockTime);
+                          && (noRet || (l.retHops && l.retHops.every(h=>h.dep&&h.arr&&h.blockTime)));
   const knownMode = aiGenAlSchedMode==='known';
   const src = aiGenAlLegs.filter(l => l.eqp && (!aiGenMulti || alRowAl(l).length>=2) && (
     isChain(l) ? chainComplete(l)
-    : (l.dep && l.arr && (knownMode ? (alKnownBlock(l,'out') && alKnownBlock(l,'ret')) : (l.blockTime && l.rBlockTime)))
+    : (l.dep && l.arr && (knownMode ? (alKnownBlock(l,'out') && (noRet || alKnownBlock(l,'ret'))) : (l.blockTime && (noRet || l.rBlockTime))))
   ));
 
   // Convert to the shape buildRotationBars expects.
@@ -9118,13 +9148,16 @@ function alBuildValidLegs() {
   // rows linked into a multi-stop flight (same flight number, or "linked to row above")
   units = alGroupKnownChains(src.filter(l=>!isChain(l))).concat(src.filter(isChain).map(l=>[l]));
   const validLegs = units.map(rows => {
+    // No return flight: every flight (single row or rows flown one after the other) is one
+    // rotation of outbound legs only
+    if (noRet && !isChain(rows[0])) return knownMode ? alKnownChainLeg(rows, true) : alRandomChainLeg(rows, true);
     if (rows.length > 1) return knownMode ? alKnownChainLeg(rows) : alRandomChainLeg(rows);
     const l = rows[0];
     if (isChain(l)) {
       // A split chain → one rotation. hops = outbound hops then return hops, in order.
       // Only the first outbound hop has a start time (l.startFixed); the rest chain via
       // block + ground at build time.
-      const hops = [...l.outHops, ...l.retHops].map((h,idx) => ({
+      const hops = (noRet ? [...l.outHops] : [...l.outHops, ...l.retHops]).map((h,idx) => ({
         dep: h.dep, arr: h.arr, block: h.blockTime,
         depFixed: (h.depFixed && /^\d{1,2}:\d{2}$/.test(h.depFixed)) ? h.depFixed : null,
         half: idx < l.outHops.length ? 'out' : 'ret',
@@ -9161,7 +9194,7 @@ function alBuildValidLegs() {
       da1: retFixed ? '00:00' : l.raa1, da2: retFixed ? '23:59' : l.raa2,
     };
   });
-  return { src, units, validLegs, knownMode };
+  return { src, units, validLegs, knownMode, noRet };
 }
 // Research signature (cache key) over the converted legs.
 function alResearchSig(validLegs) {
@@ -9183,7 +9216,7 @@ async function createRotationsAirline(mode) {
   const extras = alExtraValidLegs();                 // irregular rotations from a TTools import
   if (!built.src.length && !extras.length) {
     alert(built.knownMode
-      ? 'Please complete at least one route: '+(aiGenMulti?'airline, ':'')+'airports, EQP, and DEP + ARR times for outbound and return.'
+      ? 'Please complete at least one route: '+(aiGenMulti?'airline, ':'')+'airports, EQP, and DEP + ARR times'+(built.noRet?'.':' for outbound and return.')
       : 'Please complete at least one route ('+(aiGenMulti?'airline, ':'')+'all airports, EQP, and block times).');
     return;
   }
@@ -9296,7 +9329,8 @@ async function createRotationsAirline(mode) {
   const routePath = l => l.knownSegs
     ? l.knownSegs.filter(x=>x.half==='out').map(x=>x.dep[0]).concat([l.arr[0]]).join('->')   // multi-stop: one number out, one back
     : l.dep[0]+'->'+l.arr[0];
-  const routeList=askIdx.map(i=>{ const l=validLegs[i]; return `R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} (and return)`; }).join('\n') || '(none)';
+  const oneWay = l => l.knownSegs && !l.knownSegs.some(x=>x.half==='ret');
+  const routeList=askIdx.map(i=>{ const l=validLegs[i]; return `R${i+1}: ${l.airline} ${l.aircraft} ${routePath(l)} ${oneWay(l) ? '(one way, no return — the same number on every leg; give it as fnum_out and fnum_in)' : '(and return)'}`; }).join('\n') || '(none)';
   const alList = aiGenMulti ? [...new Set(validLegs.map(l=>l.airline))].join(', ') : aiGenAirline;
   const researchPrompt = `Research real aviation data for ${aiGenMulti ? 'the airlines below (each route has its airline)' : 'one airline'}. Use web_search if helpful, but keep it brief. Output ONLY one compact JSON object — no explanation, no markdown fences, no text before or after. Keys exactly as shown.
 
