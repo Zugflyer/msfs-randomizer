@@ -1046,7 +1046,16 @@ function aitmInit() {
       aitmLnaState().then(function (st) { aitm._lna = st; if (rmOk || st === 'granted') aitmUpdateInstalled({ silent: true }); });
     });
     aitmKvSet('acFolders', []);
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') aitmCloseModal(); });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') aitmCloseModal();
+      // Del: delete the selected flight plans (Legs visible, no dialog open, not typing)
+      if ((e.key === 'Delete' || e.key === 'Del') && aitm.sel.length && !document.getElementById('aitm-modal')) {
+        var t = e.target, legs = document.getElementById('aitm-legs');
+        if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+        if (!legs || !legs.offsetParent) return;
+        e.preventDefault(); aitmAskDeletePlans(aitm.sel.slice());
+      }
+    });
   }
   aitmRenderAll();
   if (!aitm.logoUrl) aitmFindLogo();
@@ -1132,6 +1141,8 @@ function aitmPlanHtml(p, i) {
   var sel = aitm.sel.indexOf(i) >= 0;
   return '<div class="aitm-pl' + (sel ? ' sel' : '') + '" data-i="' + i + '">'
     + '<span class="aitm-tn" title="' + aitmEsc(tn) + '">' + aitmEsc(tn || '?') + '</span>'
+    + '<span class="aitm-3d aitm-pl3d" title="3D view of ' + aitmEsc(a ? a.title : 'this aircraft') + ' (in Rotation Map)">3D</span> '
+    + (sel ? '<span class="aitm-pldel" title="Delete this flight plan' + (aitm.sel.length > 1 ? ' (and the other selected ones)' : '') + ' — or press Del">🗑</span> ' : '')
     + '<span class="aitm-chip" data-i="' + i + '" title="Click to give this flight plan (or all selected ones) another AC#">AC#' + p.ac + '</span>'
     + '<span>, ' + aitmEsc(p.reg) + ', ' + (p.pct || 1) + '%, ' + aitmEsc(String(p.period).toUpperCase()) + ', ' + p.rules + ', ' + parts.join(', ') + '</span></div>';
 }
@@ -1282,6 +1293,10 @@ function aitmBind() {
     legs.addEventListener('click', function (e) {
       var chip = e.target.closest('.aitm-chip');
       if (chip) { e.stopPropagation(); aitmAcMenu(parseInt(chip.dataset.i, 10), chip); return; }
+      var b3 = e.target.closest('.aitm-pl3d');
+      if (b3) { e.stopPropagation(); aitmPlan3D(parseInt(b3.closest('.aitm-pl').dataset.i, 10)); return; }
+      var del = e.target.closest('.aitm-pldel');
+      if (del) { e.stopPropagation(); var di = parseInt(del.closest('.aitm-pl').dataset.i, 10); aitmAskDeletePlans(aitm.sel.indexOf(di) >= 0 ? aitm.sel.slice() : [di]); return; }
       var row = e.target.closest('.aitm-pl'); if (!row) return;
       var i = parseInt(row.dataset.i, 10);
       if (e.shiftKey && aitm.selAnchor != null) {
@@ -1645,8 +1660,19 @@ function aitmCheckPlans() {
         + '<div style="color:var(--txt2);padding:2px 6px 6px;line-height:1.6;">' + c.unused.map(function (a) { return 'AC#' + a.n + ' ' + aitmEsc(a.title); }).join('<br>')
         + '<div style="margin-top:6px;color:var(--txt3);">Remove them from this plan’s aircraft list? Your installed aircraft are not touched.</div></div>' : '')
     + '</div>';
-  var card = aitmModal('Check flightplans', body,
-    c.unused.length ? [['Remove ' + c.unused.length + ' aircraft without flights', function () { aitmRemoveUnused(); aitmCheckPlans(); }, false, '#da3633']] : [], true);
+  var btns = [];
+  if (c.dups.length) {
+    // identical rotations: delete the later copy of each (its aircraft goes too when it then flies nothing)
+    var dropIdx = c.dups.map(function (x) { return x.drop; }).filter(function (v, k, arr) { return arr.indexOf(v) === k; });
+    var names = dropIdx.map(function (i) { return aitm.plans[i].reg + ' (AC#' + aitm.plans[i].ac + ')'; });
+    btns.push([dropIdx.length === 1 ? 'Delete the copy: ' + names[0] : 'Delete ' + dropIdx.length + ' copies (' + names.slice(0, 3).join(', ') + (names.length > 3 ? ' …' : '') + ')', function () {
+      var r = aitmDeletePlans(dropIdx);
+      aitmCheckPlans();
+      aitmToast(r.plans.length + ' identical flight plan' + (r.plans.length === 1 ? '' : 's') + ' deleted' + (r.ac.length ? ' · aircraft removed: ' + r.ac.map(function (a) { return 'AC#' + a.n + ' ' + a.title; }).join(', ') : '') + '.');
+    }, false, '#da3633']);
+  }
+  if (c.unused.length) btns.push(['Remove ' + c.unused.length + ' aircraft without flights', function () { aitmRemoveUnused(); aitmCheckPlans(); }, false, '#da3633']);
+  var card = aitmModal('Check flightplans', body, btns, true);
   card.querySelectorAll('.aitm-ck[data-pi]').forEach(function (el) {
     if (el.dataset.pi === '') return;
     el.addEventListener('click', function () { aitmGoPlan(parseInt(el.dataset.pi, 10)); });
@@ -1900,6 +1926,52 @@ function aitmEditPlan(i) {
   card.querySelector('#aitm-plan-txt').focus();
 }
 
+// ── delete flight plans ──
+// Removes the flight plans (indexes into aitm.plans). An aircraft that loses its last flight plan
+// here is removed from the aircraft list as well (closing the AC# gaps when the list was sorted).
+function aitmDeletePlans(idxs) {
+  var del = {}; idxs.forEach(function (i) { del[i] = 1; });
+  var gone = aitm.plans.filter(function (p, i) { return del[i]; });
+  if (!gone.length) return { plans: [], ac: [] };
+  var wasSorted = aitmSortedOk();
+  aitm.plans = aitm.plans.filter(function (p, i) { return !del[i]; });
+  var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = 1; });
+  var goneAc = aitm.ac.filter(function (a) { return !use[a.n] && gone.some(function (p) { return p.ac === a.n; }); });
+  if (goneAc.length) {
+    aitm.ac = aitm.ac.filter(function (a) { return goneAc.indexOf(a) < 0; });
+    if (wasSorted) {
+      var map = {}; aitm.ac.forEach(function (a, k) { map[a.n] = k + 1; a.n = k + 1; });
+      aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+      aitm.sortSig = aitmSortSig();
+    }
+  }
+  aitm.sel = []; aitm.selAnchor = null;
+  aitmSave(); aitmRenderAll();
+  return { plans: gone, ac: goneAc };
+}
+function aitmAskDeletePlans(idxs) {
+  idxs = idxs.filter(function (i) { return aitm.plans[i]; });
+  if (!idxs.length) return;
+  var ps = idxs.map(function (i) { return aitm.plans[i]; });
+  var left = {}; aitm.plans.forEach(function (p, i) { if (idxs.indexOf(i) < 0) left[p.ac] = 1; });
+  var lose = []; ps.forEach(function (p) { if (!left[p.ac] && lose.indexOf(p.ac) < 0) lose.push(p.ac); });
+  var list = ps.slice(0, 8).map(function (p) { return p.reg + ' (AC#' + p.ac + ')'; }).join(', ') + (ps.length > 8 ? ' …' : '');
+  if (!confirm('Delete ' + (ps.length === 1 ? 'the flight plan ' : ps.length + ' flight plans: ') + list + '?'
+    + (lose.length ? '\n\nAC#' + lose.join(', AC#') + ' then flies nothing and is removed from the aircraft list too.' : ''))) return;
+  var r = aitmDeletePlans(idxs);
+  aitmToast(r.plans.length + ' flight plan' + (r.plans.length === 1 ? '' : 's') + ' deleted' + (r.ac.length ? ' · aircraft removed: ' + r.ac.map(function (a) { return a.title; }).join(', ') : '') + '.');
+}
+// 3D view of a flight plan's aircraft: Rotation Map shows it (AI Companion's viewer on this PC, else its
+// browser preview) — it reads the model files itself, no folder to choose here
+function aitmPlan3D(i) {
+  var p = aitm.plans[i], a = p ? aitmAcByN(p.ac) : null;
+  if (!a || !a.title) { aitmToast('This flight plan has no aircraft.', true); return; }
+  if (aitm.fleet.length && !aitmInstalled(a.title)) { aitmToast('“' + a.title + '” is not installed — nothing to show.', true); return; }
+  var w = window.open(AITM_RM_URL + '?from=msfs-manager&t=' + Date.now() + '#model=' + encodeURIComponent(a.title) + '&label=' + encodeURIComponent(p.reg + ' · AC#' + p.ac), 'rotationmap');
+  if (w) { try { w.focus(); } catch (e) {} }
+  else aitmToast('The browser blocked the new tab — allow pop-ups for this page.', true);
+}
+
 // ── move airports ──
 function aitmMoveAirports(fromIcao) {
   if (!aitm.plans.length) return;
@@ -1992,6 +2064,18 @@ function aitmCheckData(d) {
         + ' — the legs need ' + Math.round(T / P) + ' × ' + AITM_CODEC.periodName(p.period).toLowerCase() + ' instead of one.', pi);
     }
   });
+  // identical flight plans: the same legs at the same times over the whole period (registration, AC#,
+  // altitudes and % aside) — two aircraft flying the same rotation side by side
+  var dups = [], bySig = {};
+  d.plans.forEach(function (p, pi) {
+    if (!p.legs.length) return;
+    var sig = String(p.period).toLowerCase() + '|' + p.legs.map(function (l) { return [l.dep, l.arr, l.to, String(l.fnum).replace(/^0+/, ''), l.tng ? 1 : 0].join('/'); }).sort().join(';');
+    if (bySig[sig] == null) { bySig[sig] = pi; return; }
+    var k = bySig[sig], q = d.plans[k];
+    dups.push({ keep: k, drop: pi });
+    E(p.reg + ' (AC#' + p.ac + ') flies exactly the same rotation as ' + q.reg + ' (AC#' + q.ac + ') — '
+      + p.legs.length + ' legs at the same times. Delete one of them.', pi);
+  });
   var use = {}; d.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
   d.ac.forEach(function (a) {
     if (!use[a.n]) return;
@@ -2000,7 +2084,7 @@ function aitmCheckData(d) {
     else if (aitm.fleet.length && !aitmInstalled(a.title)) W('AC#' + a.n + ' “' + a.title + '” is not among your installed aircraft — the simulator will not show it.');
     if (!a.speed) W('AC#' + a.n + ': no cruise speed — 450 kts is used.');
   });
-  return { errs: errs, warns: warns, items: items, unused: d.ac.filter(function (a) { return !use[a.n]; }) };
+  return { errs: errs, warns: warns, items: items, dups: dups, unused: d.ac.filter(function (a) { return !use[a.n]; }) };
 }
 function aitmShowCheck() { aitmCheckPlans(); }
 function aitmShowCheckOld() {
