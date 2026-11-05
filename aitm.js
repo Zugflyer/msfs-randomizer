@@ -523,6 +523,34 @@ var AITM_KEY = 'aitm_state_v1';
 // AC# numbers are kept as in the files (they may have gaps, e.g. 100, 110, 120 …)
 function aitmAcByN(n) { for (var i = 0; i < aitm.ac.length; i++) if (aitm.ac[i].n === n) return aitm.ac[i]; return null; }
 function aitmNormAc() { aitm.ac.forEach(function (a, i) { if (a.n == null) a.n = i + 1; }); aitm.ac.sort(function (x, y) { return x.n - y.n; }); }
+// The same aircraft (title) under several AC#: one AC# is enough — the lowest keeps it, the flight plans of
+// the others move there and those AC# are removed. Numbers 1…n without gaps stay without gaps (and a sorted
+// list stays sorted). Returns the merges [{n, into, title, fps}] (empty: nothing to do).
+function aitmConsolidateAc() {
+  var first = {}, map = {}, gone = [];
+  aitm.ac.forEach(function (a) {
+    var k = String(a.title || '').trim().toLowerCase(); if (!k) return;
+    if (first[k]) { map[a.n] = first[k].n; gone.push(a); if (!first[k].speed && a.speed) first[k].speed = a.speed; }
+    else first[k] = a;
+  });
+  if (!gone.length) return [];
+  var wasSorted = aitmSortedOk();
+  var nums = aitm.ac.map(function (a) { return a.n; }).sort(function (x, y) { return x - y; });
+  var noGaps = nums.every(function (v, k) { return v === k + 1; });
+  var out = gone.map(function (a) { return { n: a.n, into: map[a.n], title: a.title, fps: aitm.plans.filter(function (p) { return p.ac === a.n; }).length }; });
+  aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+  aitm.ac = aitm.ac.filter(function (a) { return gone.indexOf(a) < 0; });
+  if (noGaps) {
+    var ren = {}; aitm.ac.forEach(function (a, k) { ren[a.n] = k + 1; a.n = k + 1; });
+    aitm.plans.forEach(function (p) { if (ren[p.ac]) p.ac = ren[p.ac]; });
+    out.forEach(function (m) { m.into = ren[m.into] || m.into; });
+  }
+  if (wasSorted) aitm.sortSig = aitmSortSig();
+  return out;
+}
+function aitmConsolidateMsg(m) {
+  return m.map(function (x) { return 'AC#' + x.n + ' was the same aircraft as AC#' + x.into + ' (' + x.title + ')' + (x.fps ? ' — its ' + x.fps + ' flight plan' + (x.fps === 1 ? '' : 's') + ' now fl' + (x.fps === 1 ? 'ies' : 'y') + ' AC#' + x.into : ''); }).join(' · ');
+}
 // AC list from the Aircraft file entries, plus empty ones for numbers the flight plans use but the file lacks
 function aitmAcList(acs, plans, extra) {
   var by = {};
@@ -820,6 +848,8 @@ function aitmGuessCode() {
 function aitmLoad(d) {
   aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {}; aitm.sortSig = ''; aitm.checkSig = ''; aitm.compiledSig = ''; aitm.checkErrs = 0; aitm._srcDir = null;
   aitmNormAc();
+  var merged = aitmConsolidateAc();                         // the same aircraft twice → one AC#
+  if (merged.length) setTimeout(function () { aitmToast('Merged: ' + aitmConsolidateMsg(merged) + '.'); }, 50);
   aitm.fileBase = d.base || ''; aitm.source = d.source || '';
   aitm.name = d.name || ''; aitm.period = d.period || ''; aitm.code = d.code || '';
   // an airport plan (file named after an ICAO code, or AIRPORT mode of the AI Generator): many airlines
@@ -1381,8 +1411,10 @@ function aitmAssign(i, ks) {
   });
   if (!done.length) return;
   aitm.fleetSel = []; aitm.fleetQ = null;
-  aitmSave(); aitmRenderAircraft(); aitmRenderLegs(); aitmRenderFleet();
-  aitmToast(done.length === 1 ? 'AC#' + done[0] + ' replaced.' : done.length + ' aircraft replaced: AC#' + done.sort(function (a, b) { return a - b; }).join(', #') + '.');
+  var merged = aitmConsolidateAc();                         // now the same aircraft as another AC# → one AC#
+  aitmSave(); aitmRenderAll();
+  aitmToast((done.length === 1 ? 'AC#' + done[0] + ' replaced.' : done.length + ' aircraft replaced: AC#' + done.sort(function (a, b) { return a - b; }).join(', #') + '.')
+    + (merged.length ? ' Merged: ' + aitmConsolidateMsg(merged) + '.' : ''));
 }
 function aitmAcMenu(pi, anchor) {
   var m = document.getElementById('aitm-menu'); if (m) m.remove();
@@ -1639,6 +1671,8 @@ function aitmSortBySize() {
 }
 // Check flightplans: errors, warnings (click one to select its flight plan in Legs), aircraft without flights
 function aitmCheckPlans() {
+  var merged = aitmConsolidateAc();
+  if (merged.length) { aitmSave(); aitmRenderAll(); aitmToast('Merged: ' + aitmConsolidateMsg(merged) + '.'); }
   var c = aitmCheck(), nLegs = 0;
   aitm.checkErrs = c.errs.length;
   aitm.checkSig = c.errs.length || !aitm.plans.length ? '' : aitmPlanSig();
@@ -1889,6 +1923,8 @@ function aitmAcDialog(i) {
 }
 function aitmSplit(i, title) {
   title = String(title || '').trim(); if (!title) return;
+  var same = aitm.ac.filter(function (a) { return String(a.title).trim().toLowerCase() === title.toLowerCase(); })[0];
+  if (same) { aitmToast('AC#' + same.n + ' already is “' + title + '” — give the new aircraft another title (e.g. add a registration).', true); return; }
   var src = aitm.ac[i], nn = src.n + 1;
   var inst = aitmInstalled(title);
   if (aitmAcByN(nn)) {   // the number is taken: it and all following ones move up by one
