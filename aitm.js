@@ -1267,10 +1267,14 @@ function aitmRenderAircraft() {
 // hits of the fleet search; aitm._fleetRank[i]: 0 = title starts with the first word, 1 = all words in the title,
 // 2 = found only in type, airline, codes, folder … (AIG's model folders are called "FAIB_…", so "FAIB" matched
 // thousands of AIG liveries before your own "FAIB B742 VRG"). aitm.fleetSrc: 'all' | 'own' | 'aig'
-function aitmFleetMatches(q) {
-  var toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean), src = aitm.fleetSrc || 'all', rank = {};
+// AIG model: a livery in AIG's package, or AIG's model copied into one of your own packages
+// (folder "AIG_A330-200_PW", title "AIG A332 CTM_…") - the AIG switch shows both, Own shows everything outside AIG's package
+function aitmIsAigModel(e) { return e.src === 'AIG' || /^AIG(AIM)?_/i.test(e.folder || '') || /^AIG(AIM)?[ _]/i.test(e.title || ''); }
+function aitmFleetMatches(q, srcOverride) {
+  var toks = String(q || '').toLowerCase().split(/\s+/).filter(Boolean), src = srcOverride || aitm.fleetSrc || 'all', rank = {};
   var hits = aitm.fleet.filter(function (e) {
-    if (src !== 'all' && (src === 'aig') !== (e.src === 'AIG')) return false;
+    if (src === 'aig' && !aitmIsAigModel(e)) return false;
+    if (src === 'own' && e.src === 'AIG') return false;
     if (!toks.length) { rank[e.i] = 1; return true; }
     var t = String(e.title || '').toLowerCase();
     var hay = (t + ' ' + e.uiType + ' ' + e.uiVar + ' ' + e.airline + ' ' + e.sig + ' ' + e.icaoType + ' ' + e.codes + ' ' + e.folder + ' ' + e.atcAirline + ' ' + aitmTypeName(e.sig)).toLowerCase();
@@ -1302,13 +1306,16 @@ function aitmRenderFleet() {
   if (aitm.fleetSrc == null) { try { aitm.fleetSrc = localStorage.getItem('aitm_fleet_src') || 'all'; } catch (e) { aitm.fleetSrc = 'all'; } }
   var sw = document.getElementById('aitm-fleet-src');
   if (sw) {
-    var nOwn = aitm.fleet.filter(function (e) { return e.src !== 'AIG'; }).length;
-    sw.innerHTML = [['all', 'All', aitm.fleet.length], ['own', 'Own', nOwn], ['aig', 'AIG', aitm.fleet.length - nOwn]].map(function (o) {
+    var nOwn = aitm.fleet.filter(function (e) { return e.src !== 'AIG'; }).length, nAig = aitm.fleet.filter(aitmIsAigModel).length;
+    sw.innerHTML = [['all', 'All', aitm.fleet.length], ['own', 'Own', nOwn], ['aig', 'AIG', nAig]].map(function (o) {
       var on = aitm.fleetSrc === o[0];
-      return '<button onclick="aitmSetFleetSrc(\'' + o[0] + '\')" title="' + (o[0] === 'all' ? 'All installed liveries' : o[0] === 'own' ? 'Liveries outside AIG’s package (your own, IVAO, FSLTL …)' : 'AIG liveries') + ' — ' + o[2] + '" style="padding:2px 8px;font-size:10px;border:1px solid ' + (on ? '#58a6ff' : 'var(--bdr2)') + ';background:' + (on ? 'rgba(88,166,255,.15)' : 'transparent') + ';color:' + (on ? '#58a6ff' : 'var(--txt3)') + ';cursor:pointer;margin-left:-1px;' + (o[0] === 'all' ? 'border-radius:4px 0 0 4px;' : o[0] === 'aig' ? 'border-radius:0 4px 4px 0;' : '') + '">' + o[1] + '</button>';
+      return '<button onclick="aitmSetFleetSrc(\'' + o[0] + '\')" title="' + (o[0] === 'all' ? 'All installed liveries' : o[0] === 'own' ? 'Liveries outside AIG’s package (your own, IVAO, FSLTL …)' : 'AIG models: AIG’s package and AIG models in your own packages') + ' — ' + o[2] + '" style="padding:2px 8px;font-size:10px;border:1px solid ' + (on ? '#58a6ff' : 'var(--bdr2)') + ';background:' + (on ? 'rgba(88,166,255,.15)' : 'transparent') + ';color:' + (on ? '#58a6ff' : 'var(--txt3)') + ';cursor:pointer;margin-left:-1px;' + (o[0] === 'all' ? 'border-radius:4px 0 0 4px;' : o[0] === 'aig' ? 'border-radius:0 4px 4px 0;' : '') + '">' + o[1] + '</button>';
     }).join('');
   }
+  // the switch hides some hits: say so, with a link to All
+  var nAll = (aitm.fleetSrc && aitm.fleetSrc !== 'all') ? aitmFleetMatches(q, 'all').length : 0;
   var hits = aitmFleetMatches(q), rank = aitm._fleetRank || {};
+  var hidden = Math.max(0, nAll - hits.length);
   // the best fitting livery for each AC# first, in AC# order — select them all and drag them over at once
   var best = aitmBestMatches(), top = [], seen = {};
   best.forEach(function (e, i) { if (e && !seen[e.i]) { seen[e.i] = 1; top.push({ e: e, ac: aitm.ac[i].n }); } });
@@ -1329,7 +1336,8 @@ function aitmRenderFleet() {
       + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (used ? 'color:#3fb950;' : '') + '">' + aitmEsc(e.title) + '</span>'
       + '<span style="font-size:10px;color:var(--txt3);white-space:nowrap;">' + aitmEsc(e.sig || '') + (e.speed ? ' ' + e.speed : '') + '</span>'
       + '<span class="aitm-3d" title="3D view of this livery">3D</span></div>';
-  }).join('') || '<div style="padding:12px;color:var(--txt3);font-size:12px;">Nothing matches “' + aitmEsc(q) + '”.</div>';
+  }).join('') + (hidden ? '<div style="padding:8px 12px;color:#f0b400;font-size:12px;">' + hidden + ' more under <a href="#" style="color:#58a6ff;" onclick="aitmSetFleetSrc(\'all\');return false;">All</a> — the ' + (aitm.fleetSrc === 'aig' ? 'AIG' : 'Own') + ' switch hides them.</div>'
+    : shown.length ? '' : '<div style="padding:12px;color:var(--txt3);font-size:12px;">Nothing matches “' + aitmEsc(q) + '”.</div>');
   if (st) st.title = hits.length > shown.length ? 'Only the first ' + shown.length + ' are listed — type more to narrow the search' : '';
   if (st) st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' · first ' + shown.length : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
 }
@@ -1893,11 +1901,11 @@ async function aitmUpdateInstalled(opt) {
   aitmFleetIndex(); aitmRenderAll();
   var lost = aitm.ac.filter(function (a) { return wasInst[a.n] && !aitmInstalled(a.title); });
   var missing = aitm.ac.filter(function (a) { return !aitmInstalled(a.title); });
-  var added = hadFleet ? entries.filter(function (e) { return !oldTitles[String(e.title).toLowerCase()]; }).length : 0;
+  var addedL = hadFleet ? entries.filter(function (e) { return !oldTitles[String(e.title).toLowerCase()]; }) : [], added = addedL.length;
   aitm._lastRead = { root: 'Rotation Map', at: Date.now(), liveries: entries.length, added: added, lost: lost.map(function (a) { return { n: a.n, title: a.title }; }) };
   if (opt.silent && !lost.length) return;
   aitmToast('✓ Installed aircraft updated: ' + entries.length + ' liveries in ' + aitm.sources.length + ' package' + (aitm.sources.length === 1 ? '' : 's')
-    + (added ? ' · ' + added + ' new title' + (added === 1 ? '' : 's') : '')
+    + (added ? ' · ' + added + ' new: ' + addedL.slice(0, 4).map(function (e) { return e.title; }).join(', ') + (added > 4 ? ' …' : '') : hadFleet ? ' · no new titles' : '')
     + (missing.length ? ' · not installed (red): ' + missing.map(function (a) { return 'AC#' + a.n + ' ' + a.title; }).join(', ') : ''), missing.length > 0);
 }
 function aitmRmProblem(err, msg, wasFetch) {
