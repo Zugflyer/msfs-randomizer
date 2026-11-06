@@ -1225,7 +1225,8 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     <div id="view-logbook" style="display:flex;flex:1;flex-direction:column;overflow:hidden;" class="logbook-page">
       <div class="logbook-toolbar">
         <span class="filter-label">Filter:</span>
-        <input class="filter-input" id="lb-filter-input" placeholder="ICAO, city, airline..." oninput="applyLogbookFilter()" style="max-width:180px;">
+        <!-- not a login field: Chrome filled the saved login name in here (readonly until clicked, no autocomplete) -->
+        <input class="filter-input" id="lb-filter-input" type="search" name="lb-filter-q" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="ICAO, city, airline..." oninput="this.dataset.typed='1';applyLogbookFilter()" style="max-width:180px;">
         <span id="lb-filter-count" style="font-size:11px;color:var(--txt2);"></span>
         <button class="btn-toolbar-purple" onclick="showAddLogbookRow()">⊕ Add leg to logbook</button>
 
@@ -1449,12 +1450,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
     
     <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">Anthropic API Key</div>
     <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">For block time lookup. Get yours at <a href="https://console.anthropic.com" target="_blank" style="color:var(--acc);">console.anthropic.com</a></div>
-    <input id="apikey-input" type="password" placeholder="sk-ant-..." 
+    <input id="apikey-input" type="password" autocomplete="new-password" placeholder="sk-ant-..." 
       style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
     
     <div style="font-size:11px;font-weight:700;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;">GitHub Token</div>
     <div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">For uploading airline logos directly from the app. Classic token with <code>repo</code> scope.</div>
-    <input id="githubtoken-input" type="password" placeholder="ghp_..." 
+    <input id="githubtoken-input" type="password" autocomplete="new-password" placeholder="ghp_..." 
       style="width:100%;font-size:13px;padding:8px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:monospace;box-sizing:border-box;margin-bottom:16px;">
     
     <div style="display:flex;gap:8px;justify-content:flex-end;">
@@ -4789,7 +4790,9 @@ let lbSelectedAirport = null; // ICAO of selected airport on logbook map
 
 // Default views of the two lower maps (fitted once, to the size of their boxes; both can be moved)
 var LB_WORLD_BOUNDS = [[-58, -168], [78, 192]];   // the whole world once
-var LB_EU_BOUNDS = [[35.5, -24], [71.5, 38]];     // west: Iceland · south: Spain, Greece · north: North Cape
+// Europe: the user's view of 6.11.2026 (Ireland/Portugal … Turkey, Stockholm … Malta): centre 49.2, 8.7, zoom 4.4
+// on a box of 870 × 583 px — on another box size the zoom follows, so the same area is shown
+var LB_EU_VIEW = { center: [49.2, 8.7], zoom: 4.4, w: 870, h: 583 };
 var lbFitted = { world: false, eu: false };
 // World map width = what one world needs at the box height (≈ 1.8 × height), 40–66 % of the width;
 // Europe takes the rest. Fits the default views once the boxes have a size.
@@ -4799,7 +4802,9 @@ function lbLayoutMaps() {
   var W = box.clientWidth, H = box.clientHeight; if (!W || !H) return;
   w.style.width = Math.round(Math.max(W * 0.4, Math.min(W * 0.66, H * 1.8))) + 'px';
   if (lbMap) { lbMap.invalidateSize(); if (!lbFitted.world) { lbMap.fitBounds(LB_WORLD_BOUNDS); lbFitted.world = true; } }
-  if (lbMapEu) { lbMapEu.invalidateSize(); if (!lbFitted.eu) { lbMapEu.fitBounds(LB_EU_BOUNDS); lbFitted.eu = true; } }
+  if (lbMapEu) { lbMapEu.invalidateSize(); if (!lbFitted.eu) {
+    var eb = document.getElementById('lb-map-eu'), V = LB_EU_VIEW;
+    lbMapEu.setView(V.center, V.zoom + Math.log2(Math.min(eb.clientWidth / V.w, eb.clientHeight / V.h))); lbFitted.eu = true; } }
 }
 // small readout of centre and zoom (bottom left) — to agree on the default views from a screenshot
 function lbViewInfo(map) {
@@ -4810,6 +4815,11 @@ function lbViewInfo(map) {
   map.on('moveend zoomend', upd); upd();
 }
 window.addEventListener('resize', function () { lbLayoutMaps(); });
+// the browser's autofill must not filter the logbook: a value nobody typed is cleared again
+[600, 1500, 3000].forEach(function (ms) { setTimeout(function () {
+  var f = document.getElementById('lb-filter-input');
+  if (f && f.value && !f.dataset.typed && document.activeElement !== f) { f.value = ''; try { applyLogbookFilter(); } catch (e) {} }
+}, ms); });
 
 function initLbMapEu() {
   const el = document.getElementById('lb-map-eu');
@@ -4819,7 +4829,6 @@ function initLbMapEu() {
     center: [53, 7], zoom: 4, minZoom: 2, maxZoom: 12, zoomSnap: 0.1, zoomDelta: 0.5,
     zoomControl: true, dragging: true, scrollWheelZoom: true
   });
-  lbViewInfo(lbMapEu);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
@@ -4910,7 +4919,7 @@ function lbSelectAirport(icao) {
   lbSelectedAirport = icao;
   // Simply put ICAO into the filter input and trigger the existing filter
   var filterInput = document.getElementById('lb-filter-input');
-  if (filterInput) { filterInput.value = icao; }
+  if (filterInput) { filterInput.value = icao; filterInput.dataset.typed = '1'; }
   applyLogbookFilter();
   drawLbMap();
 }

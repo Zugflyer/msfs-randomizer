@@ -2232,13 +2232,13 @@ function aitmDownload(data, name, type) {
 }
 // Save txt: Flightplans_/Aircraft_/Airports_<name>.txt - name and folder chosen in a window. Folders offered: the one the
 // plan was opened from, the one in "CRE flightplans" that holds Flightplans_<name>.txt, the txt folder, another one.
-// Files that exist are replaced; the old ones are kept as *.txt.bak next to them.
+// Files that exist are replaced; the old ones are kept in a Backups folder (aitmTxtBackupDir).
 async function aitmFindTxtDir(root, base) {
   var want = ('flightplans_' + base + '.txt').toLowerCase();
   async function walk(d, path, depth) {
     for await (var e of d.values()) {
       if (e.kind === 'file' && e.name.toLowerCase() === want) return { h: d, path: path };
-      if (e.kind === 'directory' && depth > 0) { var r = await walk(e, path.concat([e.name]), depth - 1); if (r) return r; }
+      if (e.kind === 'directory' && depth > 0 && !/^backups$/i.test(e.name)) { var r = await walk(e, path.concat([e.name]), depth - 1); if (r) return r; }
     }
     return null;
   }
@@ -2271,6 +2271,26 @@ async function aitmSaveTxt() {
   card.querySelectorAll('input[name=aitm-sv-dir]').forEach(function (r) { r.addEventListener('change', function () { aitm._svConfirm = null; card.querySelector('#aitm-sv-msg').textContent = ''; }); });
   inp.focus(); inp.select();
 }
+// Backups of replaced txt files are not kept next to the flight plans: they go to one folder "Backups" in
+// "CRE flightplans" (the Installation Manager's flight plan folder), else to a "Backups" folder inside the
+// folder saved to. Names: Flightplans_X_<yyyymmdd_hhmm>.txt.bak (.bak: no tool takes them for a flight plan).
+async function aitmTxtBackupDir(saveDir) {
+  var root = await aitmKvGet('fpRoot');
+  if (root) { try { if (await aitmPermOk(root, true)) return { h: await root.getDirectoryHandle('Backups', { create: true }), label: root.name + '\\Backups' }; } catch (e) {} }
+  return { h: await saveDir.getDirectoryHandle('Backups', { create: true }), label: saveDir.name + '\\Backups' };
+}
+function aitmBakName(name, when) {
+  var d = when ? new Date(when) : new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+  return name.replace(/\.txt$/i, '') + '_' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' + p(d.getHours()) + p(d.getMinutes()) + '.txt.bak';
+}
+// a name in the Backups folder that is not taken yet (…_2, …_3)
+async function aitmFreeName(dir, name) {
+  for (var k = 1; k < 100; k++) {
+    var n = k === 1 ? name : name.replace(/\.txt\.bak$/i, '_' + k + '.txt.bak');
+    try { await dir.getFileHandle(n); } catch (e) { return n; }
+  }
+  return name;
+}
 async function aitmSaveTxtGo(places) {
   var msg = document.getElementById('aitm-sv-msg'), say = function (t, col) { if (msg) { msg.innerHTML = t; msg.style.color = col || 'var(--txt2)'; } };
   var base = String((document.getElementById('aitm-sv-name') || {}).value || '').trim().replace(/[\\/:*?"<>|]/g, '');
@@ -2293,15 +2313,24 @@ async function aitmSaveTxtGo(places) {
   var key = label + '|' + base;
   if (exist.length && aitm._svConfirm !== key) {
     aitm._svConfirm = key;
-    say(exist.join(', ') + (exist.length === 1 ? ' already exists' : ' already exist') + ' in ' + aitmEsc(label) + '. Click <b>Save</b> again to replace — the old ' + (exist.length === 1 ? 'file is' : 'files are') + ' kept as <b>.txt.bak</b>.', '#f0b400');
+    say(exist.join(', ') + (exist.length === 1 ? ' already exists' : ' already exist') + ' in ' + aitmEsc(label) + '. Click <b>Save</b> again to replace — the old ' + (exist.length === 1 ? 'file is' : 'files are') + ' kept in the <b>Backups</b> folder.', '#f0b400');
     return;
   }
+  var bak = null, moved = 0;
   try {
+    if (exist.length) bak = await aitmTxtBackupDir(dir);
     for (var j = 0; j < files.length; j++) {
       if (exist.indexOf(files[j][0]) >= 0) {
-        var old = await (await (await dir.getFileHandle(files[j][0])).getFile()).arrayBuffer();
-        var bw = await (await dir.getFileHandle(files[j][0] + '.bak', { create: true })).createWritable(); await bw.write(old); await bw.close();
+        var oldF = await (await dir.getFileHandle(files[j][0])).getFile(), old = await oldF.arrayBuffer();
+        var bw = await (await bak.h.getFileHandle(await aitmFreeName(bak.h, aitmBakName(files[j][0])), { create: true })).createWritable(); await bw.write(old); await bw.close();
       }
+      // an old-style backup next to the flight plans (<name>.txt.bak) moves into the Backups folder too
+      try {
+        var ob = await dir.getFileHandle(files[j][0] + '.bak'), obF = await ob.getFile();
+        if (!bak) bak = await aitmTxtBackupDir(dir);
+        var ow = await (await bak.h.getFileHandle(await aitmFreeName(bak.h, aitmBakName(files[j][0], obF.lastModified)), { create: true })).createWritable(); await ow.write(await obF.arrayBuffer()); await ow.close();
+        await dir.removeEntry(files[j][0] + '.bak'); moved++;
+      } catch (e) {}
       var w = await (await dir.getFileHandle(files[j][0], { create: true })).createWritable();
       await w.write(new Blob([files[j][1]], { type: 'text/plain' })); await w.close();
     }
@@ -2309,7 +2338,8 @@ async function aitmSaveTxtGo(places) {
   aitm._svConfirm = null;
   aitm._srcDir = { h: dir, label: label };
   aitmCloseModal(); rename();
-  aitmToast('✓ ' + files.map(function (f) { return f[0]; }).join(', ') + ' saved in ' + label + (exist.length ? ' (old ones kept as .txt.bak)' : '') + '.');
+  aitmToast('✓ ' + files.map(function (f) { return f[0]; }).join(', ') + ' saved in ' + label + (exist.length ? ' · old ones in ' + bak.label : '')
+    + (moved ? ' · ' + moved + ' old .txt.bak moved there' : '') + '.');
 }
 async function aitmFoldersDialog() {
   var logos = (await aitmKvGet('logoFolders')) || [], out = await aitmKvGet('outFolder'), txt = await aitmKvGet('txtFolder');
@@ -2778,7 +2808,7 @@ async function aitmImScan(msg) {
   var plans = {};
   async function walk(d, path, depth) {
     for await (var e of d.values()) {
-      if (e.kind === 'directory') { if (depth > 0) await walk(e, path.concat([e.name]), depth - 1); continue; }
+      if (e.kind === 'directory') { if (depth > 0 && !/^backups$/i.test(e.name)) await walk(e, path.concat([e.name]), depth - 1); continue; }
       var m = /^(flightplans|aircraft|airports)_(.+)\.txt$/i.exec(e.name); if (!m) continue;
       var key = path.join('/') + '|' + m[2].toLowerCase();
       var x = plans[key] = plans[key] || { name: m[2], path: path.slice(), fp: null, ac: null, ap: null };
