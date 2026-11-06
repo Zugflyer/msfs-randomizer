@@ -1209,18 +1209,38 @@ function aitmLegsTip(i) {
     + '<table style="border-collapse:collapse;font-family:monospace;font-size:11px;color:var(--txt2);">'
     + '<tr style="color:var(--txt3);"><td>#</td><td>Dep</td><td>Route</td><td>Arr</td><td>Block</td><td>Alt</td><td>Flt</td></tr>' + rows + '</table>';
 }
+// departures per week from each airport (a leg departs from the previous leg's destination; DAY plans count 7×)
+function aitmApDepCounts() {
+  var cnt = {};
+  aitm.plans.forEach(function (p) {
+    var n = p.legs.length, P = 10080;
+    try { P = AITM_CODEC.periodOf(p.period)[1] || 10080; } catch (e) {}
+    p.legs.forEach(function (l, j) {
+      if (l.dep == null) return;
+      var from = p.legs[(j - 1 + n) % n].to;
+      cnt[from] = (cnt[from] || 0) + 10080 / P;
+    });
+  });
+  return cnt;
+}
+// columns: ICAO · city · UTC offset · departures per week (both right-aligned, fixed width, so they line up)
+var AITM_AP_COLS = 'display:grid;grid-template-columns:44px minmax(0,1fr) 46px 38px;align-items:center;column-gap:8px;';
 function aitmRenderAirports() {
   var el = document.getElementById('aitm-aps'); if (!el) return;
-  var list = aitmUsedAirports();
+  var list = aitmUsedAirports(), cnt = aitmApDepCounts();
   var c = document.getElementById('aitm-aps-count'); if (c) c.textContent = list.length ? list.length : '';
-  el.innerHTML = list.map(function (icao) {
-    var a = aitmAp(icao), o = aitmOffset(icao);
+  var fmtN = function (x) { x = Math.round((x || 0) * 10) / 10; return String(x); };
+  var head = '<div style="' + AITM_AP_COLS + 'position:sticky;top:-4px;z-index:1;background:var(--bg);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--txt3);padding:2px 6px 4px;border-bottom:1px solid var(--bdr);margin-bottom:2px;">'
+    + '<span>ICAO</span><span>City</span><span style="text-align:right;">UTC</span><span style="text-align:right;" title="Departures per week from this airport (arrivals not counted)">Dep</span></div>';
+  el.innerHTML = list.length ? head + list.map(function (icao) {
+    var a = aitmAp(icao), o = aitmOffset(icao), n = cnt[icao] || 0;
     var bad = !a;
-    return '<div class="aitm-ap" data-icao="' + aitmEsc(icao) + '" title="' + aitmEsc((a ? (a.name || '') : 'Unknown airport — no coordinates, cannot be compiled') + '\nDouble-click: flight schedule · right-click: Airport Data and more') + '">'
-      + '<span style="font-family:monospace;font-weight:700;color:' + (bad ? '#f85149' : '#fff') + ';width:44px;">' + aitmEsc(icao) + '</span>'
-      + '<span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt2);">' + aitmEsc(a ? (a.city || a.name) : 'unknown') + '</span>'
-      + '<span style="font-family:monospace;color:var(--txt2);">' + (a ? aitmFmtOff(o) : '') + '</span></div>';
-  }).join('');
+    return '<div class="aitm-ap" data-icao="' + aitmEsc(icao) + '" style="' + AITM_AP_COLS + '" title="' + aitmEsc((a ? (a.name || '') : 'Unknown airport — no coordinates, cannot be compiled') + '\n' + fmtN(n) + ' departure' + (n === 1 ? '' : 's') + ' per week\nDouble-click: flight schedule · right-click: Airport Data and more') + '">'
+      + '<span style="font-family:monospace;font-weight:700;color:' + (bad ? '#f85149' : '#fff') + ';">' + aitmEsc(icao) + '</span>'
+      + '<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt2);">' + aitmEsc(a ? (a.city || a.name) : 'unknown') + '</span>'
+      + '<span style="font-family:monospace;color:var(--txt2);text-align:right;">' + (a ? aitmFmtOff(o) : '') + '</span>'
+      + '<span style="font-family:monospace;text-align:right;color:' + (n ? '#fff' : 'var(--txt3)') + ';">' + fmtN(n) + '</span></div>';
+  }).join('') : '';
 }
 function aitmRenderAircraft() {
   var el = document.getElementById('aitm-acs'); if (!el) return;
