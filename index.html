@@ -1302,11 +1302,14 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             <tbody id="lb-body"></tbody>
           </table>
         </div>
-        <!-- Europa zoom map top-right -->
-        <div id="lb-map-eu" style="flex:1;min-width:280px;background:#0e1117;border-left:1px solid var(--bdr);min-height:220px;"></div>
+        <!-- top right: kept free (something else comes here later) -->
+        <div id="lb-top-free" style="flex:1;min-width:280px;border-left:1px solid var(--bdr);min-height:220px;"></div>
       </div>
-      <!-- World map fills rest -->
-      <div id="lb-map" style="flex:1;min-height:200px;background:#0e1117;"></div>
+      <!-- bottom: the whole world once (left) + Europe zoom (right); the world map's width follows the height (lbLayoutMaps) -->
+      <div id="lb-maps" style="flex:1;min-height:200px;display:flex;overflow:hidden;">
+        <div id="lb-map" style="flex:0 0 auto;width:55%;background:#0e1117;"></div>
+        <div id="lb-map-eu" style="flex:1;min-width:280px;background:#0e1117;border-left:1px solid var(--bdr);"></div>
+      </div>
     </div>
 
     <!-- ═══ DEP/ARR CALCULATOR ═══ -->
@@ -3066,7 +3069,7 @@ function switchView(view) {
 
   // View-specific init
   if (view === 'categories') renderCatView();
-  if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbMap.invalidateSize();drawLbMap();},150); } } else { if (lbSelectedAirport) clearLbSelection(); }
+  if (view === 'logbook') { renderLogbook(); initLbMap(); if (lbMap) { setTimeout(function(){lbLayoutMaps();drawLbMap();},150); } } else { if (lbSelectedAirport) clearLbSelection(); }
   if (view === 'dashboard') {
     if (leafletMap) setTimeout(() => leafletMap.invalidateSize(), 100);
     // Always sync departure to last logbook arrival
@@ -4784,14 +4787,39 @@ let lbMapLayers = [];
 let lbMapEuLayers = [];
 let lbSelectedAirport = null; // ICAO of selected airport on logbook map
 
+// Default views of the two lower maps (fitted once, to the size of their boxes; both can be moved)
+var LB_WORLD_BOUNDS = [[-58, -168], [78, 192]];   // the whole world once
+var LB_EU_BOUNDS = [[35.5, -24], [71.5, 38]];     // west: Iceland · south: Spain, Greece · north: North Cape
+var lbFitted = { world: false, eu: false };
+// World map width = what one world needs at the box height (≈ 1.8 × height), 40–66 % of the width;
+// Europe takes the rest. Fits the default views once the boxes have a size.
+function lbLayoutMaps() {
+  var box = document.getElementById('lb-maps'), w = document.getElementById('lb-map');
+  if (!box || !w) return;
+  var W = box.clientWidth, H = box.clientHeight; if (!W || !H) return;
+  w.style.width = Math.round(Math.max(W * 0.4, Math.min(W * 0.66, H * 1.8))) + 'px';
+  if (lbMap) { lbMap.invalidateSize(); if (!lbFitted.world) { lbMap.fitBounds(LB_WORLD_BOUNDS); lbFitted.world = true; } }
+  if (lbMapEu) { lbMapEu.invalidateSize(); if (!lbFitted.eu) { lbMapEu.fitBounds(LB_EU_BOUNDS); lbFitted.eu = true; } }
+}
+// small readout of centre and zoom (bottom left) — to agree on the default views from a screenshot
+function lbViewInfo(map) {
+  var c = L.control({ position: 'bottomleft' }), d = null;
+  c.onAdd = function () { d = L.DomUtil.create('div'); d.style.cssText = 'font:10px monospace;color:#6e7681;background:rgba(13,17,23,.65);padding:1px 5px;border-radius:3px;pointer-events:none;'; return d; };
+  c.addTo(map);
+  var upd = function () { if (!d) return; var ce = map.getCenter(); d.textContent = ce.lat.toFixed(1) + ', ' + ce.lng.toFixed(1) + ' · zoom ' + map.getZoom().toFixed(2); };
+  map.on('moveend zoomend', upd); upd();
+}
+window.addEventListener('resize', function () { lbLayoutMaps(); });
+
 function initLbMapEu() {
   const el = document.getElementById('lb-map-eu');
   if (!el || lbMapEu) return;
-  // Europe bounds: roughly Portugal/Ireland to Greece
+  // Europe: Iceland … Spain / Greece … as far north as it goes (LB_EU_BOUNDS, fitted in lbLayoutMaps)
   lbMapEu = L.map('lb-map-eu', {
-    center: [48, 15], zoom: 4, minZoom: 2, maxZoom: 12,
+    center: [53, 7], zoom: 4, minZoom: 2, maxZoom: 12, zoomSnap: 0.1, zoomDelta: 0.5,
     zoomControl: true, dragging: true, scrollWheelZoom: true
   });
+  lbViewInfo(lbMapEu);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
@@ -4892,7 +4920,8 @@ function initLbMap() {
   initLbMapEu();
   const el = document.getElementById('lb-map');
   if (!el || lbMap) return;
-  lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true });
+  lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true, zoomSnap: 0.1, zoomDelta: 0.5 });
+  lbViewInfo(lbMap);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
     { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
@@ -4906,6 +4935,7 @@ function initLbMap() {
     }, 100);
   });
   setTimeout(function() { if (lbMap) lbMap.invalidateSize(); }, 200);
+  lbLayoutMaps(); setTimeout(lbLayoutMaps, 250);
 }
 
 function drawLbMap() {
