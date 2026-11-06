@@ -7428,16 +7428,24 @@ function alEstimateAirMin(dep, arr) {
   return Math.round(dist/spd*60);
 }
 // Ground/turnaround time (minutes) by EQP category.
+// military and government versions -> the civil type they are built on, for size classes (VC-25A is a 747-200 …)
+function eqpBaseType(eqp) {
+  const e = String(eqp||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const map = [[/^VC25B/, 'B748'], [/^(VC25A?|E4B)$/, 'B742'], [/^KC10A?$/, 'DC10'], [/^((KC|RC|EC|WC|OC)135[A-Z]?|K35[RE])$/, 'B703'],
+               [/^KC46A?$/, 'B762'], [/^C32[AB]?$/, 'B752'], [/^C40[ABC]?$/, 'B737'], [/^P8[AI]$/, 'B738'], [/^(KC30A?|VOYAGER|A330MRTT)$/, 'A332']];
+  for (const [re, t] of map) if (re.test(e)) return t;
+  return e;
+}
 function alGroundTime(eqp, leg) {
   // explicit per-leg override wins
   if (leg && leg.groundOverride!=null && leg.groundOverride!=='' && !isNaN(parseInt(leg.groundOverride))) {
     return parseInt(leg.groundOverride);
   }
-  const e = String(eqp||'').toUpperCase().replace(/[^A-Z0-9]/g,'');
+  const e = eqpBaseType(eqp);
   if (!e) return 45;
   // Heavies / widebodies
-  if (/^(A30|A31|A33|A34|A35|A38|B74|B76|B77|B78|B767|B777|B787|IL96|MD11|A330|A340|A350|A380|A300|A310)/.test(e)
-      || /^(764|772|773|77W|77L|763|762|781|788|789|332|333|339|342|343|346|351|359|35K|388|781)/.test(e)) return 100;
+  if (/^(A30|A31|A33|A34|A35|A38|B74|B76|B77|B78|B767|B777|B787|IL96|IL86|MD11|DC10|L101|A330|A340|A350|A380|A300|A310|A3ST|A124|A225)/.test(e)
+      || /^(764|772|773|77W|77L|763|762|781|788|789|332|333|339|342|343|346|351|359|35K|388|781|D10|L10|M11|74[1-8LH])$/.test(e)) return 100;
   // Commuters / regional turboprops & small RJ
   if (/^(DH8|DHC|AT4|AT7|ATR|E13|E14|E17|E45|CRJ|CR2|CR7|CR9|SF3|SAAB|J32|J41|BE|D38|EM2|E120|E110|L41|C208|BNI|DO228|F50)/.test(e)) return 25;
   // Default: mainline narrowbody (A320/B737 family, etc.)
@@ -11171,7 +11179,7 @@ function buildTToolsData(acNumStart) {
   const acNumOf={}; types.forEach((t,i)=>{ acNumOf[t.key]=acNumStart+i; });
 
   const paxFor = eqp => {
-    const e=(eqp||'').toUpperCase();
+    const e=eqpBaseType(eqp);
     if(/A35|A33|A34|A38|B74|B77|B78|B76/.test(e)) return 300;
     if(/A30|A31/.test(e)) return 250;
     return 180;
@@ -11230,10 +11238,170 @@ function generateTToolsFromRotations() {
 }
 
 // ── Merge into an existing flightplan ──
-function openMergeDialog() {
-  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
-  const check = buildTToolsData(1);
-  if(!check){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+// Chrome: the flight plan to merge into is picked from a list of the Flightplans_*.txt in one folder (the AI Traffic
+// Manager's "CRE flightplans", or a folder chosen here once and remembered). One click writes Flightplans_X.txt and
+// Aircraft_X.txt back into the folder they are in; the old versions go to the Backups folder (as in the AI Traffic Manager).
+// Other browsers (no folder access): the old dialog - pick both files, both are downloaded.
+let rotMerge = { rows: [], sel: -1, root: null, confirm: null };
+function rotMergeReady(){
+  if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return false; }
+  if(!buildTToolsData(1)){ alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return false; }
+  return true;
+}
+async function openMergeDialog() {
+  if(!rotMergeReady()) return;
+  if(!window.showDirectoryPicker || typeof aitmKvGet!=='function'){ openMergeDialogLegacy(); return; }
+  rotMerge = { rows: [], sel: -1, root: null, confirm: null };
+  const card = aitmModal('Merge into existing flightplan',
+    '<div id="rmg-folder" style="font-size:12px;color:var(--txt2);margin-bottom:8px;"></div>'
+    +'<input id="rmg-q" class="aitm-in" placeholder="Filter …" autocomplete="off" style="width:100%;box-sizing:border-box;margin-bottom:6px;">'
+    +'<div id="rmg-list" style="height:300px;overflow:auto;border:1px solid var(--bdr);border-radius:8px;font-size:12px;"></div>'
+    +'<div id="rmg-info" style="font-size:11px;color:var(--txt3);margin-top:8px;min-height:14px;line-height:1.5;"></div>'
+    +'<div id="rmg-msg" style="font-size:11px;margin-top:6px;min-height:14px;line-height:1.5;"></div>'
+    +'<div style="margin-top:6px;font-size:11px;"><a href="#" id="rmg-legacy" style="color:var(--txt3);">Pick the two files by hand and download them instead</a></div>',
+    [['Merge & save', rotMergeGo, false, '#238636']], true);
+  card.style.maxWidth='640px';
+  card.querySelector('#rmg-q').addEventListener('input', rotMergeRenderList);
+  card.querySelector('#rmg-legacy').onclick=e=>{ e.preventDefault(); aitmCloseModal(); openMergeDialogLegacy(); };
+  card.querySelector('#rmg-list').addEventListener('click', e=>{ const r=e.target.closest('[data-i]'); if(!r) return; rotMerge.sel=+r.dataset.i; rotMerge.confirm=null; rotMergeSay(''); rotMergeRenderList(); });
+  card.querySelector('#rmg-list').addEventListener('dblclick', e=>{ if(e.target.closest('[data-i]')) rotMergeGo(); });
+  await rotMergeLoadRoot(true);
+}
+async function rotMergeLoadRoot(ask) {
+  const own = await aitmKvGet('rotMergeDir'), fp = await aitmKvGet('fpRoot');
+  rotMerge.root = own || fp || null; rotMerge.own = !!own; rotMerge.fp = fp || null;
+  rotMerge.rows = []; rotMerge.sel = -1;
+  const list = document.getElementById('rmg-list'); if(!list) return;
+  if(!rotMerge.root){ rotMergeRenderFolder(); list.innerHTML='<div style="padding:14px;color:var(--txt2);line-height:1.6;">Choose the folder with your flight plans once (e.g. <b>CRE flightplans</b>) — it is remembered.<br><button class="aitm-btn" style="margin-top:8px;" onclick="rotMergePickFolder()">Choose folder…</button></div>'; return; }
+  rotMergeRenderFolder();
+  let ok = (await rotMerge.root.queryPermission({mode:'readwrite'}))==='granted';
+  if(!ok && ask) ok = await aitmPermOk(rotMerge.root, true);
+  if(!ok){ list.innerHTML='<div style="padding:14px;color:var(--txt2);">Chrome needs your OK to read and write in <b>'+aitmEsc(rotMerge.root.name)+'</b>.<br><button class="aitm-btn" style="margin-top:8px;" onclick="aitmPermOk(rotMerge.root,true).then(function(ok){ if(ok) rotMergeLoadRoot(false); })">Allow</button></div>'; return; }
+  list.innerHTML='<div style="padding:14px;color:var(--txt3);">Looking for flight plans …</div>';
+  const rows=[];
+  async function walk(d, path, depth){
+    const files={}, dirs=[];
+    for await (const e of d.values()){
+      if(e.kind==='directory'){ if(depth>0 && !/^backups$/i.test(e.name)) dirs.push(e); continue; }
+      files[e.name.toLowerCase()]=e;
+    }
+    for(const k of Object.keys(files)){
+      const m=/^flightplans_(.+)\.txt$/i.exec(files[k].name); if(!m) continue;
+      const fpH=files[k], acH=files[('aircraft_'+m[1]+'.txt').toLowerCase()]||null;
+      let date=0; try{ date=(await fpH.getFile()).lastModified; }catch(e){}
+      rows.push({ name:m[1], path:path.slice(), dir:d, fpH, acH, date });
+    }
+    for(const e of dirs) await walk(e, path.concat([e.name]), depth-1);
+  }
+  try{ await walk(rotMerge.root, [], 4); }catch(e){ list.innerHTML='<div style="padding:14px;color:#f85149;">Could not read the folder: '+aitmEsc(e.message)+'</div>'; return; }
+  rows.sort((a,b)=>a.name.toLowerCase().localeCompare(b.name.toLowerCase()) || a.path.join('/').localeCompare(b.path.join('/')));
+  rotMerge.rows=rows;
+  const last=(localStorage.getItem('rot_merge_target')||'').toLowerCase();
+  rotMerge.sel=rows.findIndex(r=>(r.path.join('/')+'|'+r.name).toLowerCase()===last);
+  rotMergeRenderList(true);
+}
+function rotMergeRenderFolder(){
+  const el=document.getElementById('rmg-folder'); if(!el) return;
+  const r=rotMerge.root;
+  el.innerHTML = r ? 'Folder <b style="color:#fff;">'+aitmEsc(r.name)+'</b> <span style="color:var(--txt3);">· '+(rotMerge.own?'chosen here':'from the AI Traffic Manager')+'</span>'
+      +' <button class="aitm-btn" style="padding:2px 10px;margin-left:6px;" onclick="rotMergePickFolder()">Other folder…</button>'
+      +(rotMerge.own && rotMerge.fp ? ' <button class="aitm-btn" style="padding:2px 10px;" onclick="aitmKvSet(\'rotMergeDir\',null).then(function(){rotMergeLoadRoot(true);})">Use '+aitmEsc(rotMerge.fp.name)+'</button>' : '')
+    : '';
+}
+async function rotMergePickFolder(){
+  let h; try{ h=await window.showDirectoryPicker({ id:'rot-merge', mode:'readwrite', startIn: rotMerge.root||undefined }); }catch(e){ return; }
+  await aitmKvSet('rotMergeDir', h); rotMergeSay(''); await rotMergeLoadRoot(false);
+}
+function rotMergeSay(t, col){ const m=document.getElementById('rmg-msg'); if(m){ m.innerHTML=t; m.style.color=col||'var(--txt2)'; } }
+function rotMergeRenderList(scroll){
+  const list=document.getElementById('rmg-list'); if(!list) return;
+  const q=((document.getElementById('rmg-q')||{}).value||'').toLowerCase().split(/\s+/).filter(Boolean);
+  const fmtD=t=>{ if(!t) return ''; const d=new Date(t), p=n=>String(n).padStart(2,'0'); return p(d.getDate())+'.'+p(d.getMonth()+1)+'.'+d.getFullYear()+' '+p(d.getHours())+':'+p(d.getMinutes()); };
+  const html=rotMerge.rows.map((r,i)=>{
+    const hay=(r.name+' '+r.path.join(' ')).toLowerCase();
+    if(q.length && !q.every(k=>hay.includes(k)) && i!==rotMerge.sel) return '';
+    const on=i===rotMerge.sel;
+    return '<div data-i="'+i+'" style="display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;padding:5px 10px;cursor:pointer;border-bottom:1px solid var(--bdr);'+(on?'background:rgba(125,94,232,.28);':'')+'">'
+      +'<span style="font-weight:600;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+aitmEsc(r.name)+'</span>'
+      +'<span style="font-family:monospace;font-size:11px;color:var(--txt3);text-align:right;">'+fmtD(r.date)+'</span>'
+      +'<span style="font-size:11px;color:var(--txt3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+aitmEsc([rotMerge.root.name].concat(r.path).join(' \\ '))+'</span>'
+      +'<span style="font-size:11px;text-align:right;color:'+(r.acH?'var(--txt3)':'#f0b400')+';">'+(r.acH?'':'no Aircraft_ file')+'</span></div>';
+  }).join('');
+  list.innerHTML = html || '<div style="padding:14px;color:var(--txt3);">'+(rotMerge.rows.length?'Nothing matches the filter.':'No Flightplans_*.txt in this folder.')+'</div>';
+  const info=document.getElementById('rmg-info'), r=rotMerge.rows[rotMerge.sel];
+  if(info) info.innerHTML = r ? 'Writes <b style="color:#fff;">Flightplans_'+aitmEsc(r.name)+'.txt</b> + <b style="color:#fff;">Aircraft_'+aitmEsc(r.name)+'.txt</b> back into <b style="color:#fff;">'+aitmEsc([rotMerge.root.name].concat(r.path).join(' \\ '))+'</b> · the old versions are kept in the <b>Backups</b> folder.' : (rotMerge.rows.length?'Click the flight plan to merge into.':'');
+  if(scroll && r){ const el=list.querySelector('[data-i="'+rotMerge.sel+'"]'); if(el) el.scrollIntoView({block:'center'}); }
+}
+// text of a TTools file: UTF-8 if it is valid UTF-8, else Windows-1252 (as the AI Traffic Manager reads it)
+function rotMergeDecode(buf){
+  try{ return { text:new TextDecoder('utf-8',{fatal:true}).decode(buf), utf8:true }; }
+  catch(e){ return { text:new TextDecoder('windows-1252').decode(buf), utf8:false }; }
+}
+// the file's own bytes stay as they are; the new lines are appended in its line ending and encoding
+function rotMergeAppend(buf, utf8, eol, lines){
+  let u=new Uint8Array(buf), n=u.length;
+  while(n>0 && (u[n-1]===10||u[n-1]===13||u[n-1]===32||u[n-1]===9)) n--;
+  const add=(n?eol:'')+lines.join(eol)+eol;
+  const enc = utf8 ? new TextEncoder().encode(add) : Uint8Array.from(add, c=>{ const k=c.charCodeAt(0); return k<256?k:63; });
+  const out=new Uint8Array(n+enc.length); out.set(u.subarray(0,n),0); out.set(enc,n); return out;
+}
+async function rotMergeGo(){
+  const r=rotMerge.rows[rotMerge.sel];
+  if(!r){ rotMergeSay('Click the flight plan to merge into first.', '#f0b400'); return; }
+  if(!r.acH){ rotMergeSay('There is no Aircraft_'+aitmEsc(r.name)+'.txt next to Flightplans_'+aitmEsc(r.name)+'.txt — the merge needs both.', '#f85149'); return; }
+  if(!(await aitmPermOk(r.dir, true))){ rotMergeSay('Chrome did not allow writing there. Click Merge &amp; save again and allow it.', '#f0b400'); return; }
+  let fpF, acF, fpBuf, acBuf;
+  try{ fpF=await r.fpH.getFile(); acF=await r.acH.getFile(); fpBuf=await fpF.arrayBuffer(); acBuf=await acF.arrayBuffer(); }
+  catch(e){ rotMergeSay('Could not read the files: '+aitmEsc(e.message), '#f85149'); return; }
+  const fpD=rotMergeDecode(fpBuf), acD=rotMergeDecode(acBuf);
+  const eolOf=t=>/\r\n/.test(t)?'\r\n':'\n';
+  // highest AC# in both files; the new types get the next numbers - a type whose title is already in the
+  // Aircraft file uses that AC# (no second line with the same aircraft)
+  let maxAc=0; (acD.text+'\n'+fpD.text).replace(/AC#(\d+)/g,(m,n)=>{ maxAc=Math.max(maxAc,parseInt(n,10)); return m; });
+  const data=buildTToolsData(maxAc+1);
+  if(!data){ rotMergeSay('No assigned rotations to merge.', '#f85149'); return; }
+  const have={}; acD.text.replace(/^\s*AC#(\d+)\s*,[^,\n]*,\s*"([^"\n]*)"/gm,(m,n,t)=>{ const k=t.trim().toLowerCase(); if(have[k]==null) have[k]=+n; return m; });
+  const map={}, acLines=[]; let next=maxAc+1, reused=0;
+  data.aircraftLines.forEach(l=>{
+    const m=/^AC#(\d+),([^,]*),"(.*)"$/.exec(l); if(!m) return;
+    const k=m[3].trim().toLowerCase();
+    if(have[k]!=null){ map[m[1]]=have[k]; reused++; }
+    else { map[m[1]]=next; have[k]=next; acLines.push('AC#'+next+','+m[2]+',"'+m[3]+'"'); next++; }
+  });
+  const fpLines=data.fpLines.map(l=>l.replace(/^AC#(\d+)/,(m,n)=>'AC#'+(map[n]!=null?map[n]:n)));
+  // merged before? same registrations already in the flight plan -> ask once more
+  const regs={}; fpD.text.replace(/^\s*AC#\d+\s*,\s*([^,\n]+)/gm,(m,g)=>{ regs[g.trim().toUpperCase()]=1; return m; });
+  const dupRegs=fpLines.map(l=>(l.split(',')[1]||'').trim()).filter(g=>g && regs[g.toUpperCase()]);
+  const key=r.path.join('/')+'|'+r.name+'|'+fpF.lastModified;
+  if(dupRegs.length && rotMerge.confirm!==key){
+    rotMerge.confirm=key;
+    rotMergeSay((dupRegs.length===fpLines.length?'All ':'')+dupRegs.length+' of the '+fpLines.length+' registrations are already in Flightplans_'+aitmEsc(r.name)+'.txt ('+aitmEsc(dupRegs.slice(0,6).join(', '))+(dupRegs.length>6?' …':'')+') — merged before? Click <b>Merge &amp; save</b> again to add them anyway.', '#f0b400');
+    return;
+  }
+  const label=[rotMerge.root.name].concat(r.path).join(' \\ ');
+  let bak;
+  try{
+    bak=await aitmTxtBackupDir(r.dir);
+    const outs=[[r.fpH, fpF, fpBuf, rotMergeAppend(fpBuf, fpD.utf8, eolOf(fpD.text), fpLines)]];
+    if(acLines.length) outs.push([r.acH, acF, acBuf, rotMergeAppend(acBuf, acD.utf8, eolOf(acD.text), acLines)]);
+    for(const [h, f, buf] of outs){      // first all backups, then the writes
+      const bw=await (await bak.h.getFileHandle(await aitmFreeName(bak.h, aitmBakName(f.name)), {create:true})).createWritable();
+      await bw.write(buf); await bw.close();
+    }
+    for(const [h, f, buf, bytes] of outs){ const w=await h.createWritable(); await w.write(bytes); await w.close(); }
+  }catch(e){ rotMergeSay('Could not write: '+aitmEsc(e.message), '#f85149'); return; }
+  localStorage.setItem('rot_merge_target', r.path.join('/')+'|'+r.name);
+  localStorage.setItem('rot_merge_fp_name', r.fpH.name); localStorage.setItem('rot_merge_ac_name', r.acH.name);
+  aitmCloseModal();
+  const open = (typeof aitm!=='undefined' && aitm && aitm.plans && aitm.plans.length && String(aitm.fileBase||'').toLowerCase()===r.name.toLowerCase());
+  const txt='✓ Merged '+fpLines.length+' aircraft into Flightplans_'+r.name+'.txt'+(acLines.length?' + Aircraft_'+r.name+'.txt ('+acLines.length+' new type'+(acLines.length>1?'s':'')+(reused?', '+reused+' already there':'')+')':' (aircraft types already there)')
+    +' in '+label+' · old versions in '+bak.label+(open?' · it is open in the AI Traffic Manager: open it there again before saving':'');
+  const st=document.getElementById('rot-status'); if(st) st.textContent=txt;
+  if(typeof aitmToast==='function') aitmToast(txt, open);
+}
+
+function openMergeDialogLegacy() {
+  if(!rotMergeReady()) return;
 
   let pop=document.getElementById('rot-merge-popup');
   if(pop) pop.remove();
