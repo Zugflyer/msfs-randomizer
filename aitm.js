@@ -1498,7 +1498,7 @@ function aitmApSchedule(icao) {
       var byReg = String(l.fr || 'F').toUpperCase() === 'R';
       var fn = String(l.fnum == null ? '' : l.fnum).replace(/^0+(?=\d)/, '');
       var sign = byReg ? String(p.reg || '') : cs;
-      var key = [code, sign, fn, type].join('|');
+      var key = [code, sign, fn, type, other].join('|');          // one line per destination / origin
       var r = map[key] = map[key] || { code: code, cs: sign, byReg: byReg, fn: fn, type: type, other: other, days: [0, 0, 0, 0, 0, 0, 0], via: {}, regs: {} };
       var m = ((t + offMin) % P + P) % P, dd = [];
       if (P < 10080) dd = [0, 1, 2, 3, 4, 5, 6];
@@ -1517,7 +1517,7 @@ function aitmApSchedule(icao) {
   var sortRows = function (map) {
     return Object.keys(map).map(function (k) { return map[k]; }).sort(function (x, y) {
       var cx = x.code || '\uffff', cy = y.code || '\uffff';
-      return (cx < cy ? -1 : cx > cy ? 1 : 0) || ((parseInt(x.fn, 10) || 0) - (parseInt(y.fn, 10) || 0)) || x.type.localeCompare(y.type);
+      return (cx < cy ? -1 : cx > cy ? 1 : 0) || ((parseInt(x.fn, 10) || 0) - (parseInt(y.fn, 10) || 0)) || x.type.localeCompare(y.type) || String(x.other).localeCompare(String(y.other));
     });
   };
   var D = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
@@ -1536,28 +1536,29 @@ function aitmApSchedule(icao) {
     code: function (r) { return '<td style="' + td + 'font-family:monospace;font-weight:700;color:#fff;">' + aitmEsc(r.code || '—') + '</td>'; },
     cs: function (r) { return '<td style="' + td + 'color:var(--txt2);">' + aitmEsc(r.cs || '—') + '</td>'; },
     fn: function (r) { return '<td style="' + td + 'font-family:monospace;color:#fff;">' + aitmEsc(r.fn) + '</td>'; },
-    type: function (r) { return '<td style="' + td + 'color:var(--txt2);">' + aitmEsc(r.type) + '</td>'; }
+    type: function (r) { return '<td style="' + td + 'color:var(--txt2);">' + aitmEsc(r.type) + '</td>'; },
+    other: function (r) { var o = aitmAp(r.other); return '<td style="' + td + '"><span style="font-family:monospace;font-weight:700;color:#fff;">' + aitmEsc(r.other || '—') + '</span>'
+      + (o && (o.city || o.name) ? ' <span style="color:var(--txt3);">' + aitmEsc(o.city || o.name) + '</span>' : '') + '</td>'; }
   };
   var table = function (rows, dir) {
-    var head = dir === 'dep'
-      ? '<th style="' + th + '">Airline</th><th style="' + th + '">Callsign</th><th style="' + th + '">Flight</th><th style="' + th + '">Aircraft</th>' + dayTh
-      : dayTh + '<th style="' + th + '">Aircraft</th><th style="' + th + '">Flight</th><th style="' + th + '">Callsign</th><th style="' + th + '">Airline</th>';
+    // both tables: weekdays · aircraft · airline · callsign · flight · destination (departures) / origin (arrivals)
+    var head = dayTh + '<th style="' + th + '">Aircraft</th><th style="' + th + '">Airline</th><th style="' + th + '">Callsign</th><th style="' + th + '">Flight</th><th style="' + th + '">' + (dir === 'dep' ? 'To' : 'From') + '</th>';
     var body = rows.map(function (r, i) {
-      var c = dir === 'dep' ? cells.code(r) + cells.cs(r) + cells.fn(r) + cells.type(r) + dayTds(r) : dayTds(r) + cells.type(r) + cells.fn(r) + cells.cs(r) + cells.code(r);
+      var c = dayTds(r) + cells.type(r) + cells.code(r) + cells.cs(r) + cells.fn(r) + cells.other(r);
       return '<tr title="' + aitmEsc(tip(r, dir)) + '" style="border-top:1px solid var(--bdr);' + (i % 2 ? 'background:rgba(255,255,255,.025);' : '') + '">' + c + '</tr>';
-    }).join('') || '<tr><td colspan="11" style="padding:14px;color:var(--txt3);">None</td></tr>';
+    }).join('') || '<tr><td colspan="12" style="padding:14px;color:var(--txt3);">None</td></tr>';
     return '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' + head + '</tr></thead><tbody>' + body + '</tbody></table>';
   };
   var fmtN = function (x) { return Math.round(x * 10) / 10; };
   var col = function (dir, rows) {
     return '<div style="min-width:0;display:flex;flex-direction:column;">'
-      + '<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:6px;' + (dir === 'arr' ? 'text-align:right;' : '') + '">' + (dir === 'dep' ? 'Departures' : 'Arrivals')
+      + '<div style="font-size:12px;font-weight:700;color:#fff;margin-bottom:6px;">' + (dir === 'dep' ? 'Departures' : 'Arrivals')
       + ' <span style="font-weight:400;color:var(--txt3);">· ' + rows.length + ' flight' + (rows.length === 1 ? '' : 's') + ' · ' + fmtN(perWeek[dir]) + ' per week</span></div>'
       + '<div style="max-height:64vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px;">' + table(rows, dir) + '</div></div>';
   };
   var sign = '<span style="display:inline-block;vertical-align:middle;background:#0a0a0a;border-radius:3px;padding:2px;margin-right:10px;"><span style="display:inline-block;border:2px solid #f7c600;border-radius:2px;color:#f7c600;font:700 15px/1 \'Arial Narrow\',\'Roboto Condensed\',Arial,sans-serif;letter-spacing:.1em;padding:3px 7px 2px;">' + aitmEsc(icao) + '</span></span>';
   aitmModal(sign + aitmEsc(ap ? (ap.city || ap.name || icao) : icao) + (ap && ap.name && ap.city && ap.name !== ap.city ? ' <span style="font-weight:400;color:var(--txt3);font-size:12px;">' + aitmEsc(ap.name) + '</span>' : ''),
-    '<div style="font-size:11px;color:var(--txt3);margin:-4px 0 10px;">Weekdays ' + (loc ? 'in local time (UTC' + aitmFmtOff(off) + (aitm.tmode === 'eusummer' ? ', EU summer' : '') + ')' : 'in UTC') + ' — switch with UTC / Local above. Point at a line for destination, times and aircraft.</div>'
+    '<div style="font-size:11px;color:var(--txt3);margin:-4px 0 10px;">Weekdays ' + (loc ? 'in local time (UTC' + aitmFmtOff(off) + (aitm.tmode === 'eusummer' ? ', EU summer' : '') + ')' : 'in UTC') + ' — switch with UTC / Local above. Point at a line for times and registrations.</div>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">' + col('dep', sortRows(dep)) + col('arr', sortRows(arr)) + '</div>',
     [['Airport Data', function () { aitmCloseModal(); aitmAirportData(icao); }, true], ['Rotation Map ↗', function () { aitmRotationMap(icao); }, true]], 'xl');
 }
