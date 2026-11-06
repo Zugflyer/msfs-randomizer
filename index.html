@@ -10293,7 +10293,7 @@ function rotTipEl(){
   if(!t){
     t=document.createElement('div');
     t.id='rot-hover-tip';
-    t.style.cssText='position:fixed;left:0;top:0;z-index:10000;display:none;pointer-events:none;background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;padding:10px 14px;min-width:240px;max-width:360px;box-shadow:0 8px 28px rgba(0,0,0,.6);font-size:12px;color:var(--txt2);';
+    t.style.cssText='position:fixed;left:0;top:0;z-index:10000;display:none;pointer-events:none;background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;padding:10px 14px;min-width:240px;max-width:440px;box-shadow:0 8px 28px rgba(0,0,0,.6);font-size:12px;color:var(--txt2);';
     document.body.appendChild(t);
   }
   return t;
@@ -10308,6 +10308,34 @@ function rotTipMove(e){
   t.style.left=x+'px'; t.style.top=y+'px';
 }
 function rotTipShow(e, html){ const t=rotTipEl(); t.innerHTML=html; t.style.display='block'; rotTipMove(e); }
+// Weekday of a moment on the planner timeline (minutes from Sunday 00:00 of week 1): "Sun", in a
+// 2-week cycle "Sun¹" / "Sun²".
+function rotWd(m){ const N=ROT_NDAYS*1440; const d=Math.floor((((m%N)+N)%N)/1440); return ROT_DAYS[d%7].slice(0,3)+(ROT_WEEKS>1?(d<7?'¹':'²'):''); }
+// The flights of a rotation as a table: day + time of departure (local), route, day + time of arrival
+// (local), flight number — every column aligned. rows: [{ cur, dD, dT, dep, arr, aD, aT, fnum }]
+function rotTipRotTable(rows){
+  const esc=v=>String(v==null?'':v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const td=(v,st)=>'<td style="padding:1px 7px 1px 0;white-space:nowrap;'+(st||'')+'">'+v+'</td>';
+  const th=(v,st)=>'<td style="padding:0 7px 2px 0;font-size:9px;color:var(--txt3);letter-spacing:.05em;'+(st||'')+'">'+v+'</td>';
+  let h='<table style="border-collapse:collapse;margin-top:3px;font-family:monospace;font-size:11px;line-height:1.5;">'
+    +'<tr>'+th('')+th('DEP',';')+th('')+th('ROUTE')+th('ARR')+th('')+th('FLT')+'</tr>';
+  rows.forEach(r=>{
+    h+='<tr style="'+(r.cur?'color:#fff;font-weight:700;background:rgba(88,166,255,.18);':'color:var(--txt2);')+'">'
+      +td(r.cur?'▶':'','padding-left:3px;')+td(esc(r.dD))+td(esc(r.dT))+td(esc(r.dep)+'→'+esc(r.arr))+td(esc(r.aD))+td(esc(r.aT))+td(esc(r.fnum),'padding-right:4px;')+'</tr>';
+  });
+  return h+'</table>';
+}
+// Local and UTC moments of each flight of a rotation (time bars of the upper half): placed → on the
+// first day it is placed (real weekdays), not placed → as if it started on day 0 (then shown as
+// Day 1, Day 2 … of the rotation). Map bar → { dL, aL, dU, aU } (minutes, not folded).
+function rotBarMoments(legIdx, d0){
+  const res = computePairSegs(legIdx, d0||0); if (!res) return null;
+  const N=ROT_NDAYS*1440, out=new Map(); let add=0, prev=null;
+  res.pair.forEach((b,i)=>{ const s=res.segs[i]; if (!s) return;
+    let a=s.absDep+add; if (prev!=null && a<prev) { add+=N; a+=N; } prev=a;
+    out.set(b, { dL:a+(s.depOff||0)*60, aL:a+s.block+(s.arrOff||0)*60, dU:a, aU:a+s.block }); });
+  return out;
+}
 // Details of one placed flight: which flight, when (local + UTC, weekday), block/ground,
 // and the whole rotation it belongs to (the hovered flight highlighted).
 // Info window for a time bar of the upper half (not placed on an aircraft): same look as
@@ -10327,6 +10355,16 @@ function rotBarTipHtml(bar){
   const days=legDepartureDays(bar.legIdx, which);
   const dayList=[...days.keys()].sort((a,b)=>a-b).map(d=>ROT_DAYS[d%7].slice(0,3)+(ROT_WEEKS>1?(d<7?'¹':'²'):'')+(days.get(d)>1?' ×'+days.get(d):''));
   const row=(k,v)=>'<span style="color:var(--txt3);">'+k+'</span><span style="color:#fff;">'+v+'</span>';
+  // weekdays: placed → the first day it is placed on; not placed yet → Day 1, Day 2 … of the rotation
+  const placed = days.size>0 && !split, d0 = placed ? Math.min(...days.keys()) : 0;
+  const mom = rotBarMoments(bar.legIdx, d0) || new Map();
+  const firstM = mom.get(legBars[0]) || mom.values().next().value;
+  const dayLbl = (m, base) => placed ? rotWd(m) : 'Day '+(Math.floor(m/1440)-Math.floor(base/1440)+1);
+  const lD = m => firstM ? dayLbl(m, firstM.dL) : '';
+  const uD = m => (firstM && placed) ? rotWd(m)+' ' : '';
+  const me = mom.get(bar);
+  const mono = v => '<span style="font-family:monospace;">'+v+'</span>';
+  const when = (locM, locHm, utcM, utcHm) => mono((me?esc(lD(locM))+' ':'')+locHm)+' local<span style="color:var(--txt3);"> · '+mono((me?esc(uD(utcM)):'')+utcHm)+' UTC</span>';
   let html =
     '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:8px;">'
     +'<span style="font-size:14px;font-weight:700;color:#fff;">'+esc((al && fn.toUpperCase().indexOf(al)!==0 ? al+' ' : '')+fn)+'</span>'
@@ -10335,8 +10373,8 @@ function rotBarTipHtml(bar){
     +'</div>'
     +'<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">'
     + row('Route', '<b>'+dep+' → '+arr+'</b>'+(depN||arrN?'<div style="font-size:11px;color:var(--txt2);">'+(depN||dep)+' → '+(arrN||arr)+'</div>':''))
-    + row('Departure', '<span style="font-family:monospace;">'+hm(bar.depLocal)+'</span> local<span style="color:var(--txt3);font-family:monospace;"> · '+hm(depUTC)+' UTC</span>')
-    + row('Arrival', '<span style="font-family:monospace;">'+hm(bar.arrLocal)+'</span> local'+(bar.dayCross>=1?' <span style="color:#f0b400;">+'+bar.dayCross+'d</span>':'')+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(arrUTC)+' UTC</span>')
+    + row('Departure', when(me&&me.dL, hm(bar.depLocal), me&&me.dU, hm(depUTC)))
+    + row('Arrival', when(me&&me.aL, hm(bar.arrLocal), me&&me.aU, hm(arrUTC)) + (!me && bar.dayCross>=1?' <span style="color:#f0b400;">+'+bar.dayCross+'d</span>':''))
     + (bar.legNo!=null ? row('Leg #', '<span style="font-family:monospace;color:#e0b341;">'+bar.legNo+'</span>') : '')
     + row('Block time', '<span style="font-family:monospace;">'+dur(bar.block)+'</span>')
     + row('Ground after', '<span style="font-family:monospace;">'+(bar.ground||0)+' min</span>')
@@ -10344,14 +10382,10 @@ function rotBarTipHtml(bar){
     + row('Placed', dayList.length ? '<span style="color:#3fb950;">'+dayList.join(', ')+'</span>' : '<span style="color:var(--txt3);">not yet</span>')
     +'</div>';
   if (legBars.length>1) {
-    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+legBars.length+' flights'+(split?' · split':'')+')</div>'
-      +'<div style="margin-top:3px;font-family:monospace;font-size:11px;line-height:1.5;">';
-    legBars.forEach(b=>{
-      const cur = b===bar;
-      html += '<div style="'+(cur?'color:#fff;font-weight:700;background:rgba(88,166,255,.18);border-radius:3px;padding:0 4px;margin:0 -4px;':'color:var(--txt2);')+'">'
-        +(cur?'▶ ':'&nbsp;&nbsp;')+hm(b.depLocal)+' '+esc(b.depIcao)+'→'+esc(b.arrIcao)+' '+hm(b.arrLocal)+(b.dayCross>=1?'+'+b.dayCross:'')+' · '+esc(b.fnum)+'</div>';
-    });
-    html += '</div>';
+    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+legBars.length+' flights'+(split?' · split':'')+')'
+      +(placed ? '' : '<span style="text-transform:none;letter-spacing:0;"> · times local · not placed yet: Day 1, 2 …</span>')+'</div>';
+    html += rotTipRotTable(legBars.map(b=>{ const m=mom.get(b);
+      return { cur:b===bar, dD:m?lD(m.dL):'', dT:hm(b.depLocal), dep:b.depIcao, arr:b.arrIcao, aD:m?lD(m.aL):(b.dayCross>=1?'+'+b.dayCross:''), aT:hm(b.arrLocal), fnum:b.fnum }; }));
   }
   if (!bar.ok) html += '<div style="margin-top:8px;font-size:11px;color:#f85149;">⚠ '+esc(bar.reason||'Could not satisfy all time windows / day-night for this leg.')+'</div>';
   html += '<div style="margin-top:8px;font-size:10px;color:var(--txt3);">Drag onto an aircraft below · click a time to change it</div>';
@@ -10383,23 +10417,19 @@ function rotLaneTipHtml(ac, asg, segIdx){
     +'</div>'
     +'<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 12px;">'
     + row('Route', '<b>'+dep+' → '+arr+'</b>'+(depN||arrN?'<div style="font-size:11px;color:var(--txt2);">'+(depN||dep)+' → '+(arrN||arr)+'</div>':''))
-    + row('Departure', '<span style="font-family:monospace;">'+hm(depLocAbs)+'</span> local · '+dayOf(depLocAbs)+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep)+' UTC</span>')
-    + row('Arrival', '<span style="font-family:monospace;">'+hm(arrLocAbs)+'</span> local'+(dayDiff>0?' <span style="color:#f0b400;">+'+dayDiff+'d</span>':'')+'<span style="color:var(--txt3);font-family:monospace;"> · '+hm(seg.absDep+seg.block)+' UTC</span>')
+    + row('Departure', '<span style="font-family:monospace;">'+rotWd(depLocAbs)+' '+hm(depLocAbs)+'</span> local<span style="color:var(--txt3);"> · <span style="font-family:monospace;">'+rotWd(seg.absDep)+' '+hm(seg.absDep)+'</span> UTC</span>')
+    + row('Arrival', '<span style="font-family:monospace;">'+rotWd(arrLocAbs)+' '+hm(arrLocAbs)+'</span> local<span style="color:var(--txt3);"> · <span style="font-family:monospace;">'+rotWd(seg.absDep+seg.block)+' '+hm(seg.absDep+seg.block)+'</span> UTC</span>')
     + (seg.legNo!=null ? row('Leg #', '<span style="font-family:monospace;color:#e0b341;">'+seg.legNo+'</span>') : '')
     + row('Block time', '<span style="font-family:monospace;">'+dur(seg.block)+'</span>')
     + row('Ground after', '<span style="font-family:monospace;">'+(seg.ground||0)+' min</span>')
     + row('Daily', rotDailyLegs.has(+asg.legIdx)?'<span style="color:var(--acc);">✓ yes</span>':'no')
     +'</div>';
   if (asg.segs.length>1) {
-    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+asg.segs.length+' flights'+esc(kindTxt)+')</div>'
-      +'<div style="margin-top:3px;font-family:monospace;font-size:11px;line-height:1.5;">';
-    asg.segs.forEach((s,k)=>{
-      const cur = k===segIdx;
+    html += '<div style="margin-top:8px;padding-top:6px;border-top:1px solid var(--bdr2);font-size:10px;color:var(--txt3);text-transform:uppercase;letter-spacing:.05em;">Rotation ('+asg.segs.length+' flights'+esc(kindTxt)+')<span style="text-transform:none;letter-spacing:0;"> · times local</span></div>';
+    html += rotTipRotTable(asg.segs.map((s,k)=>{
       const dL = s.absDep+(s.depOff||0)*60, aL = s.absDep+s.block+(s.arrOff||0)*60;
-      html += '<div style="'+(cur?'color:#fff;font-weight:700;background:rgba(88,166,255,.18);border-radius:3px;padding:0 4px;margin:0 -4px;':'color:var(--txt2);')+'">'
-        + (cur?'▶ ':'&nbsp;&nbsp;')+ROT_DAYS[Math.floor((((dL%N)+N)%N)/1440)%7].slice(0,3)+' '+hm(dL)+' '+esc(s.depIcao)+'→'+esc(s.arrIcao)+' '+hm(aL)+' · '+esc(s.fnum)+'</div>';
-    });
-    html += '</div>';
+      return { cur:k===segIdx, dD:rotWd(dL), dT:hm(dL), dep:s.depIcao, arr:s.arrIcao, aD:rotWd(aL), aT:hm(aL), fnum:s.fnum };
+    }));
   } else if (kindTxt) {
     html += '<div style="margin-top:6px;font-size:11px;color:var(--txt3);">'+esc(kindTxt.slice(3))+'</div>';
   }
