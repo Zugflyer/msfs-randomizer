@@ -656,9 +656,12 @@ function aitmParseCfg(text) {
 function aitmAirlineOf(kv, title) {
   if (kv.icao_airline) return kv.icao_airline.toUpperCase();
   var pc = String(kv.atc_parking_codes || '').split(',')[0].trim().toUpperCase();
+  if (/^[A-Z]{4}$/.test(pc)) return pc;                                   // USAF, RAAF …
   if (/^[A-Z]{3}/.test(pc)) return pc.slice(0, 3);
   var t = String(title || '').trim().split(/\s+/);
   for (var i = t.length - 1; i >= 0; i--) if (/^[A-Z]{3}$/.test(t[i]) && !AITM_TYPES[t[i]]) return t[i];
+  // 4 letters only when there is no 3-letter code ("FAIB B742 USAF"); model makers are no airline
+  for (i = t.length - 1; i >= 0; i--) if (/^[A-Z]{4}$/.test(t[i]) && !AITM_TYPES[t[i]] && !/^(FAIB|IVAO|NAAI|MAIW|HTAI|WOAI|SNAI|WVIP|ESAI|FSPX)$/.test(t[i])) return t[i];
   return '';
 }
 function aitmCfgEntries(cfgText, fmText, folder, src) {
@@ -781,7 +784,7 @@ function aitmAcAirlineInfo(a) {
   var t = String(a.title || ''), out = { code: '', name: '' };
   if (a.al) out.code = a.al;
   var inst = aitmInstalled(t); if (inst && inst.airline && !out.code) out.code = inst.airline;
-  var m = /^AIGAIM_([A-Z0-9]{2,3})\s+\S+\s+NCv2$/.exec(t);           // planner placeholder
+  var m = /^AIGAIM_([A-Z0-9]{2,4})\s+\S+\s+NCv2$/.exec(t);           // planner placeholder
   if (m) { if (!out.code) out.code = m[1]; return out; }
   m = /^AIGAIM_(.+?)\s*$/.exec(t);
   if (m) { var mk = AITM_MAKERS.exec(' ' + m[1]); if (mk) out.name = (' ' + m[1]).slice(0, mk.index).trim(); }
@@ -1260,7 +1263,7 @@ function aitmRenderAircraft() {
       + '<span style="font-family:monospace;color:var(--txt3);min-width:22px;flex-shrink:0;">' + a.n + '</span>'
       + '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;"></span>'
       + '<span style="flex:1;min-width:0;"><span style="display:block;color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(a.title) + '</span>'
-      + '<span style="display:block;font-size:10px;color:var(--txt3);">' + (aitm.fleet.length && !inst ? '<span style="color:#f85149;font-weight:600;">' + (/^AC#\d+$/i.test(a.title) || /^AIGAIM_[A-Z0-9]{2,3}\s+\S+\s+NCv2$/.test(a.title) ? 'no aircraft assigned' : 'not installed') + '</span> · ' : '')
+      + '<span style="display:block;font-size:10px;color:var(--txt3);">' + (aitm.fleet.length && !inst ? '<span style="color:#f85149;font-weight:600;">' + (/^AC#\d+$/i.test(a.title) || /^AIGAIM_[A-Z0-9]{2,4}\s+\S+\s+NCv2$/.test(a.title) ? 'no aircraft assigned' : 'not installed') + '</span> · ' : '')
       + aitmEsc(aitmAcTypeName(a) || a.hint || '') + (a.speed ? ' · ' + a.speed + ' kts' : '') + ' · ' + (use[a.n] || 0) + ' FP</span></span></div>';
   }).join('') || '<div style="padding:12px;color:var(--txt3);font-size:12px;">—</div>';
 }
@@ -1496,7 +1499,7 @@ function aitmAirlineMaps() {
   var cnt = {}, nmc = {};
   var vote = function (o, k, v) { (o[k] = o[k] || {})[v] = (o[k][v] || 0) + 1; };
   (aitm.fleet || []).forEach(function (e) {
-    var c = String(e.airline || '').toUpperCase(); if (!/^[A-Z0-9]{3}$/.test(c)) return;
+    var c = String(e.airline || '').toUpperCase(); if (!/^[A-Z0-9]{3,4}$/.test(c)) return;
     var s = String(e.atcAirline || '').trim().toUpperCase(); if (s) vote(cnt, c, s);
     var m = /^AIGAIM_(.+)$/.exec(e.title || ''), mk = m && AITM_MAKERS.exec(' ' + m[1]);
     if (mk) vote(nmc, aitmNormName((' ' + m[1]).slice(0, mk.index)), c);
@@ -2190,7 +2193,7 @@ function aitmCheckData(d) {
   var use = {}; d.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
   d.ac.forEach(function (a) {
     if (!use[a.n]) return;
-    var none = !a.title || /^AC#\d+$/i.test(a.title) || /^AIGAIM_[A-Z0-9]{2,3}\s+\S+\s+NCv2$/.test(a.title);
+    var none = !a.title || /^AC#\d+$/i.test(a.title) || /^AIGAIM_[A-Z0-9]{2,4}\s+\S+\s+NCv2$/.test(a.title);
     if (none) W('AC#' + a.n + ' flies ' + use[a.n] + ' flight plan' + (use[a.n] === 1 ? '' : 's') + ' but has no aircraft assigned (' + (a.title || '—') + ') — drag one from the fleet on the right.');
     else if (aitm.fleet.length && !aitmInstalled(a.title)) W('AC#' + a.n + ' “' + a.title + '” is not among your installed aircraft — the simulator will not show it.');
     if (!a.speed) W('AC#' + a.n + ': no cruise speed — 450 kts is used.');
