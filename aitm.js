@@ -1660,7 +1660,7 @@ function aitmRotationMap(icao) {
 // ── Sort by aircraft size, Check flightplans, Compile only after sorting ──
 // wingspan in metres by ICAO type (approximate) - only for aircraft whose aircraft.cfg was not read (not installed)
 var AITM_WINGSPAN = {
-  A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, VC25: 66.0 /* VC-25A: a 747-200, ranked right behind the B748, ahead of the B77W */, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, B741: 59.6, B74S: 59.6, BLCF: 64.4,
+  A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, VC25: 59.6 /* VC-25A = 747-200 */, B741: 59.6, B74S: 59.6, BLCF: 64.4,
   B778: 71.8, B779: 71.8, B77W: 64.8, B77L: 64.8, B773: 60.9, B772: 60.9, A35K: 64.8, A359: 64.8, A346: 63.5, A345: 63.5,
   A343: 60.3, A342: 60.3, A339: 64.0, A338: 64.0, A333: 60.3, A332: 60.3, A337: 60.3, B789: 60.1, B788: 60.1, B78X: 60.1,
   C5M: 67.9, C5: 67.9, IL96: 60.1, IL86: 48.1, IL76: 50.5, IL62: 43.2, C17: 51.8, MD11: 51.7, DC10: 50.4, L101: 47.3,
