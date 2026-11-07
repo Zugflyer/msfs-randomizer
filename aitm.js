@@ -420,7 +420,7 @@ var AITM_TYPES = {
   'B703':'Boeing 707-320','B712':'Boeing 717-200','B720':'Boeing 720','B721':'Boeing 727-100','B722':'Boeing 727-200',
   'B731':'Boeing 737-100','B732':'Boeing 737-200','B733':'Boeing 737-300','B734':'Boeing 737-400','B735':'Boeing 737-500',
   'B736':'Boeing 737-600','B737':'Boeing 737-700','B738':'Boeing 737-800','B739':'Boeing 737-900','B37M':'Boeing 737 MAX 7',
-  'B38M':'Boeing 737 MAX 8','B39M':'Boeing 737 MAX 9','B3XM':'Boeing 737 MAX 10','B741':'Boeing 747-100','B742':'Boeing 747-200',
+  'B38M':'Boeing 737 MAX 8','B39M':'Boeing 737 MAX 9','B3XM':'Boeing 737 MAX 10','B741':'Boeing 747-100','B742':'Boeing 747-200','VC25':'Boeing VC-25A',
   'B743':'Boeing 747-300','B744':'Boeing 747-400','B748':'Boeing 747-8','B74S':'Boeing 747SP','B74R':'Boeing 747SR',
   'B752':'Boeing 757-200','B753':'Boeing 757-300','B762':'Boeing 767-200','B763':'Boeing 767-300','B764':'Boeing 767-400',
   'B772':'Boeing 777-200','B77L':'Boeing 777-200LR','B773':'Boeing 777-300','B77W':'Boeing 777-300ER','B788':'Boeing 787-8',
@@ -458,7 +458,7 @@ var AITM_IATA_EQP = {
 
 // military and government versions -> the civil type they are built on (size, type name): VC-25A is a 747-200 …
 var AITM_MIL_TYPES = [
-  [/\bVC[- ]?25[- ]?B\b/, 'B748'], [/\bVC[- ]?25(?:[- ]?A)?\b/, 'B742'], [/\bE[- ]?4B\b/, 'B742'],
+  [/\bVC[- ]?25[- ]?B\b/, 'B748'], [/\bVC[- ]?25(?:[- ]?A)?\b/, 'VC25'], [/\bE[- ]?4B\b/, 'B742'],
   [/\bKC[- ]?10A?\b/, 'DC10'], [/\b(?:KC|RC|EC|WC|OC)[- ]?135[A-Z]?\b|\bK35[RE]\b/, 'K35R'], [/\bKC[- ]?46A?\b/, 'B762'],
   [/\bC[- ]?32[AB]?\b/, 'B752'], [/\bC[- ]?40[ABC]?\b/, 'B737'], [/\bP[- ]?8[AI]\b/, 'B738'], [/\bVOYAGER\b|\bKC[- ]?30A?\b/, 'A332']
 ];
@@ -578,7 +578,7 @@ function aitmSaveNow() {
   aitm._saveDue = false;
   try {
     localStorage.setItem(AITM_KEY, JSON.stringify({ kind: aitm.kind || 'airline', apIcao: aitm.apIcao || '', name: aitm.name, code: aitm.code, period: aitm.period, fileBase: aitm.fileBase,
-      source: aitm.source, ac: aitm.ac, plans: aitm.plans, apx: aitm.apx, tmode: aitm.tmode, outName: aitm.outName || '', sortSig: aitm.sortSig || '', checkSig: aitm.checkSig || '', compiledSig: aitm.compiledSig || '' }));
+      source: aitm.source, ac: aitm.ac, plans: aitm.plans, apx: aitm.apx, tmode: aitm.tmode, outName: aitm.outName || '', sortSig: aitm.sortSig || '', checkSig: aitm.checkSig || '', compiledSig: aitm.compiledSig || '', savedSig: aitm.savedSig || '' }));
   } catch (e) {}
 }
 // a reload or a closed tab right after a change must not lose it
@@ -590,7 +590,7 @@ function aitmRestore() {
   try {
     var s = JSON.parse(localStorage.getItem(AITM_KEY) || 'null');
     if (!s) return;
-    ['kind', 'apIcao', 'name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName', 'sortSig', 'checkSig', 'compiledSig'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
+    ['kind', 'apIcao', 'name', 'code', 'period', 'fileBase', 'source', 'ac', 'plans', 'apx', 'tmode', 'outName', 'sortSig', 'checkSig', 'compiledSig', 'savedSig'].forEach(function (k) { if (s[k] != null) aitm[k] = s[k]; });
     aitmNormAc();
   } catch (e) {}
 }
@@ -856,9 +856,10 @@ function aitmGuessCode() {
   return best;
 }
 function aitmLoad(d) {
-  aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {}; aitm.sortSig = ''; aitm.checkSig = ''; aitm.compiledSig = ''; aitm.checkErrs = 0; aitm._srcDir = null;
+  aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {}; aitm.sortSig = ''; aitm.checkSig = ''; aitm.compiledSig = ''; aitm.savedSig = ''; aitm.checkErrs = 0; aitm._srcDir = null;
   aitmNormAc();
   var merged = aitmConsolidateAc();                         // the same aircraft twice → one AC#
+  aitm._loadMerged = merged.length;
   if (merged.length) setTimeout(function () { aitmToast('Merged: ' + aitmConsolidateMsg(merged) + '.'); }, 50);
   aitm.fileBase = d.base || ''; aitm.source = d.source || '';
   aitm.name = d.name || ''; aitm.period = d.period || ''; aitm.code = d.code || '';
@@ -955,6 +956,7 @@ async function aitmLoadTxt(fpFile, acFile, apFile) {
   var list = aitmAcList(acs, fp.plans);
   var sb = aitmSplitBase(fpFile.name);
   aitmLoad({ aircraft: list, plans: fp.plans, apx: apText ? AITM_CODEC.parseAirportsTxt(apText) : {}, base: sb.base, name: sb.name, period: sb.period, source: fpFile.name });
+  if (acFile && !aitm._loadMerged && !fp.errors.length) { aitm.savedSig = aitmTxtSig(); aitmSave(); }   // as on disk: Save txt green
   var msg = [fpFile.name, acFile ? acFile.name : null, apFile ? apFile.name : null].filter(Boolean).join(' + ') + ' loaded.';
   if (!acFile) msg = 'No Aircraft' + fpFile.name.replace(/^flightplans/i, '') + ' found — the AC# entries are empty; drag your aircraft onto them.';
   if (fp.errors.length) msg += ' ' + fp.errors.length + ' line(s) could not be read: ' + fp.errors.slice(0, 3).join('; ');
@@ -1658,7 +1660,7 @@ function aitmRotationMap(icao) {
 // ── Sort by aircraft size, Check flightplans, Compile only after sorting ──
 // wingspan in metres by ICAO type (approximate) - only for aircraft whose aircraft.cfg was not read (not installed)
 var AITM_WINGSPAN = {
-  A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, B741: 59.6, B74S: 59.6, BLCF: 64.4,
+  A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, VC25: 66.0 /* VC-25A: a 747-200, ranked right behind the B748, ahead of the B77W */, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, B741: 59.6, B74S: 59.6, BLCF: 64.4,
   B778: 71.8, B779: 71.8, B77W: 64.8, B77L: 64.8, B773: 60.9, B772: 60.9, A35K: 64.8, A359: 64.8, A346: 63.5, A345: 63.5,
   A343: 60.3, A342: 60.3, A339: 64.0, A338: 64.0, A333: 60.3, A332: 60.3, A337: 60.3, B789: 60.1, B788: 60.1, B78X: 60.1,
   C5M: 67.9, C5: 67.9, IL96: 60.1, IL86: 48.1, IL76: 50.5, IL62: 43.2, C17: 51.8, MD11: 51.7, DC10: 50.4, L101: 47.3,
@@ -1680,7 +1682,9 @@ var AITM_WINGSPAN = {
 // AI models carry unusable values there (AIG A321 78 ft, AIG B77W 164 ft, IVAO B742/DC10/MD11/B721 all 50.8 ft)
 function aitmAcSize(a) {
   var e = aitmInstalled(a.title);
-  var cands = [e && e.icaoType, e && e.sig, aitmAcSig(a), aitmTypeSig(a.hint), aitmTypeSig(a.title)], t = '', m = 0;
+  // a military / government version named in the title or ui_type wins over the cfg type ("FAIB B742 USAF", ui_type "Boeing VC-25A")
+  var mil = ''; [a.title, a.hint, e && e.uiType, e && e.title].some(function (x) { var u = String(x || '').toUpperCase(); return AITM_MIL_TYPES.some(function (r) { if (r[0].test(u)) { mil = r[1]; return true; } return false; }); });
+  var cands = [mil, e && e.icaoType, e && e.sig, aitmAcSig(a), aitmTypeSig(a.hint), aitmTypeSig(a.title)], t = '', m = 0;
   for (var i = 0; i < cands.length && !m; i++) {
     var c = String(cands[i] || '').toUpperCase(); if (!c) continue;
     if (!t) t = c;
@@ -1692,7 +1696,8 @@ function aitmAcSize(a) {
   return w ? { ft: w, src: 'cfg', type: t } : { ft: 0, src: '', type: t };
 }
 // "sorted" = Sort by aircraft size was pressed and the aircraft list has not changed since
-function aitmSortSig() { return aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|'); }
+// Sort is due again after any change of the flight plans, not only of the aircraft (button red until sorted again)
+function aitmSortSig() { return aitmPlanSig() + '#' + aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|') + '#' + aitm.plans.map(function (p) { return p.ac; }).join(','); }
 function aitmSortedOk() { return !!aitm.plans.length && !!aitm.sortSig && aitm.sortSig === aitmSortSig(); }
 // largest aircraft = AC#1 …; the flight plans follow their aircraft. Returns the aircraft with their sizes.
 function aitmSortCore() {
@@ -1934,8 +1939,16 @@ function aitmPlanSig() {
   var byN = {}; aitm.ac.forEach(function (a) { byN[a.n] = a.title + '/' + (a.speed || 0); });
   return aitmHash(aitm.plans.map(function (p) {
     return JSON.stringify([byN[p.ac] || '#' + p.ac, p.reg, p.pct, p.period, p.rules, p.legs.map(function (l) { return [l.dep, l.arr, l.alt, l.fr, l.fnum, l.to, l.tng ? 1 : 0]; })]);
-  }).sort().join('\n') + '|' + aitm.ac.map(function (a) { return a.title; }).sort().join('|'));
+  }).sort().join('\n') + '|' + aitm.ac.map(function (a) { return a.title; }).sort().join('|')
+    + '|' + aitmUsedAirports().map(function (c) { var x = aitmAp(c); return c + (x ? ':' + x.lat + ',' + x.lon : '?'); }).join(','));
 }
+// Save txt: the three files as they would be written; green while they match what was last saved (or opened)
+function aitmTxtContent() {
+  return ['//FSXDAYS=False\n' + aitm.plans.map(AITM_CODEC.planToTxt).join('\n') + '\n', AITM_CODEC.aircraftToTxt(aitm.ac) + '\n',
+    AITM_CODEC.airportsToTxt(aitmUsedAirports(), function (c) { return aitmAp(c); }) + '\n'];
+}
+function aitmTxtSig() { return aitmHash(aitmTxtContent().join('\u0001')); }
+function aitmSavedOk() { return !!aitm.plans.length && !!aitm.savedSig && aitm.savedSig === aitmTxtSig(); }
 function aitmCheckedOk() { return !!aitm.plans.length && !!aitm.checkSig && aitm.checkSig === aitmPlanSig(); }
 function aitmCompiledOk() { return !!aitm.compiledSig && aitm.compiledSig === aitmPlanSig() + '#' + aitmSortSig() + '#' + (aitm.outName || ''); }
 function aitmUpdateCompileBtn() {
@@ -1945,10 +1958,12 @@ function aitmUpdateCompileBtn() {
     b.style.background = c[0]; b.style.color = c[1]; b.style.borderColor = c[2]; b.style.border = '1px solid ' + c[2];
     b.disabled = state === 'grey'; b.style.cursor = state === 'grey' ? 'not-allowed' : 'pointer'; b.title = tip;
   };
-  var has = !!aitm.plans.length, chk = aitmCheckedOk(), srt = aitmSortedOk(), done = aitmCompiledOk();
+  var has = !!aitm.plans.length, chk = aitmCheckedOk(), srt = aitmSortedOk(), done = aitmCompiledOk(), svd = aitmSavedOk();
+  set('aitm-btn-savetxt', !has ? 'grey' : svd ? 'green' : 'red', !has ? 'Load a flight plan first' : svd ? 'Saved — after a change it turns red again'
+    : (aitm.savedSig ? 'Changed since the last save — save again' : 'Not saved as txt yet') + ' (Flightplans_, Aircraft_ and Airports_….txt — name and folder in the next window)');
   set('aitm-btn-check', chk ? 'green' : 'red', chk ? 'Checked: every flight plan can be flown (warnings aside)'
     : aitm.checkErrs ? aitm.checkErrs + ' error' + (aitm.checkErrs === 1 ? '' : 's') + ' — fix them and check again' : 'Check every flight plan — needed before Compile');
-  set('aitm-btn-sort', srt ? 'green' : 'red', srt ? 'Sorted: largest aircraft is AC#1' : (aitm.sortSig ? 'The aircraft changed since sorting — sort again' : 'Sort the aircraft by size — needed before Compile'));
+  set('aitm-btn-sort', srt ? 'green' : 'red', srt ? 'Sorted: largest aircraft is AC#1' : (aitm.sortSig ? 'The flight plans changed since sorting — sort again' : 'Sort the aircraft by size — needed before Compile'));
   set('aitm-compile', !has || !chk || !srt ? 'grey' : done ? 'green' : 'blue',
     !has ? 'Load a flight plan first' : !chk || !srt ? 'First “Check flightplans” and “Sort by aircraft size” (both green)' : done ? 'Compiled — after a change it turns blue again' : 'Compile the traffic BGL');
 }
@@ -2378,13 +2393,10 @@ async function aitmSaveTxtGo(places) {
   if (!base) { say('A name, please.', '#f85149'); return; }
   var norm = aitmMakeCompiled(), nm = aitmMakeCompiledMsg(norm);
   if (nm) aitm._svNorm = aitm._svNorm ? aitm._svNorm + ' · ' + nm : nm;
-  var files = [
-    ['Flightplans_' + base + '.txt', '//FSXDAYS=False\n' + aitm.plans.map(AITM_CODEC.planToTxt).join('\n') + '\n'],
-    ['Aircraft_' + base + '.txt', AITM_CODEC.aircraftToTxt(aitm.ac) + '\n'],
-    ['Airports_' + base + '.txt', AITM_CODEC.airportsToTxt(aitmUsedAirports(), function (c) { return aitmAp(c); }) + '\n']
-  ];
+  var txt = aitmTxtContent(), txtSig = aitmTxtSig();
+  var files = [['Flightplans_' + base + '.txt', txt[0]], ['Aircraft_' + base + '.txt', txt[1]], ['Airports_' + base + '.txt', txt[2]]];
   var rename = function () { if (base !== aitm.fileBase) { aitm.fileBase = base; aitm.outName = 'Traffic_' + base + '.bgl'; aitmSave(); aitmRenderBottom(); } };
-  if (!places) { files.forEach(function (f, k) { setTimeout(function () { aitmDownload(f[1], f[0]); }, k * 400); }); aitmCloseModal(); rename(); aitmToast('✓ ' + files.map(function (f) { return f[0]; }).join(', ') + ' downloaded' + (aitm._svNorm ? ' · ' + aitm._svNorm : '') + '.'); aitm._svNorm = null; return; }
+  if (!places) { files.forEach(function (f, k) { setTimeout(function () { aitmDownload(f[1], f[0]); }, k * 400); }); aitmCloseModal(); aitm.savedSig = txtSig; aitmSave(); rename(); aitmToast('✓ ' + files.map(function (f) { return f[0]; }).join(', ') + ' downloaded' + (aitm._svNorm ? ' · ' + aitm._svNorm : '') + '.'); aitm._svNorm = null; return; }
   var pick = (document.querySelector('input[name=aitm-sv-dir]:checked') || {}).value, dir, label;
   if (pick === 'other' || pick == null) {
     try { dir = await window.showDirectoryPicker({ id: 'aitm-txt', mode: 'readwrite' }); } catch (e) { return; }
@@ -2420,7 +2432,7 @@ async function aitmSaveTxtGo(places) {
   } catch (e) { say('Could not write: ' + aitmEsc(e.message), '#f85149'); return; }
   aitm._svConfirm = null;
   aitm._srcDir = { h: dir, label: label };
-  aitmCloseModal(); rename();
+  aitmCloseModal(); aitm.savedSig = txtSig; aitmSave(); rename();
   aitmToast('✓ ' + files.map(function (f) { return f[0]; }).join(', ') + ' saved in ' + label + (exist.length ? ' · old ones in ' + bak.label : '')
     + (moved ? ' · ' + moved + ' old .txt.bak moved there' : '') + (aitm._svNorm ? ' · ' + aitm._svNorm : '') + '.');
   aitm._svNorm = null;
