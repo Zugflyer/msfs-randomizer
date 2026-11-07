@@ -1378,6 +1378,14 @@ function aitmBind() {
       aitmRenderLegs();
     });
     legs.addEventListener('dblclick', function (e) { var row = e.target.closest('.aitm-pl'); if (row) aitmEditPlan(parseInt(row.dataset.i, 10)); });
+    // right-click: on a selected row it acts on all selected rows, on another row only on that one (which becomes the selection)
+    legs.addEventListener('contextmenu', function (e) {
+      var row = e.target.closest('.aitm-pl'); if (!row) return;
+      e.preventDefault(); rotTipHide();
+      var i = parseInt(row.dataset.i, 10);
+      if (aitm.sel.indexOf(i) < 0) { aitm.sel = [i]; aitm.selAnchor = i; aitmRenderLegs(); }
+      aitmPlanMenu(aitm.sel.slice().sort(function (a, b) { return a - b; }), e.clientX, e.clientY);
+    });
     legs.addEventListener('mousemove', function (e) {
       var row = e.target.closest('.aitm-pl');
       if (!row) { rotTipHide(); return; }
@@ -1603,6 +1611,28 @@ function aitmApSchedule(icao) {
     [['Airport Data', function () { aitmCloseModal(); aitmAirportData(icao); }, true], ['Rotation Map ↗', function () { aitmRotationMap(icao); }, true]], 'xl');
 }
 // right-click on an airport
+function aitmPlanMenu(idxs, x, y) {
+  var m = document.getElementById('aitm-menu'); if (m) m.remove();
+  idxs = idxs.filter(function (i) { return aitm.plans[i]; }); if (!idxs.length) return;
+  m = document.createElement('div'); m.id = 'aitm-menu';
+  m.style.cssText = 'position:fixed;z-index:10001;left:' + Math.min(x, window.innerWidth - 240) + 'px;top:' + Math.min(y, window.innerHeight - 120) + 'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.6);padding:4px;min-width:200px;';
+  var one = idxs.length === 1, p = aitm.plans[idxs[0]];
+  var head = one ? p.reg + ' · AC#' + p.ac : idxs.length + ' flight plans selected';
+  var items = [['del', '🗑 Delete' + (one ? '' : ' ' + idxs.length + ' flight plans'), '#ff7b72']];
+  if (one) items.push(['edit', 'Edit…', ''], ['3d', '3D view', '']);
+  m.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:4px 8px;text-transform:uppercase;letter-spacing:.06em;font-family:monospace;">' + aitmEsc(head) + '</div>'
+    + items.map(function (it) { return '<div class="aitm-mi" data-a="' + it[0] + '" style="padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;color:' + (it[2] || 'var(--txt)') + ';">' + it[1] + '</div>'; }).join('');
+  m.addEventListener('click', function (e) {
+    var it = e.target.closest('.aitm-mi'); if (!it) return;
+    m.remove();
+    var a = it.dataset.a;
+    if (a === 'del') aitmAskDeletePlans(idxs);
+    else if (a === 'edit') aitmEditPlan(idxs[0]);
+    else aitmPlan3D(idxs[0]);
+  });
+  document.body.appendChild(m);
+  setTimeout(function () { document.addEventListener('mousedown', function h(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', h); } }); }, 0);
+}
 function aitmApMenu(icao, x, y) {
   var m = document.getElementById('aitm-menu'); if (m) m.remove();
   m = document.createElement('div'); m.id = 'aitm-menu';
