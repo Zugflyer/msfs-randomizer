@@ -376,6 +376,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .aitm-ac{display:flex;align-items:center;gap:8px;font-size:12px;padding:7px 9px;margin:4px 2px;border:1px solid var(--bdr);border-radius:8px;background:var(--surf);cursor:default;user-select:none;}
 .aitm-ac:hover{border-color:var(--bdr2);}
 .aitm-ac.drop{border-color:#3fb950;background:rgba(63,185,80,.15);}
+.aitm-ac.sel{border-color:#7d5ee8;background:rgba(125,94,232,.22);}
 .aitm-fl{display:flex;align-items:center;gap:6px;font-size:12px;padding:4px 7px;margin:2px 2px;border:1px solid transparent;border-radius:6px;color:var(--txt);cursor:grab;user-select:none;}
 .aitm-fl:hover{background:var(--surf2);}
 .aitm-fl.sel{background:rgba(125,94,232,.25);border-color:var(--acc);}
@@ -1338,7 +1339,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
           <div id="aitm-aps" class="aitm-body"></div>
         </div>
         <div class="aitm-col">
-          <div class="aitm-colh">Aircraft <span class="aitm-sub" style="margin-left:auto;">drop here · double-click</span></div>
+          <div class="aitm-colh">Aircraft <span class="aitm-sub" style="margin-left:auto;" title="Drag liveries from the fleet list onto an aircraft · click selects (Shift/Ctrl for more) · right-click or Del deletes the aircraft with its flight plans · double-click for details">drop here · right-click · double-click</span></div>
           <div id="aitm-acs" class="aitm-body"></div>
         </div>
         <div class="aitm-col">

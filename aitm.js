@@ -546,6 +546,7 @@ function aitmConsolidateAc() {
   var noGaps = nums.every(function (v, k) { return v === k + 1; });
   var out = gone.map(function (a) { return { n: a.n, into: map[a.n], title: a.title, fps: aitm.plans.filter(function (p) { return p.ac === a.n; }).length }; });
   aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+  aitm.acSel = []; aitm.acAnchor = null;
   aitm.ac = aitm.ac.filter(function (a) { return gone.indexOf(a) < 0; });
   if (noGaps) {
     var ren = {}; aitm.ac.forEach(function (a, k) { ren[a.n] = k + 1; a.n = k + 1; });
@@ -870,7 +871,7 @@ function aitmLoad(d) {
   if (aitm.kind === 'airport') {
     var ap = aitmAp(ic); aitm.code = ''; aitm.name = ap ? (ap.city || ap.name || ic) : ic;
     aitm.outName = 'Traffic_' + (aitm.fileBase || ('CRE_' + ic)) + '.bgl';
-    aitm.sel = []; aitm.fleetQ = null; aitm.fleetSel = [];
+    aitm.sel = []; aitm.acSel = []; aitm.fleetQ = null; aitm.fleetSel = [];
     if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; }
     aitmSave(); aitmRenderAll(); return;
   }
@@ -881,7 +882,7 @@ function aitmLoad(d) {
   }
   if (!aitm.name && aitm.code && typeof AIRLINE_NAMES !== 'undefined' && AIRLINE_NAMES[aitm.code]) aitm.name = AIRLINE_NAMES[aitm.code];
   aitm.outName = 'Traffic_' + (aitm.fileBase || ('CRE_' + (aitm.name || aitm.code || 'Airline').replace(/\s+/g, ''))) + '.bgl';
-  aitm.sel = []; aitm.fleetQ = null; aitm.fleetSel = [];
+  aitm.sel = []; aitm.acSel = []; aitm.fleetQ = null; aitm.fleetSel = [];
   aitmSave(); aitmRenderAll(); aitmFindLogo();
 }
 // Open txt: pick Flightplans_<name>.txt — Aircraft_<name>.txt and Airports_<name>.txt are taken
@@ -1091,11 +1092,13 @@ function aitmInit() {
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') aitmCloseModal();
       // Del: delete the selected flight plans (Legs visible, no dialog open, not typing)
-      if ((e.key === 'Delete' || e.key === 'Del') && aitm.sel.length && !document.getElementById('aitm-modal')) {
+      if ((e.key === 'Delete' || e.key === 'Del') && (aitm.sel.length || (aitm.acSel || []).length) && !document.getElementById('aitm-modal')) {
         var t = e.target, legs = document.getElementById('aitm-legs');
         if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
         if (!legs || !legs.offsetParent) return;
-        e.preventDefault(); aitmAskDeletePlans(aitm.sel.slice());
+        e.preventDefault();
+        if (aitm._lastList === 'ac' && aitm.acSel.length) aitmAskDeleteAircraft(aitm.acSel.slice());
+        else if (aitm.sel.length) aitmAskDeletePlans(aitm.sel.slice());
       }
     });
   }
@@ -1261,7 +1264,7 @@ function aitmRenderAircraft() {
     var inst = aitmInstalled(a.title);
     var dot = inst ? '#3fb950' : (aitm.fleet.length ? '#f85149' : 'var(--txt3)');
     var tip = inst ? 'Installed (' + inst.src + ' · ' + inst.folder + ')' : (aitm.fleet.length ? 'Not found among your installed aircraft — drag one from the right' : 'Connect your aircraft folders on the right to check');
-    return '<div class="aitm-ac" data-i="' + i + '" title="' + aitmEsc(tip) + ' · double-click for more">'
+    return '<div class="aitm-ac' + ((aitm.acSel || []).indexOf(a.n) >= 0 ? ' sel' : '') + '" data-i="' + i + '" title="' + aitmEsc(tip) + ' · click = select (Shift/Ctrl for more) · right-click = delete · double-click for more">'
       + '<span style="font-family:monospace;color:var(--txt3);min-width:22px;flex-shrink:0;">' + a.n + '</span>'
       + '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;"></span>'
       + '<span style="flex:1;min-width:0;"><span style="display:block;color:#fff;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(a.title) + '</span>'
@@ -1368,7 +1371,7 @@ function aitmBind() {
       var del = e.target.closest('.aitm-pldel');
       if (del) { e.stopPropagation(); var di = parseInt(del.closest('.aitm-pl').dataset.i, 10); aitmAskDeletePlans(aitm.sel.indexOf(di) >= 0 ? aitm.sel.slice() : [di]); return; }
       var row = e.target.closest('.aitm-pl'); if (!row) return;
-      var i = parseInt(row.dataset.i, 10);
+      var i = parseInt(row.dataset.i, 10); aitm._lastList = 'pl';
       if (e.shiftKey && aitm.selAnchor != null) {
         var a = Math.min(aitm.selAnchor, i), b = Math.max(aitm.selAnchor, i); aitm.sel = [];
         for (var k = a; k <= b; k++) aitm.sel.push(k);
@@ -1403,6 +1406,27 @@ function aitmBind() {
   if (acs && !acs._b) {
     acs._b = 1;
     acs.addEventListener('dblclick', function (e) { var c = e.target.closest('.aitm-ac'); if (c) aitmAcDialog(parseInt(c.dataset.i, 10)); });
+    // click = select, Shift = range, Ctrl = add/remove (aitm.acSel holds AC numbers); right-click → Delete …
+    acs.addEventListener('click', function (e) {
+      var c = e.target.closest('.aitm-ac'); if (!c) return;
+      var i = parseInt(c.dataset.i, 10), n = aitm.ac[i] && aitm.ac[i].n; if (n == null) return;
+      aitm.acSel = aitm.acSel || []; aitm._lastList = 'ac';
+      if (e.shiftKey && aitm.acAnchor != null) {
+        var a = Math.min(aitm.acAnchor, i), b = Math.max(aitm.acAnchor, i); aitm.acSel = [];
+        for (var k = a; k <= b; k++) if (aitm.ac[k]) aitm.acSel.push(aitm.ac[k].n);
+      } else if (e.ctrlKey || e.metaKey) {
+        var x = aitm.acSel.indexOf(n); if (x >= 0) aitm.acSel.splice(x, 1); else aitm.acSel.push(n); aitm.acAnchor = i;
+      } else { aitm.acSel = (aitm.acSel.length === 1 && aitm.acSel[0] === n) ? [] : [n]; aitm.acAnchor = i; }
+      aitmRenderAircraft();
+    });
+    acs.addEventListener('contextmenu', function (e) {
+      var c = e.target.closest('.aitm-ac'); if (!c) return;
+      e.preventDefault();
+      var i = parseInt(c.dataset.i, 10), n = aitm.ac[i] && aitm.ac[i].n; if (n == null) return;
+      aitm.acSel = aitm.acSel || []; aitm._lastList = 'ac';
+      if (aitm.acSel.indexOf(n) < 0) { aitm.acSel = [n]; aitm.acAnchor = i; aitmRenderAircraft(); }
+      aitmAcMenuDel(aitm.acSel.slice(), e.clientX, e.clientY);
+    });
     acs.addEventListener('dragover', function (e) { var c = e.target.closest('.aitm-ac'); if (!c) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; aitmDropHint(c); });
     acs.addEventListener('dragleave', function (e) { if (!acs.contains(e.relatedTarget)) aitmDropHint(null); });
     acs.addEventListener('drop', function (e) {
@@ -1739,7 +1763,7 @@ function aitmSortCore() {
   aitm.ac = sized.map(function (x, k) { x.a.n = k + 1; return x.a; });
   aitm.plans = aitm.plans.map(function (p, i) { return { p: p, i: i }; })
     .sort(function (x, y) { return (x.p.ac - y.p.ac) || (x.i - y.i); }).map(function (x) { return x.p; });
-  aitm.sel = []; aitm.selAnchor = null;
+  aitm.sel = []; aitm.selAnchor = null; aitm.acSel = []; aitm.acAnchor = null;
   aitm.sortSig = aitmSortSig();
   return sized;
 }
@@ -2101,12 +2125,58 @@ function aitmDeletePlans(idxs) {
     if (wasSorted) {
       var map = {}; aitm.ac.forEach(function (a, k) { map[a.n] = k + 1; a.n = k + 1; });
       aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
-      aitm.sortSig = aitmSortSig();
     }
   }
   aitm.sel = []; aitm.selAnchor = null;
   aitmSave(); aitmRenderAll();
   return { plans: gone, ac: goneAc };
+}
+// delete aircraft with all their flight plans (ns = AC numbers)
+function aitmDeleteAircraft(ns) {
+  var del = {}; ns.forEach(function (n) { del[n] = 1; });
+  var gonePl = aitm.plans.filter(function (p) { return del[p.ac]; }), goneAc = aitm.ac.filter(function (a) { return del[a.n]; });
+  if (!goneAc.length && !gonePl.length) return { plans: [], ac: [] };
+  var contiguous = aitm.ac.every(function (a, k) { return a.n === k + 1; });
+  aitm.plans = aitm.plans.filter(function (p) { return !del[p.ac]; });
+  aitm.ac = aitm.ac.filter(function (a) { return !del[a.n]; });
+  if (contiguous) {                                          // AC#1..n stays without gaps
+    var map = {}; aitm.ac.forEach(function (a, k) { map[a.n] = k + 1; a.n = k + 1; });
+    aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
+  }
+  aitm.acSel = []; aitm.acAnchor = null; aitm.sel = []; aitm.selAnchor = null;
+  aitmSave(); aitmRenderAll();
+  return { plans: gonePl, ac: goneAc };
+}
+function aitmAskDeleteAircraft(ns) {
+  ns = ns.filter(function (n) { return aitmAcByN(n); }).sort(function (a, b) { return a - b; });
+  if (!ns.length) return;
+  var nPl = aitm.plans.filter(function (p) { return ns.indexOf(p.ac) >= 0; }).length;
+  var list = ns.slice(0, 8).map(function (n) { return 'AC#' + n + ' ' + aitmAcByN(n).title; }).join('\n') + (ns.length > 8 ? '\n…' : '');
+  var one = ns.length === 1;
+  var what = (one ? 'this aircraft' : 'these ' + ns.length + ' aircraft') + (!nPl ? ' (no flight plans)' : nPl === 1 ? ' and the flight plan ' + (one ? 'it flies' : 'they fly') : ' and the ' + nPl + ' flight plans ' + (one ? 'it flies' : 'they fly'));
+  if (!confirm('Delete ' + what + '?\n\n' + list)) return;
+  var r = aitmDeleteAircraft(ns);
+  aitmToast(r.ac.length + ' aircraft and ' + r.plans.length + ' flight plan' + (r.plans.length === 1 ? '' : 's') + ' deleted.');
+}
+function aitmAcMenuDel(ns, x, y) {
+  var m = document.getElementById('aitm-menu'); if (m) m.remove();
+  ns = ns.filter(function (n) { return aitmAcByN(n); }).sort(function (a, b) { return a - b; }); if (!ns.length) return;
+  m = document.createElement('div'); m.id = 'aitm-menu';
+  m.style.cssText = 'position:fixed;z-index:10001;left:' + Math.min(x, window.innerWidth - 260) + 'px;top:' + Math.min(y, window.innerHeight - 110) + 'px;background:var(--surf);border:1px solid var(--bdr2);border-radius:8px;box-shadow:0 8px 28px rgba(0,0,0,.6);padding:4px;min-width:220px;';
+  var one = ns.length === 1, nPl = aitm.plans.filter(function (p) { return ns.indexOf(p.ac) >= 0; }).length;
+  var head = one ? 'AC#' + ns[0] + ' · ' + aitmAcByN(ns[0]).title : ns.length + ' aircraft selected (AC#' + ns.join(', ') + ')';
+  var items = [['del', '🗑 Delete' + (one ? '' : ' ' + ns.length + ' aircraft') + ' + ' + nPl + ' flight plan' + (nPl === 1 ? '' : 's'), '#ff7b72']];
+  if (one) items.push(['edit', 'Details…', '']);
+  m.innerHTML = '<div style="font-size:10px;color:var(--txt3);padding:4px 8px;font-family:monospace;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(head) + '</div>'
+    + items.map(function (it) { return '<div class="aitm-mi" data-a="' + it[0] + '" style="padding:6px 10px;border-radius:5px;cursor:pointer;font-size:12px;color:' + (it[2] || 'var(--txt)') + ';">' + it[1] + '</div>'; }).join('');
+  m.addEventListener('click', function (e) {
+    var it = e.target.closest('.aitm-mi'); if (!it) return;
+    m.remove();
+    if (it.dataset.a === 'del') aitmAskDeleteAircraft(ns);
+    else aitmAcDialog(aitm.ac.findIndex(function (a) { return a.n === ns[0]; }));
+  });
+  document.body.appendChild(m);
+  setTimeout(function () { document.addEventListener('mousedown', function h(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', h); } }); }, 0);
 }
 function aitmAskDeletePlans(idxs) {
   idxs = idxs.filter(function (i) { return aitm.plans[i]; });
