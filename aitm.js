@@ -2632,7 +2632,7 @@ async function aitmSaveTxtGo(places) {
   aitm._svNorm = null;
 }
 async function aitmFoldersDialog() {
-  var logos = (await aitmKvGet('logoFolders')) || [], out = await aitmKvGet('outFolder'), txt = await aitmKvGet('txtFolder');
+  var logos = (await aitmKvGet('logoFolders')) || [], out = await aitmKvGet('outFolder'), txt = await aitmKvGet('txtFolder'), upDir = await aitmKvGet('logoUploadDir');
   var btn = function (label, on) { return '<button onclick="' + on + '" style="font-size:11px;padding:2px 8px;border-radius:5px;border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">' + label + '</button>'; };
   var row = function (name, info, btns) { return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--bdr);"><span style="flex:1;color:#fff;">' + aitmEsc(name) + '</span><span style="color:var(--txt3);font-size:11px;">' + info + '</span>' + (btns || '') + '</div>'; };
   var srcs = aitm.sources || [];
@@ -2648,6 +2648,8 @@ async function aitmFoldersDialog() {
     + 'Without Rotation Map a folder can be read by hand here: Chrome hides *.cfg files from folder access, so that uses the browser’s folder upload (Chrome calls it “upload”, but nothing leaves your PC).</div>'
     + '<div style="font-weight:700;color:var(--txt);margin-bottom:4px;">Logos</div>'
     + (logos.length ? logos.map(function (h, i) { return row(h.name, 'logos', btn('Remove', 'aitmRemoveLogoFolder(' + i + ')')); }).join('') : '<div style="color:var(--txt3);">none yet — e.g. your Rotation Map folder (it has “Logos” and “AI Companion\\logos”)</div>')
+    + '<div style="font-weight:700;color:var(--txt);margin:12px 0 4px;">Logo window</div>'
+    + row(upDir ? upDir.name : 'not chosen (asked on the first click on a logo box)', 'a click on a logo box opens the window here', btn('Change…', 'aitmCloseModal();logoUploadFolderDialog()'))
     + '<div style="font-weight:700;color:var(--txt);margin:12px 0 4px;">Output</div>'
     + row(out ? out.name : 'not chosen', 'BGL (package folder with layout.json)') + row(txt ? txt.name : 'not chosen (asked on first save)', 'txt')
     + '</div>',

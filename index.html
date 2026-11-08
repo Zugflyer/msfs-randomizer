@@ -5200,7 +5200,43 @@ async function uploadLogoToGitHub(icaoCode, file) {
   });
 }
 
-function triggerLogoUpload(icaoCode) {
+// The logo window opens right in your folder "Airline Logos" (…\\MSFS Manager\\Airline Logos): the folder is chosen
+// once and remembered in this browser (IndexedDB 'logoUploadDir'); Chrome then starts the window there.
+let _logoUploadDir;                       // undefined = not read yet · null = not chosen
+async function logoUploadDirGet() {
+  if (_logoUploadDir !== undefined) return _logoUploadDir;
+  _logoUploadDir = null;
+  try {
+    _logoUploadDir = (await aitmKvGet('logoUploadDir')) || null;
+    if (!_logoUploadDir) {                // a logo folder of the AI Traffic Manager named "Airline Logos" will do
+      const lf = (await aitmKvGet('logoFolders')) || [];
+      const h = lf.find(x => /airline\s*logos/i.test(x.name || ''));
+      if (h) { _logoUploadDir = h; await aitmKvSet('logoUploadDir', h); }
+    }
+  } catch(e) {}
+  return _logoUploadDir;
+}
+setTimeout(() => { if (typeof aitmKvGet === 'function') logoUploadDirGet(); }, 1500);   // ready before the first click
+async function logoUploadPickDir() {
+  try {
+    const h = await window.showDirectoryPicker({ id: 'airline-logos', mode: 'read', startIn: _logoUploadDir || 'documents' });
+    await aitmKvSet('logoUploadDir', h); _logoUploadDir = h; return h;
+  } catch(e) { return null; }
+}
+function logoUploadFolderDialog(code, why) {
+  aitmModal('Airline Logos folder',
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.6;max-width:460px;">' + (why ? '<div style="color:#f0b400;margin-bottom:8px;">' + why + '</div>' : '')
+    + 'The logo window opens directly in your folder <b style="color:#fff;">Airline Logos</b>:<br>'
+    + '<span style="font-family:monospace;font-size:12px;color:var(--txt);">OneDrive\\MSFS2020 on OneDrive\\MSFS Manager\\Airline Logos</span><br><br>'
+    + 'Choose this folder once — it is remembered. From then on a click on a logo box opens the window right there.</div>',
+    [['Choose folder…', async function () {
+      const h = await logoUploadPickDir(); if (!h) return;
+      if (!code) { aitmCloseModal(); if (typeof aitmToast === 'function') aitmToast('✓ Logos open in “' + h.name + '” from now on.'); return; }
+      aitmModal('Airline Logos folder', '<div style="font-size:13px;color:var(--txt2);">✓ Folder <b style="color:#fff;">' + h.name + '</b> saved — the logo window opens there from now on.</div>',
+        [['Choose logo for ' + code + '…', function () { aitmCloseModal(); triggerLogoUpload(code); }, false, '#238636']]);
+    }, false, '#238636']]);
+}
+function logoUploadLegacy(icaoCode) {
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = 'image/png,image/jpeg,image/svg+xml';
@@ -5208,11 +5244,25 @@ function triggerLogoUpload(icaoCode) {
     const file = input.files[0];
     if (!file) return;
     const ok = await uploadLogoToGitHub(icaoCode, file);
-    if (ok) {
-      alert('✓ Logo for ' + icaoCode + ' saved to cloud!');
-    }
+    if (ok) alert('✓ Logo for ' + icaoCode + ' saved to cloud!');
   };
   input.click();
+}
+async function triggerLogoUpload(icaoCode) {
+  if (!window.showOpenFilePicker || typeof aitmKvGet !== 'function') { logoUploadLegacy(icaoCode); return; }
+  const dir = await logoUploadDirGet();
+  if (!dir) { logoUploadFolderDialog(icaoCode); return; }
+  let hs;
+  try {
+    hs = await window.showOpenFilePicker({ id: 'airline-logos', startIn: dir, multiple: false,
+      types: [{ description: 'Airline logo', accept: { 'image/png': ['.png'], 'image/jpeg': ['.jpg', '.jpeg'], 'image/svg+xml': ['.svg'] } }] });
+  } catch(e) {
+    if (e && e.name === 'AbortError') return;                 // window closed without a file
+    logoUploadFolderDialog(icaoCode, 'The folder “' + (dir.name || '') + '” cannot be opened any more — choose it again.'); return;
+  }
+  const file = await hs[0].getFile();
+  const ok = await uploadLogoToGitHub(icaoCode, file);
+  if (ok) alert('✓ Logo for ' + icaoCode + ' saved to cloud!');
 }
 
 window.addEventListener('resize', () => {
