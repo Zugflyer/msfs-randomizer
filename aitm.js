@@ -469,6 +469,9 @@ function aitmTypeSig(text) {
   if (AITM_TYPES[s]) return s;
   if (AITM_IATA_EQP[s]) return AITM_IATA_EQP[s];
   for (var q = 0; q < AITM_MIL_TYPES.length; q++) if (AITM_MIL_TYPES[q][0].test(s)) return AITM_MIL_TYPES[q][1];
+  var nm = /\bA3(19|20|21)[- ]?(?:\d{1,3})?\s*(?:NEO|N)\b/.exec(s);           // "A321-200neo", "A320-251N" (before the token "A321" wins)
+  if (nm) return { '19': 'A19N', '20': 'A20N', '21': 'A21N' }[nm[1]];
+  var x7 = /\b777[- ]?([89])(?:X)?\b/.exec(s); if (x7) return 'B77' + x7[1];   // 777-8 / 777-9
   var toks = s.replace(/[_\-\/,()]/g, ' ').split(/\s+/);
   for (var i = 0; i < toks.length; i++) {
     var t = toks[i];
@@ -1715,7 +1718,7 @@ function aitmRotationMap(icao) {
 // wingspan in metres by ICAO type (approximate) - only for aircraft whose aircraft.cfg was not read (not installed)
 // length in m: decides between types with the same wingspan (B77W before B77L, A35K before A359, B789 before B788)
 var AITM_LENGTH = {
-  A225: 84.0, A124: 69.1, A388: 72.7, B748: 76.3, B744: 70.7, B74R: 70.6, B743: 70.6, B742: 70.6, VC25: 70.7, B741: 70.6, B74S: 56.3, BLCF: 71.7,
+  A225: 84.0, A124: 69.1, A388: 72.7, B748: 76.3, B744: 70.7, B74R: 70.6, B743: 70.6, B742: 70.6, VC25: 70.6, B741: 70.6, B74S: 56.3, BLCF: 71.7,
   B778: 70.9, B779: 76.7, B77W: 73.9, B77L: 63.7, B773: 73.9, B772: 63.7, A35K: 73.8, A359: 66.8, A346: 75.3, A345: 67.9,
   A343: 63.6, A342: 59.4, A339: 63.7, A338: 58.8, A333: 63.7, A332: 58.8, A337: 63.1, B78X: 68.3, B789: 62.8, B788: 56.7,
   C5M: 75.3, C5: 75.3, IL96: 55.3, IL86: 59.5, IL76: 46.6, IL62: 53.1, C17: 53.0, MD11: 61.6, DC10: 55.5, L101: 54.2,
@@ -1767,9 +1770,28 @@ function aitmAcSize(a) {
 function aitmSortSig() { return aitmPlanSig() + '#' + aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|') + '#' + aitm.plans.map(function (p) { return p.ac; }).join(','); }
 function aitmSortedOk() { return !!aitm.plans.length && !!aitm.sortSig && aitm.sortSig === aitmSortSig(); }
 // largest aircraft = AC#1 …; the flight plans follow their aircraft. Returns the aircraft with their sizes.
-// size order: wingspan, then length (same wingspan: B77W before B77L, B789 before B788), then the same type together
+// Size order (set by you, 8 Nov 2026): these types in exactly this order …
+var AITM_SIZE_ORDER = ['B748', 'B742', 'B77W', 'B77L', 'B772', 'A35K', 'A359', 'A339', 'A338', 'A333', 'A332', 'B789', 'B788', 'B764', 'B763', 'A21N'];
+// … family members that are not in the list stand next to their family (positions as in the list above: 0 = B748) …
+var AITM_SIZE_FAMILY = { B744: 0.5, BLCF: 0.5, B741: 1, B743: 1, B74R: 1, VC25: 1, B74S: 1.2, B779: 1.5, B778: 1.5, B773: 3.5, B78X: 10.5 };
+// … and all others by wingspan: above the first type of the list that no longer has a type at least as wide after it
+// (A388, A225 on top; C-5 between B748 and B742; A340 after A338; MD-11 after B764; A320 after A21N)
+var AITM_SIZE_ENV = (function () {
+  var env = [], mx = 0;
+  for (var i = AITM_SIZE_ORDER.length - 1; i >= 0; i--) { mx = Math.max(mx, AITM_WINGSPAN[AITM_SIZE_ORDER[i]] || 0); env[i] = mx; }
+  return env;
+})();
+function aitmSizeKey(type, spanM) {
+  var k = AITM_SIZE_ORDER.indexOf(type); if (k >= 0) return k;
+  if (AITM_SIZE_FAMILY[type] != null) return AITM_SIZE_FAMILY[type];
+  if (!spanM) return AITM_SIZE_ORDER.length + 1;                 // size unknown: last
+  var n = 0; for (var i = 0; i < AITM_SIZE_ENV.length; i++) if (AITM_SIZE_ENV[i] >= spanM - 1e-6) n = i + 1;
+  return n - 0.5;
+}
+// then: wider first, then longer (B77W before B77L), then the same type together
 function aitmSizeCmp(x, y) {
-  return (y.s.ft - x.s.ft) || ((AITM_LENGTH[y.s.type] || 0) - (AITM_LENGTH[x.s.type] || 0))
+  return (aitmSizeKey(x.s.type, x.s.ft / 3.2808) - aitmSizeKey(y.s.type, y.s.ft / 3.2808))
+    || (y.s.ft - x.s.ft) || ((AITM_LENGTH[y.s.type] || 0) - (AITM_LENGTH[x.s.type] || 0))
     || String(x.s.type || '').localeCompare(String(y.s.type || '')) || (x.i - y.i);
 }
 function aitmSortCore() {
