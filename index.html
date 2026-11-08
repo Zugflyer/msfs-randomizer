@@ -3174,6 +3174,8 @@ function airlineLogoHtml(icao) {
       + '</div>';
   }
 
+  if (localLogoUrlFor(code)) _logoExists[code] = true;      // in your folder "Airline Logos"
+
   function uploadBtn() {
     return '<div onclick="triggerLogoUpload(\'' + code + '\')" title="Upload logo for ' + code + '" '
       + 'style="display:flex;flex-direction:column;align-items:center;justify-content:center;'
@@ -5149,7 +5151,8 @@ async function saveLogoToSupabase(code, dataUrl) {
 }
 
 function getLogoUrl(code) {
-  // Supabase logos take priority, then fall back to GitHub-hosted
+  // your folder "Airline Logos" first, then the cloud logos (Supabase), then the ones on GitHub
+  const loc = localLogoUrlFor(code); if (loc) return loc;
   if (_supabaseLogos[code]) return _supabaseLogos[code];
   return 'https://zugflyer.github.io/msfs-randomizer/logos/' + code + '.png';
 }
@@ -5220,7 +5223,9 @@ setTimeout(() => { if (typeof aitmKvGet === 'function') logoUploadDirGet(); }, 1
 async function logoUploadPickDir() {
   try {
     const h = await window.showDirectoryPicker({ id: 'airline-logos', mode: 'read', startIn: _logoUploadDir || 'documents' });
-    await aitmKvSet('logoUploadDir', h); _logoUploadDir = h; return h;
+    await aitmKvSet('logoUploadDir', h); _logoUploadDir = h;
+    localLogosInit(false);
+    return h;
   } catch(e) { return null; }
 }
 function logoUploadFolderDialog(code, why) {
@@ -5248,6 +5253,72 @@ function logoUploadLegacy(icaoCode) {
   };
   input.click();
 }
+// ═══ Logos from your folder "Airline Logos" — the first source for every logo in the tool ═══
+// (AI Generator, flight planner, logbook, AI Traffic Manager …). Files are found by name: the airline code
+// ("AFR.png") or the airline's name ("AEROSUCRE.png"). Chrome asks once per visit for permission to read the
+// folder — choose "Allow on every visit" and it never asks again. Without it the cloud logos are shown as before.
+var _localLogoIx = null;                 // NAME (upper case, without extension) → file handle
+var _localLogoUrl = {};                // NAME → object URL
+var _localLogoState = 'none';            // none (no folder) · prompt (Chrome needs your OK) · ready
+function localLogoKey(s) { return String(s || '').toUpperCase().replace(/\s+/g, ' ').trim(); }
+function localLogoUrlFor(code) {
+  if (!_localLogoIx) return '';
+  const c = localLogoKey(code);
+  if (_localLogoUrl[c]) return _localLogoUrl[c];
+  const nm = (typeof AIRLINE_NAMES !== 'undefined' && AIRLINE_NAMES[c]) ? localLogoKey(AIRLINE_NAMES[c]) : '';
+  return (nm && _localLogoUrl[nm]) || '';
+}
+async function localLogosInit(ask) {
+  try {
+    const dir = await logoUploadDirGet();
+    if (!dir) { _localLogoState = 'none'; localLogosPill(); return false; }
+    let p = 'prompt';
+    try { p = await dir.queryPermission({ mode: 'read' }); } catch(e) {}
+    if (p !== 'granted' && ask) { try { p = await dir.requestPermission({ mode: 'read' }); } catch(e) {} }
+    if (p !== 'granted') { _localLogoState = 'prompt'; localLogosPill(); return false; }
+    const ix = {};
+    for await (const e of dir.values()) {
+      if (e.kind === 'file' && /\.(png|jpe?g|gif|svg|webp)$/i.test(e.name)) { const k = localLogoKey(e.name.replace(/\.[^.]+$/, '')); if (!ix[k]) ix[k] = e; }
+    }
+    const keys = Object.keys(ix);
+    for (let i = 0; i < keys.length; i += 100) {             // a link for every file (the image is read when shown)
+      await Promise.all(keys.slice(i, i + 100).map(async k => { try { if (!_localLogoUrl[k]) _localLogoUrl[k] = URL.createObjectURL(await ix[k].getFile()); } catch(e) {} }));
+    }
+    _localLogoIx = ix; _localLogoState = 'ready'; localLogosPill();
+    localLogosRefreshScreen();
+    if (typeof aitm !== 'undefined' && typeof aitmFindLogo === 'function') { aitm.logos = null; aitmFindLogo(false); }
+    return true;
+  } catch(e) { console.warn('local logos', e); return false; }
+}
+// logos already on screen: show the one from the folder
+function localLogosRefreshScreen() {
+  document.querySelectorAll('[data-lgw]').forEach(function(el) {
+    const code = el.getAttribute('data-lgw'), url = localLogoUrlFor(code);
+    if (!code || !url) return;
+    _logoExists[code] = true;
+    const img = el.querySelector('img');
+    if (img) { if (img.getAttribute('src') !== url) img.src = url; return; }
+    el.style.background = '#fff'; el.style.padding = '2px 4px'; el.style.border = ''; el.style.cursor = 'pointer';
+    el.title = 'Double-click or right-click to replace logo';
+    el.setAttribute('ondblclick', "triggerLogoUpload('" + code + "')");
+    el.setAttribute('oncontextmenu', "event.preventDefault();triggerLogoUpload('" + code + "');return false;");
+    el.innerHTML = '<img src="' + url + '" style="max-width:100%;max-height:28px;object-fit:contain;cursor:pointer;" alt="' + code + '">';
+  });
+}
+// small button bottom left while Chrome needs your OK to read the folder
+function localLogosPill() {
+  let el = document.getElementById('local-logos-pill');
+  if (_localLogoState !== 'prompt') { if (el) el.remove(); return; }
+  if (el) return;
+  el = document.createElement('button'); el.id = 'local-logos-pill';
+  el.textContent = '🖼 Show logos from “' + ((_logoUploadDir && _logoUploadDir.name) || 'Airline Logos') + '”';
+  el.title = 'Chrome needs your OK to read the logo folder — choose “Allow on every visit”, then it does not ask again';
+  el.style.cssText = 'position:fixed;left:12px;bottom:12px;z-index:9000;padding:7px 12px;border-radius:8px;border:1px solid #4a9eda;background:#0d1b2a;color:#cfe6ff;font-size:12px;font-weight:600;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.4);';
+  el.onclick = function() { localLogosInit(true); };
+  document.body.appendChild(el);
+}
+setTimeout(() => { if (typeof aitmKvGet === 'function') localLogosInit(false); }, 1600);
+
 async function triggerLogoUpload(icaoCode) {
   if (!window.showOpenFilePicker || typeof aitmKvGet !== 'function') { logoUploadLegacy(icaoCode); return; }
   const dir = await logoUploadDirGet();

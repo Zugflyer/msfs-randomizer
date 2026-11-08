@@ -2672,6 +2672,9 @@ async function aitmRemoveLogoFolder(i) {
 async function aitmLogoIndex(ask) {
   if (aitm.logos) return aitm.logos;
   var l = (await aitmKvGet('logoFolders')) || [], ix = {};
+  // your folder "Airline Logos" (the one the logo window opens in) comes first
+  var up = await aitmKvGet('logoUploadDir');
+  if (up) { var dup = false; for (var j = 0; j < l.length; j++) { try { if (await l[j].isSameEntry(up)) dup = true; } catch (e) {} } if (!dup) l = [up].concat(l); else l = [up].concat(l.filter(function (x) { return x !== up; })); }
   async function walk(d, depth) {
     for await (var e of d.values()) {
       if (e.kind === 'file' && /\.(png|jpe?g|gif)$/i.test(e.name)) { var k = e.name.replace(/\.[^.]+$/, '').toLowerCase(); if (!ix[k]) ix[k] = e; }
