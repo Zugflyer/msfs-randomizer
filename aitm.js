@@ -1713,9 +1713,22 @@ function aitmRotationMap(icao) {
 
 // ── Sort by aircraft size, Check flightplans, Compile only after sorting ──
 // wingspan in metres by ICAO type (approximate) - only for aircraft whose aircraft.cfg was not read (not installed)
+// length in m: decides between types with the same wingspan (B77W before B77L, A35K before A359, B789 before B788)
+var AITM_LENGTH = {
+  A225: 84.0, A124: 69.1, A388: 72.7, B748: 76.3, B744: 70.7, B74R: 70.6, B743: 70.6, B742: 70.6, VC25: 70.7, B741: 70.6, B74S: 56.3, BLCF: 71.7,
+  B778: 70.9, B779: 76.7, B77W: 73.9, B77L: 63.7, B773: 73.9, B772: 63.7, A35K: 73.8, A359: 66.8, A346: 75.3, A345: 67.9,
+  A343: 63.6, A342: 59.4, A339: 63.7, A338: 58.8, A333: 63.7, A332: 58.8, A337: 63.1, B78X: 68.3, B789: 62.8, B788: 56.7,
+  C5M: 75.3, C5: 75.3, IL96: 55.3, IL86: 59.5, IL76: 46.6, IL62: 53.1, C17: 53.0, MD11: 61.6, DC10: 55.5, L101: 54.2,
+  B764: 61.4, B763: 54.9, B762: 48.5, A306: 54.1, A30B: 53.6, A3ST: 56.2, A310: 46.7, DC86: 57.1, DC87: 57.1, DC85: 45.9, DC8: 45.9,
+  B703: 46.6, B701: 44.2, B720: 41.5, K35R: 41.5, VC10: 48.4, A400: 45.1, C130: 29.8, C30J: 34.4, B753: 54.4, B752: 47.3,
+  A321: 44.5, A21N: 44.5, A320: 37.6, A20N: 37.6, A319: 33.8, A19N: 33.8, C919: 38.9, BCS3: 38.7, BCS1: 35.0, E295: 41.5,
+  B39M: 42.2, B38M: 39.5, B37M: 35.6, B3XM: 43.8, B739: 42.1, B738: 39.5, B737: 33.6, B736: 31.2, B735: 31.0, B734: 36.4, B733: 33.4,
+  B732: 30.5, B731: 28.6, E290: 36.2, B722: 46.7, B721: 40.6, MD90: 46.5, MD88: 45.1, MD87: 39.8, MD83: 45.1, MD82: 45.1, MD81: 45.1, MD80: 45.1,
+  E190: 36.2, E195: 38.7, E75L: 31.7, DH8D: 32.8, BA11: 32.6, DC93: 36.4, DC9: 31.8, B712: 37.8, F100: 35.5, F70: 30.9
+};
 var AITM_WINGSPAN = {
   A225: 88.4, A124: 73.3, A388: 79.8, B748: 68.4, B744: 64.4, B74R: 59.6, B743: 59.6, B742: 59.6, VC25: 59.6 /* VC-25A = 747-200 */, B741: 59.6, B74S: 59.6, BLCF: 64.4,
-  B778: 71.8, B779: 71.8, B77W: 64.8, B77L: 64.8, B773: 60.9, B772: 60.9, A35K: 64.8, A359: 64.8, A346: 63.5, A345: 63.5,
+  B778: 71.8, B779: 71.8, B77W: 64.8, B77L: 64.8, B773: 60.9, B772: 60.9, A35K: 64.75, A359: 64.75, A346: 63.5, A345: 63.5,
   A343: 60.3, A342: 60.3, A339: 64.0, A338: 64.0, A333: 60.3, A332: 60.3, A337: 60.3, B789: 60.1, B788: 60.1, B78X: 60.1,
   C5M: 67.9, C5: 67.9, IL96: 60.1, IL86: 48.1, IL76: 50.5, IL62: 43.2, C17: 51.8, MD11: 51.7, DC10: 50.4, L101: 47.3,
   B764: 51.9, B763: 47.6, B762: 47.6, A306: 44.8, A30B: 44.8, A3ST: 44.8, A310: 43.9, DC86: 45.2, DC87: 45.2, DC85: 43.4, DC8: 43.4,
@@ -1754,9 +1767,14 @@ function aitmAcSize(a) {
 function aitmSortSig() { return aitmPlanSig() + '#' + aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|') + '#' + aitm.plans.map(function (p) { return p.ac; }).join(','); }
 function aitmSortedOk() { return !!aitm.plans.length && !!aitm.sortSig && aitm.sortSig === aitmSortSig(); }
 // largest aircraft = AC#1 …; the flight plans follow their aircraft. Returns the aircraft with their sizes.
+// size order: wingspan, then length (same wingspan: B77W before B77L, B789 before B788), then the same type together
+function aitmSizeCmp(x, y) {
+  return (y.s.ft - x.s.ft) || ((AITM_LENGTH[y.s.type] || 0) - (AITM_LENGTH[x.s.type] || 0))
+    || String(x.s.type || '').localeCompare(String(y.s.type || '')) || (x.i - y.i);
+}
 function aitmSortCore() {
   var sized = aitm.ac.map(function (a, i) { return { a: a, i: i, s: aitmAcSize(a) }; });
-  sized.sort(function (x, y) { return (y.s.ft - x.s.ft) || (x.i - y.i); });
+  sized.sort(aitmSizeCmp);
   var map = {};
   sized.forEach(function (x, k) { map[x.a.n] = k + 1; });
   aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
@@ -2334,9 +2352,9 @@ function aitmModelOf(ac, plans) {
 function aitmOrder(plans) { return aitmOrderFor(aitm.ac)(plans); }
 function aitmOrderFor(ac) {
   var byN = {}; ac.forEach(function (a) { byN[a.n] = a; });
-  var wing = function (p) { var a = byN[p.ac]; return a ? aitmAcSize(a).ft : 0; };
-  return function (plans) {
-    return plans.map(function (p, i) { return { p: p, i: i, w: wing(p) }; }).sort(function (x, y) { return (y.w - x.w) || (x.i - y.i); }).map(function (x) { return x.p; });
+  var size = function (p) { var a = byN[p.ac]; return a ? aitmAcSize(a) : { ft: 0, type: '' }; };
+  return function (plans) {   // same order as Sort by aircraft size
+    return plans.map(function (p, i) { return { p: p, i: i, s: size(p) }; }).sort(aitmSizeCmp).map(function (x) { return x.p; });
   };
 }
 async function aitmPickOut() {
