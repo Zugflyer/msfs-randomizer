@@ -772,7 +772,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div id="cat-gates-section" style="display:none;flex:1;flex-direction:column;overflow:hidden;">
         <div style="padding:6px 14px;border-bottom:1px solid var(--bdr);display:flex;align-items:center;gap:8px;flex-shrink:0;">
           <button onclick="catShowCategories()" style="font-size:11px;padding:4px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;display:flex;align-items:center;gap:4px;">← Back</button>
-          <span style="font-size:11px;color:var(--txt3);">Gate Sizes Reference — click any cell to edit</span>
+          <span style="font-size:11px;color:var(--txt3);">Gate Sizes Reference — click any cell to edit · also the size order of “Sort by aircraft size” in the AI Traffic Manager (larger gate first, equal gates in list order) · <a href="#" onclick="gatesReset();return false;" style="color:var(--txt3);">reset</a></span>
           <div style="flex:1;"></div>
           <button onclick="gatesAddRow()" style="font-size:11px;padding:4px 12px;border-radius:var(--r);border:1px solid var(--acc);background:transparent;color:var(--acc);cursor:pointer;">⊕ Add row</button>
           <select id="gates-sort" onchange="renderGatesTable()" style="font-size:11px;padding:3px 6px;border-radius:var(--r);border:1px solid var(--bdr);background:var(--bg);color:var(--txt);">
@@ -6288,7 +6288,9 @@ function etopsAddRow() {
 }
 
 // ═══ GATE SIZES DATA ═══
-let gatesData = [
+// Also the size order of "Sort by aircraft size" in the AI Traffic Manager (larger gate first, equal gates in list order).
+// Your edits are kept in this browser (localStorage 'gates_data_v1').
+const GATES_DEFAULT = [
   {mfr:'Airbus', type:'A380', gates:35},
   {mfr:'Boeing', type:'747', gates:30},
   {mfr:'Airbus', type:'A330-A350', gates:27},
@@ -6314,6 +6316,21 @@ let gatesData = [
   {mfr:'Cessna', type:'C208', gates:7},
   {mfr:'Britten', type:'BNI', gates:7}
 ];
+let gatesData = (function(){
+  try {
+    const d = JSON.parse(localStorage.getItem('gates_data_v1') || 'null');
+    if (Array.isArray(d) && d.length && d.every(r => r && typeof r.type === 'string')) return d.map(r => ({ mfr: String(r.mfr || ''), type: r.type, gates: +r.gates || 0 }));
+  } catch(e) {}
+  return GATES_DEFAULT.map(r => Object.assign({}, r));
+})();
+function gatesChanged(){
+  try { localStorage.setItem('gates_data_v1', JSON.stringify(gatesData)); } catch(e) {}
+  if (typeof aitmUpdateCompileBtn === 'function') { try { aitmUpdateCompileBtn(); } catch(e) {} }   // Sort turns red: the order may change
+}
+function gatesReset(){
+  if (!confirm('Reset the Gate Sizes list to the original values? Your changes are lost.')) return;
+  gatesData = GATES_DEFAULT.map(r => Object.assign({}, r)); gatesChanged(); renderGatesTable();
+}
 
 function renderGatesTable() {
   const tbl = document.getElementById('gates-table');
@@ -6336,10 +6353,10 @@ function renderGatesTable() {
     + sorted.map((r,i) => {
         const ri = gatesData.indexOf(r);
         return '<tr>'
-          + '<td style="'+tdS+'"><input value="'+r.mfr+'" onchange="gatesData['+ri+'].mfr=this.value" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
-          + '<td style="'+tdS+'"><input value="'+r.type+'" onchange="gatesData['+ri+'].type=this.value" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
-          + '<td style="'+tdN+'"><input type="number" value="'+r.gates+'" onchange="gatesData['+ri+'].gates=+this.value" style="background:transparent;border:none;color:var(--blue);font-size:13px;width:60px;text-align:right;outline:none;font-family:monospace;font-weight:600;" /></td>'
-          + '<td style="padding:4px;border-bottom:1px solid var(--bdr);text-align:center;"><button onclick="gatesData.splice('+ri+',1);renderGatesTable()" style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:13px;padding:2px 6px;">✕</button></td>'
+          + '<td style="'+tdS+'"><input value="'+r.mfr+'" onchange="gatesData['+ri+'].mfr=this.value;gatesChanged()" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
+          + '<td style="'+tdS+'"><input value="'+r.type+'" onchange="gatesData['+ri+'].type=this.value;gatesChanged()" style="background:transparent;border:none;color:var(--txt);font-size:13px;width:100%;outline:none;font-family:var(--ff);" /></td>'
+          + '<td style="'+tdN+'"><input type="number" value="'+r.gates+'" onchange="gatesData['+ri+'].gates=+this.value;gatesChanged()" style="background:transparent;border:none;color:var(--blue);font-size:13px;width:60px;text-align:right;outline:none;font-family:monospace;font-weight:600;" /></td>'
+          + '<td style="padding:4px;border-bottom:1px solid var(--bdr);text-align:center;"><button onclick="gatesData.splice('+ri+',1);gatesChanged();renderGatesTable()" style="background:transparent;border:none;color:var(--txt3);cursor:pointer;font-size:13px;padding:2px 6px;">✕</button></td>'
           + '</tr>';
       }).join('')
     + '</tbody>';
@@ -6347,7 +6364,7 @@ function renderGatesTable() {
 
 function gatesAddRow() {
   gatesData.push({mfr:'New', type:'Type', gates:0});
-  renderGatesTable();
+  gatesChanged(); renderGatesTable();
 }
 
 

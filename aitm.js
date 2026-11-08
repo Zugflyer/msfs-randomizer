@@ -472,6 +472,8 @@ function aitmTypeSig(text) {
   var nm = /\bA3(19|20|21)[- ]?(?:\d{1,3})?\s*(?:NEO|N)\b/.exec(s);           // "A321-200neo", "A320-251N" (before the token "A321" wins)
   if (nm) return { '19': 'A19N', '20': 'A20N', '21': 'A21N' }[nm[1]];
   var x7 = /\b777[- ]?([89])(?:X)?\b/.exec(s); if (x7) return 'B77' + x7[1];   // 777-8 / 777-9
+  var ru = /\b(IL|TU|AN)[- ]?(\d{2,3})\b/.exec(s);                              // Ilyushin IL-96, Tupolev Tu-154, Antonov An-124
+  if (ru) { var rc = ru[1] === 'TU' ? 'T' + ru[2] : ru[1] === 'AN' && ru[2].length === 3 ? 'A' + ru[2] : ru[1] + ru[2]; if (AITM_WINGSPAN[rc] || AITM_TYPES[rc]) return rc; }
   var toks = s.replace(/[_\-\/,()]/g, ' ').split(/\s+/);
   for (var i = 0; i < toks.length; i++) {
     var t = toks[i];
@@ -1767,36 +1769,85 @@ function aitmAcSize(a) {
 }
 // "sorted" = Sort by aircraft size was pressed and the aircraft list has not changed since
 // Sort is due again after any change of the flight plans, not only of the aircraft (button red until sorted again)
-function aitmSortSig() { return aitmPlanSig() + '#' + aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|') + '#' + aitm.plans.map(function (p) { return p.ac; }).join(','); }
+function aitmSortSig() { return aitmGateSig() + '#' + aitmPlanSig() + '#' + aitm.ac.map(function (a) { return a.n + '=' + a.title; }).join('|') + '#' + aitm.plans.map(function (p) { return p.ac; }).join(','); }
 function aitmSortedOk() { return !!aitm.plans.length && !!aitm.sortSig && aitm.sortSig === aitmSortSig(); }
 // largest aircraft = AC#1 …; the flight plans follow their aircraft. Returns the aircraft with their sizes.
-// Size order (set by you, 8 Nov 2026): these types in exactly this order …
-var AITM_SIZE_ORDER = ['B748', 'B742', 'B77W', 'B77L', 'B772', 'A35K', 'A359', 'A339', 'A338', 'A333', 'A332', 'B789', 'B788', 'B764', 'B763', 'A21N'];
-// … family members that are not in the list stand next to their family (positions as in the list above: 0 = B748) …
-var AITM_SIZE_FAMILY = { B744: 0.5, BLCF: 0.5, B741: 1, B743: 1, B74R: 1, VC25: 1, B74S: 1.2, B779: 1.5, B778: 1.5, B773: 3.5, B78X: 10.5 };
-// … and all others by wingspan: above the first type of the list that no longer has a type at least as wide after it
-// (A388, A225 on top; C-5 between B748 and B742; A340 after A338; MD-11 after B764; A320 after A21N)
-var AITM_SIZE_ENV = (function () {
-  var env = [], mx = 0;
-  for (var i = AITM_SIZE_ORDER.length - 1; i >= 0; i--) { mx = Math.max(mx, AITM_WINGSPAN[AITM_SIZE_ORDER[i]] || 0); env[i] = mx; }
-  return env;
-})();
-function aitmSizeKey(type, spanM) {
-  var k = AITM_SIZE_ORDER.indexOf(type); if (k >= 0) return k;
-  if (AITM_SIZE_FAMILY[type] != null) return AITM_SIZE_FAMILY[type];
-  if (!spanM) return AITM_SIZE_ORDER.length + 1;                 // size unknown: last
-  var n = 0; for (var i = 0; i < AITM_SIZE_ENV.length; i++) if (AITM_SIZE_ENV[i] >= spanM - 1e-6) n = i + 1;
-  return n - 0.5;
+// ── Size order = the Gate Sizes list in the Data tab ──
+// Larger gate size first; equal gate sizes in the order of the list's rows (A330-A350 before 777);
+// within one row: wider first, then longer (B748 > B744 > B742, A35K > A359), then the same type together.
+// Which ICAO types belong to a row of the list:
+var AITM_GATE_FAMILIES = {
+  'A380': ['A388', 'A38F'],
+  '747': ['B741', 'B742', 'B743', 'B744', 'B748', 'B74S', 'B74R', 'B74F', 'BLCF', 'VC25'],
+  'A330-A350': ['A332', 'A333', 'A337', 'A338', 'A339', 'A342', 'A343', 'A345', 'A346', 'A359', 'A35K'],
+  '777': ['B772', 'B773', 'B77L', 'B77W', 'B778', 'B779', 'B77F'],
+  '787': ['B788', 'B789', 'B78X'],
+  'DC10': ['DC10', 'KC10'], 'MD11': ['MD11'],
+  '767': ['B762', 'B763', 'B764', 'B76F'],
+  'A300': ['A306', 'A30B', 'A310', 'A3ST'],
+  '757': ['B752', 'B753'],
+  'A32S': ['A318', 'A319', 'A320', 'A321', 'A19N', 'A20N', 'A21N'],
+  '717-737': ['B712', 'B731', 'B732', 'B733', 'B734', 'B735', 'B736', 'B737', 'B738', 'B739', 'B37M', 'B38M', 'B39M', 'B3XM'],
+  'A220': ['BCS1', 'BCS3'],
+  'E-JETS': ['E170', 'E175', 'E75L', 'E75S', 'E190', 'E195', 'E290', 'E295'],
+  'AVRO': ['RJ70', 'RJ85', 'RJ1H', 'B461', 'B462', 'B463'],
+  'E145': ['E135', 'E145', 'E35L', 'E45X'],
+  'CRJ': ['CRJ1', 'CRJ2', 'CRJ7', 'CRJ9', 'CRJX'],
+  'DH8': ['DH8A', 'DH8B', 'DH8C', 'DH8D'],
+  'ATR': ['AT43', 'AT44', 'AT45', 'AT46', 'AT72', 'AT73', 'AT75', 'AT76'],
+  'S200': ['SB20'], 'SF34': ['SF34'], 'B190': ['B190'], 'C208': ['C208'], 'BNI': ['BN2P', 'BN2T', 'BN2A']
+};
+// a row typed in by you ("MD80", "B73", "727", "IL96"): exact ICAO code, ICAO prefix, or a Boeing number 7x7
+function aitmGateRowMatch(label) {
+  var key = String(label || '').toUpperCase().replace(/\s+/g, '');
+  if (AITM_GATE_FAMILIES[key]) { var set = {}; AITM_GATE_FAMILIES[key].forEach(function (c) { set[c] = 1; }); return function (t) { return !!set[t]; }; }
+  var toks = key.split(/[^A-Z0-9]+/).filter(Boolean);
+  return function (t) {
+    return toks.some(function (k) {
+      if (t === k) return true;
+      if (/^7\d7$/.test(k)) return t.indexOf('B7' + k[1]) === 0;
+      return k.length >= 3 && t.indexOf(k) === 0;
+    });
+  };
 }
-// then: wider first, then longer (B77W before B77L), then the same type together
+// the list as it is now (your edits included), larger gate first, equal gates in list order
+function aitmGateRows() {
+  var src = (typeof gatesData !== 'undefined' && Array.isArray(gatesData)) ? gatesData : [];
+  var rows = src.map(function (r, i) { return { label: r.type, gates: +r.gates || 0, i: i, match: aitmGateRowMatch(r.type) }; })
+    .sort(function (a, b) { return (b.gates - a.gates) || (a.i - b.i); });
+  rows.forEach(function (r, k) {
+    r.rank = k;
+    // widest type of this row: types that are in no row go to the narrowest row they still fit
+    r.maxSpan = 0;
+    Object.keys(AITM_WINGSPAN).forEach(function (t) { if (r.match(t)) r.maxSpan = Math.max(r.maxSpan, AITM_WINGSPAN[t]); });
+  });
+  return rows;
+}
+function aitmGateSig() { return typeof gatesData !== 'undefined' ? aitmHash(JSON.stringify(gatesData)) : ''; }
+// rank in the size order: the row of the list (0 = largest gate); a type in no row: just after the narrowest row it fits
+function aitmSizeKey(type, spanM, rows) {
+  rows = rows || aitmGateRows();
+  var t = String(type || '').toUpperCase();
+  for (var i = 0; i < rows.length; i++) if (t && rows[i].match(t)) return rows[i].rank;
+  if (!spanM) return rows.length + 1;                           // size unknown: last
+  var fit = null;
+  rows.forEach(function (r) { if (r.maxSpan >= spanM - 1e-6 && (!fit || r.maxSpan < fit.maxSpan)) fit = r; });
+  return fit ? fit.rank + 0.5 : -0.5;                          // wider than every row: on top
+}
+function aitmGateOf(type, spanM, rows) {
+  rows = rows || aitmGateRows();
+  var k = aitmSizeKey(type, spanM, rows), r = rows[Math.floor(k)];
+  return k === Math.floor(k) && r ? { row: r.label, gates: r.gates } : (r ? { row: r.label + ' (by wingspan)', gates: r.gates } : null);
+}
 function aitmSizeCmp(x, y) {
-  return (aitmSizeKey(x.s.type, x.s.ft / 3.2808) - aitmSizeKey(y.s.type, y.s.ft / 3.2808))
+  var rows = aitmSizeCmp._rows || aitmGateRows();
+  return (aitmSizeKey(x.s.type, x.s.ft / 3.2808, rows) - aitmSizeKey(y.s.type, y.s.ft / 3.2808, rows))
     || (y.s.ft - x.s.ft) || ((AITM_LENGTH[y.s.type] || 0) - (AITM_LENGTH[x.s.type] || 0))
     || String(x.s.type || '').localeCompare(String(y.s.type || '')) || (x.i - y.i);
 }
 function aitmSortCore() {
   var sized = aitm.ac.map(function (a, i) { return { a: a, i: i, s: aitmAcSize(a) }; });
-  sized.sort(aitmSizeCmp);
+  aitmSizeCmp._rows = aitmGateRows(); sized.sort(aitmSizeCmp); aitmSizeCmp._rows = null;
   var map = {};
   sized.forEach(function (x, k) { map[x.a.n] = k + 1; });
   aitm.plans.forEach(function (p) { if (map[p.ac]) p.ac = map[p.ac]; });
@@ -1842,8 +1893,9 @@ function aitmSortBySize() {
   aitmSave(); aitmRenderAll();
   var m = function (x) { return x.s.ft ? Math.round(x.s.ft / 3.2808 * 10) / 10 + ' m' : 'size unknown'; };
   var nCfg = sized.filter(function (x) { return x.s.src === 'cfg'; }).length, nUnk = sized.filter(function (x) { return !x.s.ft; }).length;
-  var lbl = function (x) { return x.a.title + ' (' + (x.s.type ? x.s.type + ', ' : '') + m(x) + ')'; };
-  aitmToast('Sorted by wingspan: AC#1 ' + lbl(sized[0]) + ' … AC#' + sized.length + ' ' + lbl(sized[sized.length - 1])
+  var rows = aitmGateRows();
+  var lbl = function (x) { var g = aitmGateOf(x.s.type, x.s.ft / 3.2808, rows); return x.a.title + ' (' + (x.s.type ? x.s.type + ', ' : '') + (g ? 'gate ' + g.gates + ' · ' : '') + m(x) + ')'; };
+  aitmToast('Sorted by the Gate Sizes list (Data tab): AC#1 ' + lbl(sized[0]) + ' … AC#' + sized.length + ' ' + lbl(sized[sized.length - 1])
     + (nCfg ? ' · ' + nCfg + ' of unknown type: wingspan from aircraft.cfg' : '') + (nUnk ? ' · ' + nUnk + ' of unknown size placed last' : '') + ' — Compile is ready.', nUnk > 0);
 }
 // Check flightplans: errors, warnings (click one to select its flight plan in Legs), aircraft without flights
@@ -2376,7 +2428,9 @@ function aitmOrderFor(ac) {
   var byN = {}; ac.forEach(function (a) { byN[a.n] = a; });
   var size = function (p) { var a = byN[p.ac]; return a ? aitmAcSize(a) : { ft: 0, type: '' }; };
   return function (plans) {   // same order as Sort by aircraft size
-    return plans.map(function (p, i) { return { p: p, i: i, s: size(p) }; }).sort(aitmSizeCmp).map(function (x) { return x.p; });
+    aitmSizeCmp._rows = aitmGateRows();
+    var out = plans.map(function (p, i) { return { p: p, i: i, s: size(p) }; }).sort(aitmSizeCmp).map(function (x) { return x.p; });
+    aitmSizeCmp._rows = null; return out;
   };
 }
 async function aitmPickOut() {
