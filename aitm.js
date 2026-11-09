@@ -707,17 +707,16 @@ function aitmReadAircraftFolder() {
     var oldTitles = {}; aitm.fleet.forEach(function (e) { oldTitles[String(e.title).toLowerCase()] = 1; });
     aitmToast('Reading ' + files.length + ' files …');
     await new Promise(function (r) { setTimeout(r, 20); });
-    var byDir = {}, subCfg = {}, root = '';
+    var byDir = {}, root = '';
     files.forEach(function (f) {
       var p = (f.webkitRelativePath || f.name).split('/');
       if (!root) root = p[0];
       var n = p.pop().toLowerCase();
       if (n === 'aircraft.cfg' || n === 'flight_model.cfg' || n === 'aircraft.cfgaig') { var d = p.join('/'); (byDir[d] = byDir[d] || {})[n] = f; }
-      else if (n === 'model.cfg' || n === 'texture.cfg') { var sub = p.pop(), dd = p.join('/'); ((subCfg[dd] = subCfg[dd] || {})[sub.toLowerCase()] = subCfg[dd][sub.toLowerCase()] || {})[n] = f; }
     });
     var src = /aig/i.test(root) || Object.keys(byDir).some(function (d) { return /aig-aitraffic/i.test(d); }) ? 'AIG' : 'Own';
     var entries = [], ncfg = 0, errs = [];
-    var meta = {}, nsub = 0, dirs = Object.keys(byDir);
+    var meta = {}, dirs = Object.keys(byDir);
     for (var di = 0; di < dirs.length; di++) {
       var d = dirs[di], g = byDir[d], cf = g['aircraft.cfg'] || g['aircraft.cfgaig'];
       if (!cf) continue;
@@ -727,22 +726,7 @@ function aitmReadAircraftFolder() {
         aitmCfgEntries(cfg, fm, d.split('/').pop(), src).forEach(function (e) { e.root = root; e.rel = rel; entries.push(e); });
         ncfg++;
       } catch (e) { errs.push(d + ': ' + e.message); }
-      // for the 3D view: model.cfg [models] normal= and texture.cfg fallbacks of the sub folders
-      // (Chrome hides *.cfg from folder access, so they are kept from here)
-      var subs = subCfg[d] || {}, m = { m: {}, t: {} }, jobs = [];
-      Object.keys(subs).forEach(function (sub) {
-        if (subs[sub]['model.cfg']) jobs.push(aitmReadText(subs[sub]['model.cfg']).then(function (t) {
-          aitmParseCfg(t).forEach(function (sc) { if (sc.name === 'models' && sc.kv.normal) m.m[sub] = sc.kv.normal; });
-        }));
-        if (subs[sub]['texture.cfg']) jobs.push(aitmReadText(subs[sub]['texture.cfg']).then(function (t) {
-          var fb = [];
-          aitmParseCfg(t).forEach(function (sc) { Object.keys(sc.kv).forEach(function (k) { var x = /^fallback\.(\d+)$/.exec(k); if (x) fb[parseInt(x[1], 10)] = sc.kv[k]; }); });
-          m.t[sub] = fb.filter(Boolean);
-        }));
-      });
-      await Promise.all(jobs); nsub += jobs.length;
-      meta[rel] = m;
-      if (di % 20 === 0) { aitmToast('Reading ' + root + ' … ' + ncfg + ' aircraft.cfg, ' + nsub + ' model/texture settings'); await new Promise(function (r) { setTimeout(r, 0); }); }
+      if (di % 20 === 0) { aitmToast('Reading ' + root + ' … ' + ncfg + ' aircraft.cfg'); await new Promise(function (r) { setTimeout(r, 0); }); }
     }
     aitm.fleetMeta = aitm.fleetMeta || {}; aitm.fleetMeta[root] = meta;
     aitm.fleet = aitm.fleet.filter(function (e) { return e.root && e.root !== root; }).concat(entries);
@@ -1191,7 +1175,7 @@ function aitmPlanHtml(p, i) {
   var sel = aitm.sel.indexOf(i) >= 0;
   return '<div class="aitm-pl' + (sel ? ' sel' : '') + '" data-i="' + i + '">'
     + '<span class="aitm-tn" title="' + aitmEsc(tn) + '">' + aitmEsc(tn || '?') + '</span>'
-    + '<span class="aitm-3d aitm-pl3d" title="3D view of ' + aitmEsc(a ? a.title : 'this aircraft') + ' (in Rotation Map)">3D</span> '
+    + '<span class="aitm-3d aitm-pl3d" title="Show ' + aitmEsc(a ? a.title : 'this aircraft') + ' in the 3D viewer (Rotation map\\Viewer, opened by Rotation Map on this PC)">3D</span> '
     + (sel ? '<span class="aitm-pldel" title="Delete this flight plan' + (aitm.sel.length > 1 ? ' (and the other selected ones)' : '') + ' — or press Del">🗑</span> ' : '')
     + '<span class="aitm-chip" data-i="' + i + '" title="Click to give this flight plan (or all selected ones) another AC#">AC#' + p.ac + '</span>'
     + '<span>, ' + aitmEsc(p.reg) + ', ' + (p.pct || 1) + '%, ' + aitmEsc(String(p.period).toUpperCase()) + ', ' + p.rules + ', ' + parts.join(', ') + '</span></div>';
@@ -1348,7 +1332,7 @@ function aitmRenderFleet() {
       + (acOf[e.i] ? '<span class="aitm-hint" title="Best fit for AC#' + acOf[e.i] + '">→' + acOf[e.i] + '</span>' : '<span class="aitm-hint"></span>')
       + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;' + (used ? 'color:#3fb950;' : '') + '">' + aitmEsc(e.title) + '</span>'
       + '<span style="font-size:10px;color:var(--txt3);white-space:nowrap;">' + aitmEsc(e.sig || '') + (e.speed ? ' ' + e.speed : '') + '</span>'
-      + '<span class="aitm-3d" title="3D view of this livery">3D</span></div>';
+      + '<span class="aitm-3d" title="Show this livery in the 3D viewer (Rotation map\\Viewer, opened by Rotation Map on this PC)">3D</span></div>';
   }).join('') + (hidden ? '<div style="padding:8px 12px;color:#f0b400;font-size:12px;">' + hidden + ' more under <a href="#" style="color:#58a6ff;" onclick="aitmSetFleetSrc(\'all\');return false;">All</a> — the ' + (aitm.fleetSrc === 'aig' ? 'AIG' : 'Own') + ' switch hides them.</div>'
     : shown.length ? '' : '<div style="padding:12px;color:var(--txt3);font-size:12px;">Nothing matches “' + aitmEsc(q) + '”.</div>');
   if (st) st.title = hits.length > shown.length ? 'Only the first ' + shown.length + ' are listed — type more to narrow the search' : '';
@@ -1445,7 +1429,7 @@ function aitmBind() {
     fl._b = 1;
     fl.addEventListener('click', function (e) {
       var b3 = e.target.closest('.aitm-3d');
-      if (b3) { e.stopPropagation(); var rr = b3.closest('.aitm-fl'); aitmOpen3D(aitm.fleetShown[parseInt(rr.dataset.k, 10)]); return; }
+      if (b3) { e.stopPropagation(); var rr = b3.closest('.aitm-fl'); var fe = aitm.fleetShown[parseInt(rr.dataset.k, 10)]; if (fe) aitmViewer3D(fe.title, ''); return; }
       var r = e.target.closest('.aitm-fl'); if (!r) return;
       var k = parseInt(r.dataset.k, 10), ix = aitm.fleetShown[k].i;
       if (e.shiftKey && aitm.fleetAnchor != null) {
@@ -2282,15 +2266,21 @@ function aitmAskDeletePlans(idxs) {
   var r = aitmDeletePlans(idxs);
   aitmToast(r.plans.length + ' flight plan' + (r.plans.length === 1 ? '' : 's') + ' deleted' + (r.ac.length ? ' · aircraft removed: ' + r.ac.map(function (a) { return a.title; }).join(', ') : '') + '.');
 }
-// 3D view of a flight plan's aircraft: Rotation Map shows it (AI Companion's viewer on this PC, else its
-// browser preview) — it reads the model files itself, no folder to choose here
+// 3D view: always the viewer in the folder "Rotation map\Viewer" (Viewer.exe, AI Companion's viewer).
+// The page cannot start a program, so it asks Rotation Map on this PC: #model=<title> makes Rotation Map
+// start Viewer\Viewer.exe next to RotationMap.exe with the title's model, textures and aircraft.cfg.
+function aitmViewer3D(title, label) {
+  title = String(title || '').trim();
+  if (!title) { aitmToast('No aircraft to show.', true); return; }
+  if (aitm.fleet.length && !aitmInstalled(title)) { aitmToast('“' + title + '” is not installed — nothing to show.', true); return; }
+  var w = window.open(AITM_RM_URL + '?from=msfs-manager&t=' + Date.now() + '#model=' + encodeURIComponent(title) + (label ? '&label=' + encodeURIComponent(label) : ''), 'rotationmap');
+  if (w) { try { w.focus(); } catch (e) {} aitmToast('Opening “' + title + '” in the 3D viewer (Rotation map\\Viewer) — Rotation Map has to run on this PC.'); }
+  else aitmToast('The browser blocked the new tab — allow pop-ups for this page.', true);
+}
 function aitmPlan3D(i) {
   var p = aitm.plans[i], a = p ? aitmAcByN(p.ac) : null;
   if (!a || !a.title) { aitmToast('This flight plan has no aircraft.', true); return; }
-  if (aitm.fleet.length && !aitmInstalled(a.title)) { aitmToast('“' + a.title + '” is not installed — nothing to show.', true); return; }
-  var w = window.open(AITM_RM_URL + '?from=msfs-manager&t=' + Date.now() + '#model=' + encodeURIComponent(a.title) + '&label=' + encodeURIComponent(p.reg + ' · AC#' + p.ac), 'rotationmap');
-  if (w) { try { w.focus(); } catch (e) {} }
-  else aitmToast('The browser blocked the new tab — allow pop-ups for this page.', true);
+  aitmViewer3D(a.title, p.reg + ' · AC#' + p.ac);
 }
 
 // ── move airports ──
@@ -2706,362 +2696,6 @@ async function aitmFindLogo(ask) {
     if (hit) aitm.logoUrl = URL.createObjectURL(await hit.getFile());
     aitmRenderHeader();
   } catch (e) { console.warn('logo', e); }
-}
-
-// ═══ 3D view of a livery — as in Rotation Map's browser viewer (three.js; the simulator's glTF
-// read directly, textures from the livery folder and its fallbacks; DDS handed to the graphics
-// card as compressed textures). Model and texture files are read with folder access (only *.cfg
-// is hidden by Chrome — model.cfg and texture.cfg are kept from reading the aircraft folder).
-var AITM_ORBIT_URL = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/controls/OrbitControls.js';
-async function aitmOpen3D(e) {
-  if (!e) return;
-  if (!window.showDirectoryPicker) { aitmToast('The 3D view needs Chrome or Edge.', true); return; }
-  if (!e.rel && e.rel !== '' || e.model == null) {
-    aitmModal('3D view', '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">Read the folder <b>' + aitmEsc(e.root || '') + '</b> once more (Folders → Read again) — then the page knows where the model and texture files of each livery are.</div>',
-      [['Read aircraft folder…', function () { aitmCloseModal(); aitmReadAircraftFolder(); }]]);
-    return;
-  }
-  var roots = (await aitmKvGet('mdlRoots')) || {};
-  var h = roots[e.root];
-  if (h && (await aitmPermOk(h))) { aitmView3D(e, h, 0); return; }
-  aitmModal('3D view',
-    '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">For the 3D view the page reads the model and texture files directly. '
-    + (h ? 'Chrome needs your OK for “' + aitmEsc(e.root) + '” again.' : 'Choose the folder <b>' + aitmEsc(e.root) + '</b> once (the same one you read the aircraft from) and allow Chrome to view it — choose “Allow on every visit” if Chrome offers it.') + '</div>',
-    [[h ? 'Allow' : 'Choose folder…', async function () {
-      try {
-        var x = h;
-        if (x) { if (!(await aitmPermOk(x))) return; }
-        else {
-          x = await window.showDirectoryPicker({ id: 'aitm-3d', mode: 'read' });
-          if (x.name.toLowerCase() !== String(e.root).toLowerCase() && !confirm('You chose “' + x.name + '”, but the aircraft were read from “' + e.root + '”. Use it anyway?')) return;
-          roots[e.root] = x; await aitmKvSet('mdlRoots', roots);
-        }
-        aitmCloseModal(); aitmView3D(e, x, 0);
-      } catch (err) { if (err && err.name !== 'AbortError') aitmToast(err.message, true); }
-    }]]);
-}
-async function aitmDirMap(d) {
-  if (d._aitmMap) return d._aitmMap;
-  var m = {}; for await (var x of d.values()) m[x.name.toLowerCase()] = x;
-  d._aitmMap = m; return m;
-}
-async function aitmChild(d, name, kind) { var m = await aitmDirMap(d); var x = m[String(name).toLowerCase()]; return x && x.kind === kind ? x : null; }
-// path (Windows style, may contain ..) from a folder given as a stack of handles from the root
-async function aitmResolve(stack, rel) {
-  var st = stack.slice();
-  var parts = String(rel || '').split(/[\\/]+/).filter(Boolean);
-  for (var i = 0; i < parts.length; i++) {
-    if (parts[i] === '.') continue;
-    if (parts[i] === '..') { if (st.length <= 1) return null; st.pop(); continue; }
-    var c = await aitmChild(st[st.length - 1], parts[i], 'directory'); if (!c) return null; st.push(c);
-  }
-  return st;
-}
-function aitmHalf(h) {
-  var s = (h & 0x8000) ? -1 : 1, e = (h >> 10) & 31, f = h & 1023;
-  if (e === 0) return s * Math.pow(2, -14) * (f / 1024);
-  if (e === 31) return f ? NaN : s * Infinity;
-  return s * Math.pow(2, e - 15) * (1 + f / 1024);
-}
-var AITM_NCOMP = { SCALAR: 1, VEC2: 2, VEC3: 3, VEC4: 4, MAT4: 16 }, AITM_CSIZE = { 5120: 1, 5121: 1, 5122: 2, 5123: 2, 5125: 4, 5126: 4 };
-function aitmAccessor(g, bufs, ai, o) {
-  var a = g.accessors[ai], bv = g.bufferViews[a.bufferView], buf = bufs[bv.buffer];
-  var n = AITM_NCOMP[a.type], cs = AITM_CSIZE[a.componentType], stride = bv.byteStride || n * cs;
-  var base = (bv.byteOffset || 0) + (a.byteOffset || 0), dv = new DataView(buf), k = o.want || n;
-  var out = o.asIndex ? new Uint32Array(a.count) : new Float32Array(a.count * k);
-  for (var i = 0; i < a.count; i++) {
-    var q = base + i * stride;
-    for (var c = 0; c < Math.min(k, n); c++) {
-      var p = q + c * cs, v;
-      switch (a.componentType) {
-        case 5126: v = dv.getFloat32(p, true); break;
-        case 5120: v = dv.getInt8(p); if (!o.asIndex) v = Math.max(-1, v / 127); break;
-        case 5121: v = dv.getUint8(p); if (!o.asIndex && a.normalized) v /= 255; break;
-        case 5122: v = o.half ? aitmHalf(dv.getUint16(p, true)) : dv.getInt16(p, true) / (a.normalized ? 32767 : 1); break;
-        case 5123: v = dv.getUint16(p, true); if (!o.asIndex && a.normalized) v /= 65535; break;
-        case 5125: v = dv.getUint32(p, true); break;
-        default: v = 0;
-      }
-      if (o.asIndex) out[i] = v; else out[i * k + c] = v;
-    }
-  }
-  return out;
-}
-// DDS -> three.js texture (BC1/BC2/BC3/BC7 stay compressed on the graphics card; RGBA as data)
-function aitmDdsTexture(T, buf, caps) {
-  var dv = new DataView(buf), u8 = new Uint8Array(buf);
-  if (buf.byteLength < 128 || dv.getUint32(0, true) !== 0x20534444) return null;
-  var h = dv.getUint32(12, true), w = dv.getUint32(16, true), mips = Math.max(1, dv.getUint32(28, true));
-  var pf = dv.getUint32(80, true), four = String.fromCharCode(u8[84], u8[85], u8[86], u8[87]), bits = dv.getUint32(88, true);
-  var off = 128, fmt = null, bs = 0, raw = null;
-  if (four === 'DXT1') { fmt = T.RGBA_S3TC_DXT1_Format; bs = 8; }
-  else if (four === 'DXT2' || four === 'DXT3') { fmt = T.RGBA_S3TC_DXT3_Format; bs = 16; }
-  else if (four === 'DXT4' || four === 'DXT5') { fmt = T.RGBA_S3TC_DXT5_Format; bs = 16; }
-  else if (four === 'DX10') {
-    off = 148; var f = dv.getUint32(128, true);
-    if (f >= 70 && f <= 72) { fmt = T.RGBA_S3TC_DXT1_Format; bs = 8; }
-    else if (f >= 73 && f <= 75) { fmt = T.RGBA_S3TC_DXT3_Format; bs = 16; }
-    else if (f >= 76 && f <= 78) { fmt = T.RGBA_S3TC_DXT5_Format; bs = 16; }
-    else if (f >= 97 && f <= 99) { fmt = T.RGBA_BPTC_Format; bs = 16; }
-    else if (f >= 27 && f <= 29) raw = 'rgba'; else if (f === 87 || f === 90 || f === 91) raw = 'bgra';
-    else return null;
-  } else if ((pf & 0x40) && bits === 32) raw = dv.getUint32(92, true) === 0x00ff0000 ? 'bgra' : 'rgba';
-  else return null;
-  var t, srgb = true;
-  if (fmt != null) {
-    var bptc = fmt === T.RGBA_BPTC_Format;
-    if (bptc ? !caps.bptc : !caps.s3tc) return null;
-    if (!bptc && !caps.s3tcSrgb) srgb = false;
-    var levels = [], cw = w, ch = h, p = off;
-    for (var i = 0; i < mips; i++) {
-      var size = Math.max(1, Math.ceil(cw / 4)) * Math.max(1, Math.ceil(ch / 4)) * bs;
-      if (p + size > buf.byteLength) break;
-      levels.push({ data: new Uint8Array(buf, p, size), width: cw, height: ch });
-      p += size; cw = Math.max(1, cw >> 1); ch = Math.max(1, ch >> 1);
-    }
-    if (!levels.length) return null;
-    var last = levels[levels.length - 1], full = levels.length > 1 && last.width === 1 && last.height === 1;
-    while (full && levels.length > 1 && Math.max(levels[0].width, levels[0].height) > 2048) levels.shift();
-    if (!full) levels = [levels[0]];
-    t = new T.CompressedTexture(levels, levels[0].width, levels[0].height, fmt);
-    t.minFilter = levels.length > 1 ? T.LinearMipmapLinearFilter : T.LinearFilter;
-    t.generateMipmaps = false;
-  } else {
-    var px = new Uint8Array(w * h * 4);
-    px.set(new Uint8Array(buf, off, Math.min(w * h * 4, buf.byteLength - off)));
-    if (raw === 'bgra') for (var j = 0; j < px.length; j += 4) { var b = px[j]; px[j] = px[j + 2]; px[j + 2] = b; }
-    t = new T.DataTexture(px, w, h, T.RGBAFormat);
-    t.minFilter = T.LinearFilter;
-  }
-  t.magFilter = T.LinearFilter; t.flipY = false; t.wrapS = t.wrapT = T.RepeatWrapping;
-  if (srgb) t.colorSpace = T.SRGBColorSpace;
-  t.anisotropy = 8; t.needsUpdate = true;
-  return t;
-}
-function aitm3dClose() {
-  var box = document.getElementById('aitm-3d-box'); if (box) box.remove();
-  if (aitm.v3d) { aitm.v3d.dispose(); aitm.v3d = null; }
-}
-async function aitmView3D(e, root, lod) {
-  aitm3dClose();
-  var box = document.createElement('div'); box.id = 'aitm-3d-box';
-  box.style.cssText = 'position:fixed;inset:0;z-index:9998;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.6);';
-  box.innerHTML = '<div style="background:var(--surf);border:1px solid var(--bdr2);border-radius:12px;width:min(1100px,92vw);height:min(760px,88vh);display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,.6);overflow:hidden;">'
-    + '<div style="display:flex;align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--bdr);">'
-    + '<div style="flex:1;min-width:0;"><div style="font-size:14px;font-weight:700;color:#fff;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(e.title) + '</div>'
-    + '<div id="aitm-3d-sub" style="font-size:11px;color:var(--txt3);"></div></div>'
-    + '<label style="font-size:11px;color:var(--txt2);">Detail <select id="aitm-3d-lod" class="aitm-in" style="padding:2px 4px;"></select></label>'
-    + '<label style="font-size:11px;color:var(--txt2);"><input type="checkbox" id="aitm-3d-spin"> Turn</label>'
-    + '<button class="aitm-btn" id="aitm-3d-reset" style="padding:3px 10px;">Reset view</button>'
-    + '<button class="aitm-btn" id="aitm-3d-close" style="padding:3px 10px;">Close</button></div>'
-    + '<div id="aitm-3d-canvas" style="flex:1;position:relative;min-height:0;"><div id="aitm-3d-msg" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--txt2);font-size:13px;padding:20px;text-align:center;">Loading the model …</div></div>'
-    + '<div id="aitm-3d-foot" style="padding:6px 14px;font-size:11px;color:var(--txt3);border-top:1px solid var(--bdr);"></div></div>';
-  document.body.appendChild(box);
-  box.addEventListener('mousedown', function (ev) { if (ev.target === box) aitm3dClose(); });
-  document.getElementById('aitm-3d-close').onclick = aitm3dClose;
-  var msg = document.getElementById('aitm-3d-msg'), say = function (t) { msg.style.display = 'flex'; msg.textContent = t; };
-  try {
-    var T = await import('three');
-    var OrbitControls = (await import(AITM_ORBIT_URL)).OrbitControls;
-    // the aircraft folder
-    var stack = await aitmResolve([root], e.rel);
-    if (!stack) { say('Folder ' + e.rel + ' not found in “' + root.name + '”.'); return; }
-    var acDir = stack[stack.length - 1];
-    var meta = ((aitm.fleetMeta || {})[e.root] || {})[e.rel] || { m: {}, t: {} };
-    var mName = 'model' + (e.model ? '.' + e.model : '');
-    var mdl = await aitmChild(acDir, mName, 'directory');
-    if (!mdl) { say('Model folder “' + mName + '” not found in ' + e.folder + '.'); return; }
-    var mStack = stack.concat([mdl]);
-    // LOD list: model.cfg [models] normal= (an XML with the LODs, or a glTF)
-    var lods = [], normal = meta.m[mdl.name.toLowerCase()] || '';
-    var readXml = async function (nameRel) {
-      var parts = nameRel.split(/[\\/]+/), st = await aitmResolve(mStack, parts.slice(0, -1).join('/'));
-      if (!st) return [];
-      var fh = await aitmChild(st[st.length - 1], parts[parts.length - 1], 'file'); if (!fh) return [];
-      var txt = await (await fh.getFile()).text(), out = [], re = /ModelFile\s*=\s*"([^"]+)"/gi, x;
-      while ((x = re.exec(txt))) if (out.indexOf(x[1]) < 0) out.push(x[1]);
-      return out;
-    };
-    if (/\.gltf$/i.test(normal)) lods = [normal];
-    else if (normal) lods = await readXml(normal);
-    if (!lods.length) {
-      var mm = await aitmDirMap(mdl), xmls = Object.keys(mm).filter(function (k) { return /\.xml$/.test(k) && !/interior/.test(k); });
-      for (var xi = 0; xi < xmls.length && !lods.length; xi++) lods = await readXml(mm[xmls[xi]].name);
-      if (!lods.length) lods = Object.keys(mm).filter(function (k) { return /\.gltf$/.test(k) && !/interior/.test(k); }).sort().map(function (k) { return mm[k].name; });
-    }
-    lods = lods.filter(function (l) { return !/interior/i.test(l); });
-    if (!lods.length) { say('No glTF model found in ' + e.folder + '\\' + mdl.name + '.'); return; }
-    if (lod >= lods.length) lod = 0;
-    var sel = document.getElementById('aitm-3d-lod');
-    sel.innerHTML = lods.map(function (l, i) { return '<option value="' + i + '"' + (i === lod ? ' selected' : '') + '>' + (i === 0 ? 'Highest' : 'LOD ' + i) + '</option>'; }).join('');
-    sel.onchange = function () { aitmView3D(e, root, parseInt(sel.value, 10)); };
-    var lp = lods[lod].split(/[\\/]+/), gStack = await aitmResolve(mStack, lp.slice(0, -1).join('/'));
-    var gDir = gStack && gStack[gStack.length - 1], gh = gDir && await aitmChild(gDir, lp[lp.length - 1], 'file');
-    if (!gh) { say(lods[lod] + ' not found.'); return; }
-    var g = JSON.parse((await (await gh.getFile()).text()).replace(/^﻿/, ''));
-    var bufs = await Promise.all((g.buffers || []).map(async function (b) {
-      var bh = await aitmChild(gDir, String(b.uri || '').split(/[\\/]/).pop(), 'file');
-      if (!bh) throw new Error('model data ' + b.uri + ' missing');
-      return (await bh.getFile()).arrayBuffer();
-    }));
-    // texture folders: the livery, its fallbacks (texture.cfg), the aircraft's "texture", the model folder
-    var texStacks = [], seen = {};
-    var addTex = async function (st, depth) {
-      if (!st || depth > 5) return;
-      var key = st.map(function (x) { return x.name; }).join('/').toLowerCase();
-      if (seen[key]) return; seen[key] = 1; texStacks.push(st);
-      var top = st[st.length - 1], fbs = st.length === stack.length + 1 ? meta.t[top.name.toLowerCase()] : null;
-      if (!fbs && !Object.keys(meta.t).length && st.length === stack.length + 1) {
-        // read before the 3D view existed: guess the usual fallbacks
-        var am = await aitmDirMap(acDir);
-        fbs = Object.keys(am).filter(function (k) { return /^oci\.texture/.test(k) || k === 'texture.base'; }).map(function (k) { return '..\\' + am[k].name; }).concat(['..\\..\\..\\..\\texture']);
-      }
-      for (var i = 0; fbs && i < fbs.length; i++) await addTex(await aitmResolve(st, fbs[i]), depth + 1);
-    };
-    var tName = 'texture' + (e.texture ? '.' + e.texture : '');
-    var tdir = await aitmChild(acDir, tName, 'directory');
-    if (tdir) await addTex(stack.concat([tdir]), 0);
-    var plain = await aitmChild(acDir, 'texture', 'directory'); if (plain) await addTex(stack.concat([plain]), 0);
-    await addTex(mStack, 0);
-    var findTex = async function (uri) {
-      var name = String(uri || '').split(/[\\/]/).pop(); if (!name) return null;
-      var cands = [name, name + '.dds', name.replace(/\.dds$/i, '')];
-      for (var i = 0; i < texStacks.length; i++) {
-        var d = texStacks[i][texStacks[i].length - 1];
-        for (var c = 0; c < cands.length; c++) { var f = await aitmChild(d, cands[c], 'file'); if (f) return f; }
-      }
-      return null;
-    };
-    document.getElementById('aitm-3d-sub').textContent = e.folder + ' \\ ' + mdl.name + ' · ' + (tdir ? tdir.name : '(default livery)') + ' · ' + lods[lod];
-    // renderer
-    var host = document.getElementById('aitm-3d-canvas');
-    var W = host.clientWidth, H = host.clientHeight;
-    var renderer = new T.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setSize(W, H);
-    renderer.outputColorSpace = T.SRGBColorSpace;
-    host.appendChild(renderer.domElement);
-    var ex = renderer.extensions;
-    var caps = { s3tc: ex.has('WEBGL_compressed_texture_s3tc'), s3tcSrgb: ex.has('WEBGL_compressed_texture_s3tc_srgb'), bptc: ex.has('EXT_texture_compression_bptc') };
-    var scene = new T.Scene(); scene.background = new T.Color(0x1d232b);
-    scene.add(new T.HemisphereLight(0xffffff, 0x8090a0, 2.2));
-    var sun = new T.DirectionalLight(0xffffff, 2.2); sun.position.set(-30, 50, 40); scene.add(sun);
-    var fill = new T.DirectionalLight(0xffffff, 0.8); fill.position.set(40, 20, -40); scene.add(fill);
-    var camera = new T.PerspectiveCamera(35, W / H, 0.1, 5000);
-    var controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true; controls.autoRotateSpeed = 1.2;
-    var render = function () { renderer.render(scene, camera); };
-    // materials (base colour only, as in Rotation Map)
-    var texCache = {}, missing = [], pending = [];
-    var texture = function (src) {
-      var img = g.images && g.images[src]; if (!img || !img.uri) return Promise.resolve(null);
-      if (!texCache[img.uri]) texCache[img.uri] = findTex(img.uri).then(async function (fh) {
-        if (!fh) { missing.push(img.uri); return null; }
-        var buf = await (await fh.getFile()).arrayBuffer();
-        if (/\.dds$/i.test(fh.name)) { var t = aitmDdsTexture(T, buf, caps); if (!t) missing.push(img.uri + ' (format)'); return t; }
-        var bmp = await createImageBitmap(new Blob([buf]));
-        var t2 = new T.Texture(bmp); t2.flipY = false; t2.colorSpace = T.SRGBColorSpace; t2.wrapS = t2.wrapT = T.RepeatWrapping; t2.needsUpdate = true; return t2;
-      }).catch(function () { missing.push(img.uri); return null; });
-      return texCache[img.uri];
-    };
-    var matCache = {};
-    var material = function (mi) {
-      if (matCache[mi]) return matCache[mi];
-      var m = (g.materials && g.materials[mi]) || {}, ext = m.extensions || {};
-      var hidden = ext.ASOBO_material_invisible || ext.ASOBO_material_shadow_only || ext.ASOBO_material_environment_occluder || /collision|invisible|shadow_only/i.test(m.name || '');
-      var pbr = m.pbrMetallicRoughness || {}, f = pbr.baseColorFactor || [1, 1, 1, 1];
-      var mat = new T.MeshStandardMaterial({ color: new T.Color(f[0], f[1], f[2]), metalness: Math.min(0.4, pbr.metallicFactor == null ? 0.1 : pbr.metallicFactor),
-        roughness: Math.max(0.35, pbr.roughnessFactor == null ? 0.6 : pbr.roughnessFactor), side: m.doubleSided ? T.DoubleSide : T.FrontSide, opacity: f[3] });
-      if (m.alphaMode === 'BLEND') { mat.transparent = true; mat.depthWrite = false; }
-      if (m.alphaMode === 'MASK') mat.alphaTest = m.alphaCutoff == null ? 0.5 : m.alphaCutoff;
-      var ti = pbr.baseColorTexture ? pbr.baseColorTexture.index : -1;
-      if (ti >= 0 && g.textures && g.textures[ti]) {
-        var tx = g.textures[ti], src = tx.source != null ? tx.source : (tx.extensions && tx.extensions.MSFT_texture_dds ? tx.extensions.MSFT_texture_dds.source : undefined);
-        if (src != null) {
-          if (m.alphaMode === 'BLEND' || m.alphaMode === 'MASK') mat.visible = false; // see-through parts only with their picture
-          pending.push(texture(src).then(function (t) { if (t) { mat.map = t; mat.visible = !hidden; mat.needsUpdate = true; render(); } }));
-        }
-      }
-      if (hidden) mat.visible = false;
-      return (matCache[mi] = mat);
-    };
-    // geometry (the simulator stores normals as bytes and texture coordinates as half floats)
-    var model = new T.Group();
-    var meshes = (g.meshes || []).map(function (mesh) {
-      var grp = new T.Group();
-      (mesh.primitives || []).forEach(function (pr) {
-        if (pr.mode !== undefined && pr.mode !== 4) return;
-        var at = pr.attributes || {}; if (at.POSITION === undefined) return;
-        var asobo = pr.extras && pr.extras.ASOBO_primitive, geo = new T.BufferGeometry();
-        geo.setAttribute('position', new T.BufferAttribute(aitmAccessor(g, bufs, at.POSITION, { want: 3 }), 3));
-        if (at.NORMAL !== undefined) geo.setAttribute('normal', new T.BufferAttribute(aitmAccessor(g, bufs, at.NORMAL, { want: 3 }), 3));
-        if (at.TEXCOORD_0 !== undefined) {
-          var acc = g.accessors[at.TEXCOORD_0];
-          geo.setAttribute('uv', new T.BufferAttribute(aitmAccessor(g, bufs, at.TEXCOORD_0, { want: 2, half: acc.componentType === 5122 && !acc.normalized }), 2));
-        }
-        if (pr.indices !== undefined) {
-          var idx = aitmAccessor(g, bufs, pr.indices, { asIndex: true });
-          if (asobo && (asobo.BaseVertexIndex || asobo.StartIndex !== undefined)) {
-            var start = asobo.StartIndex || 0, cnt = asobo.PrimitiveCount ? asobo.PrimitiveCount * 3 : idx.length - start, bvi = asobo.BaseVertexIndex || 0;
-            idx = idx.slice(start, start + cnt).map(function (i) { return i + bvi; });
-          }
-          geo.setIndex(new T.BufferAttribute(idx, 1));
-        }
-        if (at.NORMAL === undefined) geo.computeVertexNormals();
-        grp.add(new T.Mesh(geo, material(pr.material == null ? -1 : pr.material)));
-      });
-      return grp;
-    });
-    var nodes = (g.nodes || []).map(function (n) {
-      var o = new T.Group();
-      if (n.matrix) { o.matrix.fromArray(n.matrix); o.matrix.decompose(o.position, o.quaternion, o.scale); }
-      if (n.translation) o.position.fromArray(n.translation);
-      if (n.rotation) o.quaternion.fromArray(n.rotation);
-      if (n.scale) o.scale.fromArray(n.scale);
-      if (n.mesh !== undefined && meshes[n.mesh]) o.add(meshes[n.mesh].clone());
-      return o;
-    });
-    (g.nodes || []).forEach(function (n, i) { (n.children || []).forEach(function (c) { if (nodes[c]) nodes[i].add(nodes[c]); }); });
-    var sc0 = g.scenes && g.scenes[g.scene || 0];
-    var tops = sc0 ? sc0.nodes : nodes.map(function (_, i) { return i; }).filter(function (i) { return !(g.nodes || []).some(function (n) { return (n.children || []).indexOf(i) >= 0; }); });
-    tops.forEach(function (i) { if (nodes[i]) model.add(nodes[i]); });
-    model.scale.x = -1; // the simulator's glTF is left-handed: mirror so registrations read the right way
-    scene.add(model);
-    var fit = function () {
-      var bb = new T.Box3().setFromObject(model), size = bb.getSize(new T.Vector3()), c = bb.getCenter(new T.Vector3());
-      var r = Math.max(size.x, size.y, size.z) || 10;
-      camera.position.set(c.x - r * 1.05, c.y + r * 0.28, c.z + r * 0.75);
-      camera.near = r / 200; camera.far = r * 50; camera.updateProjectionMatrix();
-      controls.target.copy(c); controls.update(); render();
-    };
-    var raf = 0, alive = true;
-    var loop = function () {
-      cancelAnimationFrame(raf);
-      var tick = function () { if (!alive) return; var moved = controls.update(); render(); if (moved || controls.autoRotate) raf = requestAnimationFrame(tick); };
-      raf = requestAnimationFrame(tick);
-    };
-    controls.addEventListener('change', render); controls.addEventListener('start', loop);
-    var ro = new ResizeObserver(function () { var w2 = host.clientWidth, h2 = host.clientHeight; if (!w2 || !h2) return; renderer.setSize(w2, h2); camera.aspect = w2 / h2; camera.updateProjectionMatrix(); render(); });
-    ro.observe(host);
-    document.getElementById('aitm-3d-spin').onchange = function (ev) { controls.autoRotate = ev.target.checked; loop(); };
-    document.getElementById('aitm-3d-reset').onclick = fit;
-    aitm.v3d = { dispose: function () {
-      alive = false; cancelAnimationFrame(raf); ro.disconnect(); controls.dispose();
-      scene.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } });
-      renderer.dispose();
-    } };
-    msg.style.display = 'none';
-    fit(); loop();
-    var foot = document.getElementById('aitm-3d-foot');
-    foot.textContent = 'Drag to turn · wheel to zoom · right button to move · loading textures …';
-    await Promise.all(pending);
-    foot.innerHTML = 'Drag to turn · wheel to zoom · right button to move'
-      + (missing.length ? ' · <span title="' + aitmEsc(missing.join('\n')) + '" style="color:#f0b400;">' + missing.length + ' texture' + (missing.length === 1 ? '' : 's') + ' not found</span>' : '')
-      + (!caps.bptc ? ' · this graphics card cannot show BC7 textures' : '');
-    render();
-  } catch (err) {
-    console.warn('3D', err);
-    say('3D view not possible: ' + (err && err.message || err) + (/import|module|fetch/i.test(String(err && err.message)) ? ' (three.js could not be loaded from cdn.jsdelivr.net)' : ''));
-  }
 }
 
 // ═══ Installation Manager: every flight plan of the "CRE flightplans" folder (with sub folders)
