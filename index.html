@@ -7180,6 +7180,7 @@ function aiGenAlImportFiles(fileList){
 // departs where A arrives AND either
 //   • both rows carry the same outbound flight number (708 SBGL→LPPT + 708 LPPT→LPPR), or
 //   • B is marked "linked to row above" (leg.cont) and stands directly below A.
+//   • never when B was separated by hand (leg.uncont).
 function alRowContinues(a, b) {
   if (!a || !b || a===b || !a.arr || !b.dep || b.dep[0]!==a.arr[0]) return false;
   if (aiGenMulti && alRowAl(a)!==alRowAl(b)) return false;     // AIRPORT mode: never across airlines
@@ -7187,6 +7188,8 @@ function alRowContinues(a, b) {
   if (isSplit(a) || isSplit(b)) return false;
   // an explicit link always means the row directly above
   if (b.cont) return aiGenAlLegs[aiGenAlLegs.indexOf(b)-1]===a;
+  // separated by hand (a click on the purple link field): starts its own flight, even with the same flight number
+  if (b.uncont) return false;
   // first row of a rotation imported from TTools: starts its own flight
   if (b.ttFirst) return false;
   const fd = v => String(v||'').replace(/\D/g,'');
@@ -8262,7 +8265,7 @@ function _renderAiGenAlLegsNow() {
     const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
     dupBtn.dataset.tabseq=i+'.11';
     dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false, ttImported:false, ttFirst:false}); renderAiGenAlLegs(); };
+    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false, uncont:false, ttImported:false, ttFirst:false}); renderAiGenAlLegs(); };
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
@@ -8287,17 +8290,21 @@ function _renderAiGenAlLegsNow() {
         && (!aiGenAlSort || rowVisPrev===i-1 || alRowContinues(prevLeg, leg))) {
       const linked = alRowContinues(prevLeg, leg);
       const byNumber = linked && !leg.cont;
+      const fdig = v => String(v||'').replace(/\D/g,'');
+      const sameNum = !!(fdig(prevLeg.flightNum) && fdig(prevLeg.flightNum)===fdig(leg.flightNum));
       const linkBtn=document.createElement('button');
       linkBtn.dataset.tabseq=i+'.14';
       linkBtn.textContent = linked ? '⛓ Linked to row above' : '⛓ Link to row above';
       linkBtn.title = byNumber
-        ? 'Same flight number as the row above: both rows are one flight with a stop in '+leg.dep[0]+'.'
+        ? 'Same flight number as the row above: both rows are one flight with a stop in '+leg.dep[0]+'. Click to separate them.'
         : (linked ? 'Both rows are ONE flight with a stop in '+leg.dep[0]+'. Click to separate them again.'
-                  : 'Make this row the onward flight of the row above (one flight with a stop in '+leg.dep[0]+').');
+                  : (leg.uncont && sameNum ? 'Separated from the row above (same flight number). Click to link them again.'
+                                           : 'Make this row the onward flight of the row above (one flight with a stop in '+leg.dep[0]+').'));
       linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;'
         + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
                   : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
-      linkBtn.onclick=()=>{ if (byNumber) return; leg.cont = !leg.cont; renderAiGenAlLegs(); };
+      // one click: purple (linked) ↔ black (separate) — also for rows linked by their flight number
+      linkBtn.onclick=()=>{ if (linked) { leg.cont=false; leg.uncont=true; } else { leg.cont=true; leg.uncont=false; } renderAiGenAlLegs(); };
       leftCol.appendChild(linkBtn);
       if (linked) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
     }
