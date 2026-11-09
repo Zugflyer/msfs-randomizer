@@ -1146,7 +1146,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             style="font-size:13px;font-weight:700;padding:0 18px;height:60px;border-radius:6px;border:none;background:linear-gradient(135deg,#7b61ff,#5b8cff);color:#fff;cursor:pointer;white-space:nowrap;flex-shrink:0;">
             ⊞ Generate Rotations
           </button>
-          <!-- Update unassigned: shown once rotations are assigned on the planner page -->
+          <!-- Update unassigned: shown once a rotation plan exists (Known and Random schedule) -->
           <button id="aigen-al-update" onclick="createRotationsAirline('keep')" style="display:none;font-size:12px;font-weight:700;padding:0 14px;height:60px;border-radius:6px;border:1.5px solid #7b61ff;background:rgba(123,97,255,.12);color:#c9b8ff;cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.25;"
             title="Recalculate only the routes that are not assigned to an aircraft yet. Assigned rotations, aircraft and registrations stay exactly as they are.">
             ↻ Update unassigned<br><span style="font-size:10px;font-weight:500;color:var(--txt3);">keeps assigned rotations</span>
@@ -6546,7 +6546,14 @@ function applyAiGenAlSchedModeUI() {
   if (lr) lr.style.color = known ? 'var(--txt3)' : '#fff';
   const win=document.getElementById('aigen-al-windows'); if (win) win.style.display = known ? 'none' : 'flex';
   const imp=document.getElementById('aigen-al-import'); if (imp) imp.style.display = 'flex';   // import works in both modes
-  const upd=document.getElementById('aigen-al-update'); if (upd) upd.style.display = (typeof rotHasAssignments==='function' && rotHasAssignments()) ? '' : 'none';
+  // "Update unassigned": offered in both schedule modes as soon as a rotation plan exists
+  { const upd=document.getElementById('aigen-al-update');
+    if (upd) {
+      let has=false, plan=false;
+      try { has = rotHasAssignments(); plan = has || rotBars.length>0; } catch(e) {}
+      upd.style.display = plan ? '' : 'none';
+      const sub = upd.querySelector('span'); if (sub) sub.textContent = has ? 'keeps assigned rotations' : 'none assigned yet';
+    } }
   const mg=document.getElementById('aigen-al-min-ground'); if (mg && document.activeElement!==mg) mg.value = aiGenAlMinGround;
 }
 // Known schedule: block time from typed DEP and ARR (local times), honouring the
