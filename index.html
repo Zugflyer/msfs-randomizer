@@ -1152,9 +1152,9 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
             title="Recalculate only the routes that are not assigned to an aircraft yet. Assigned rotations, aircraft and registrations stay exactly as they are.">
             ↻ Update unassigned<br><span style="font-size:10px;font-weight:500;color:var(--txt3);">keeps assigned rotations</span>
           </button>
-          <button id="aigen-al-planner" onclick="switchView('rotations')" style="display:none;font-size:12px;font-weight:700;padding:0 14px;height:60px;border-radius:6px;border:1.5px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.25;"
-            title="Open the Rotation Planner as it is, without recalculating anything">
-            Rotation Planner →<br><span style="font-size:10px;font-weight:500;color:var(--txt3);">open, no changes</span>
+          <button id="aigen-al-planner" onclick="aiwsLoadPlanner()" style="display:none;font-size:12px;font-weight:700;padding:0 14px;height:60px;border-radius:6px;border:1.5px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.25;"
+            title="Loads the latest work saved in the cloud — from whichever computer it was saved (also this one) — and opens the Rotation Planner, without recalculating anything">
+            ☁ Load Rotation Planner from Cloud<br><span id="aigen-al-planner-sub" style="font-size:10px;font-weight:500;color:var(--txt3);">latest saved state</span>
           </button>
 
         </div>
@@ -6559,7 +6559,7 @@ function applyAiGenAlSchedModeUI() {
       try { has = rotHasAssignments(); plan = has || rotBars.length>0; } catch(e) {}
       upd.style.display = plan ? '' : 'none';
       const sub = upd.querySelector('span'); if (sub) sub.textContent = has ? 'keeps assigned rotations' : 'none assigned yet';
-      const pl=document.getElementById('aigen-al-planner'); if (pl) pl.style.display = plan ? '' : 'none';
+      if (typeof aiwsPlannerBtnUI==='function') aiwsPlannerBtnUI(plan);
     } }
   const mg=document.getElementById('aigen-al-min-ground'); if (mg && document.activeElement!==mg) mg.value = aiGenAlMinGround;
 }
@@ -12523,7 +12523,7 @@ function fleetAddRow() {
 const AIWS_ROW = '__aigen_work__', AIWS_META = '__aigen_work_meta__';
 let _aiwsBase = (function(){ try { return localStorage.getItem('aiws_base') || ''; } catch(e) { return ''; } })();
 let _aiwsLastJson = '', _aiwsTimer = null, _aiwsApplying = false, _aiwsReady = false, _aiwsChecking = null;
-let _aiwsSaving = false, _aiwsAgain = false, _aiwsMsg = '', _aiwsMsgCol = '', _aiwsConflict = null, _aiwsPlannerDirty = false;
+let _aiwsSaving = false, _aiwsAgain = false, _aiwsMsg = '', _aiwsMsgCol = '', _aiwsConflict = null, _aiwsPlannerDirty = false, _aiwsLastMeta = null, _aiwsFocusAt = 0;
 
 function aiwsDevice() {
   let n = ''; try { n = localStorage.getItem('aiws_device') || ''; } catch(e) {}
@@ -12605,7 +12605,9 @@ async function aiwsFetchMeta() {                    // null = nothing saved yet 
   try {
     const { data, error } = await sb.from('categories').select('items').eq('name', AIWS_META).maybeSingle();
     if (error) throw error;
-    return (data && Array.isArray(data.items) && data.items[0]) || null;
+    _aiwsLastMeta = (data && Array.isArray(data.items) && data.items[0]) || null;
+    aiwsPlannerBtnUI();
+    return _aiwsLastMeta;
   } catch(e) { console.warn('AI Generator cloud:', e); return undefined; }
 }
 async function aiwsLoad() {
@@ -12637,9 +12639,10 @@ async function aiwsSave(force) {
     const at = new Date().toISOString();
     let r = await sb.from('categories').upsert({ name: AIWS_ROW, items: [{ stamp, at, state: JSON.parse(json) }] }, { onConflict: 'name' });
     if (r && r.error) throw r.error;
-    r = await sb.from('categories').upsert({ name: AIWS_META, items: [{ stamp, at, device: aiwsDevice(), view: aiwsView(), size: json.length, hasWork: aiwsHasWork() }] }, { onConflict: 'name' });
+    r = await sb.from('categories').upsert({ name: AIWS_META, items: [{ stamp, at, device: aiwsDevice(), view: aiwsView(), size: json.length, hasWork: aiwsHasWork(), bars: rotBars.length }] }, { onConflict: 'name' });
     if (r && r.error) throw r.error;
     _aiwsBase = stamp; try { localStorage.setItem('aiws_base', stamp); } catch(e) {}
+    _aiwsLastMeta = { stamp, at, device: aiwsDevice(), bars: rotBars.length, hasWork: aiwsHasWork() }; aiwsPlannerBtnUI();
     _aiwsLastJson = json; _aiwsConflict = null; aiwsBanner(null);
     aiwsStatus('☁ Saved ' + aiwsTime(at), '#3fb950');
   } catch(e) {
@@ -12718,6 +12721,39 @@ function aiwsBanner(meta) {
     aiwsBanner(null); _aiwsConflict = null; _aiwsReady = true; aiwsSave(true);
   };
 }
+// "Load the work from the cloud" / "Load Rotation Planner from Cloud": the latest saved state,
+// whichever computer saved it (also this one). Asks only when something changed here that the
+// cloud does not have yet.
+async function aiwsTakeOver(openPlanner) {
+  const meta = await aiwsFetchMeta();
+  const openLocal = () => { if (openPlanner && rotBars.length) switchView('rotations'); };
+  if (meta === undefined) { aiwsStatus('☁ Cloud not reachable', '#f85149'); if (openPlanner && rotBars.length) openLocal(); else alert('The cloud is not reachable.'); return; }
+  if (!meta || !meta.stamp) { if (openPlanner && rotBars.length) openLocal(); else alert('Nothing has been saved in the cloud yet.'); return; }
+  let unchanged = false; try { unchanged = !!_aiwsLastJson && aiwsEncode() === _aiwsLastJson; } catch(e) {}
+  if (meta.stamp === _aiwsBase && _aiwsLastJson) {
+    // what is open here is the cloud state (or newer: changes of the last seconds, saved now)
+    if (!unchanged) { _aiwsReady = true; aiwsSave(false); }
+    aiwsStatus('☁ Up to date · ' + (meta.device || '') + ' · ' + aiwsTime(meta.at), '#3fb950');
+    openLocal(); return;
+  }
+  if (aiwsHasWork() && !unchanged && !confirm('Replace what is open here with the work saved by ' + (meta.device || 'another computer') + ' at ' + aiwsTime(meta.at) + '?\n\n(What you changed here since then is lost.)')) return;
+  try {
+    const it = await aiwsLoad();
+    _aiwsReady = true; aiwsBanner(null); _aiwsConflict = null;
+    aiwsStatus('☁ Loaded from ' + (meta.device || 'the cloud') + ' · ' + aiwsTime(it ? it.at : meta.at), '#3fb950');
+    if (openPlanner) { if (rotBars.length) switchView('rotations'); else alert('The work saved by ' + (meta.device || 'the other computer') + ' has no Rotation Planner yet.'); }
+  } catch(e) { alert('Could not load: ' + (e.message || e)); }
+}
+function aiwsLoadPlanner() { return aiwsTakeOver(true); }
+function aiwsPlannerBtnUI(localPlan) {
+  const b = document.getElementById('aigen-al-planner'); if (!b) return;
+  let m = null; try { m = _aiwsLastMeta; } catch(e) {}
+  if (localPlan === undefined) { try { localPlan = rotBars.length > 0; } catch(e) { localPlan = false; } }
+  const cloudPlan = !!(m && (m.bars > 0 || (m.bars == null && m.hasWork)));
+  b.style.display = (localPlan || cloudPlan) ? '' : 'none';
+  const s = document.getElementById('aigen-al-planner-sub');
+  if (s) s.textContent = m && m.at ? 'latest: ' + (m.device || '?') + ' · ' + aiwsTime(m.at) : 'latest saved state';
+}
 function aiGenEsc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' })[c]); }
 function aiwsMenu(ev) {
   const old = document.getElementById('aiws-menu'); if (old) { old.remove(); return; }
@@ -12729,13 +12765,7 @@ function aiwsMenu(ev) {
     d.onmouseenter = () => d.style.background = 'var(--surf3)'; d.onmouseleave = () => d.style.background = '';
     d.onclick = () => { m.remove(); fn(); }; m.appendChild(d); };
   item('Save now', () => { _aiwsReady = true; aiwsSave(false).then(() => { if (!_aiwsConflict && !_aiwsMsg.startsWith('☁ Saved')) aiwsStatus('☁ Saved', '#3fb950'); }); }, 'Normally done by itself a few seconds after each change');
-  item('Load the work from the cloud', async () => {
-    const meta = await aiwsFetchMeta();
-    if (!meta || !meta.stamp) { alert(meta === undefined ? 'The cloud is not reachable.' : 'Nothing has been saved in the cloud yet.'); return; }
-    if (aiwsHasWork() && aiwsEncode() !== _aiwsLastJson && !confirm('Replace what is open here with the work saved by ' + (meta.device || 'another computer') + ' at ' + aiwsTime(meta.at) + '?')) return;
-    try { await aiwsLoad(); _aiwsReady = true; aiwsBanner(null); _aiwsConflict = null; aiwsStatus('☁ Loaded · ' + aiwsTime(meta.at), '#3fb950'); }
-    catch(e) { alert('Could not load: ' + (e.message || e)); }
-  }, 'Replaces what is open here');
+  item('Load the work from the cloud', () => aiwsTakeOver(false), 'The latest saved state, from whichever computer (also this one)');
   item('Name of this computer: <b>' + aiGenEsc(aiwsDevice()) + '</b> …', () => {
     const n = prompt('Name of this computer (shown on the other computers, e.g. "Zug", "Paris", "MacBook"):', aiwsDevice());
     if (n == null) return; try { localStorage.setItem('aiws_device', n.trim().slice(0, 30)); } catch(e) {}
@@ -12756,6 +12786,11 @@ document.addEventListener('visibilitychange', () => {
   if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
 });
 window.addEventListener('pagehide', () => { if (_aiwsTimer) { clearTimeout(_aiwsTimer); aiwsSave(false); } });
+window.addEventListener('focus', () => {
+  if (Date.now() - _aiwsFocusAt < 4000) return; _aiwsFocusAt = Date.now();
+  const v = aiwsView(), a = document.getElementById('view-aigen');
+  if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
+});
 </script>
 <script src="aitm.js"></script>
 </body>
