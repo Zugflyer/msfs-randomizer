@@ -2813,7 +2813,7 @@ function aitmImRender(msg) {
     + opt('all', 'All') + opt('in', 'BGL in the Traffic folder') + opt('out', 'BGL not in the Traffic folder') + opt('notxt', 'BGL without txt') + '</select>'
     + '<input class="aitm-in" placeholder="🔍 filter" style="width:190px;padding:3px 8px;" value="' + aitmEsc(aitm.imQ || '') + '" oninput="aitm.imQ=this.value;aitmImFilter()">'
     + '<button class="aitm-btn" style="padding:3px 10px;" onclick="aitmKvSet(\'fpRoot\', null).then(function(){aitmInstallManager();})">Other folders…</button></div>'
-    + '<div id="aitm-im-msg" style="min-height:18px;margin-bottom:6px;line-height:1.5;">' + (msg ? (msg.warn ? '<span style="color:#f0b400;">' : '<span style="color:#3fb950;">') + msg.html + '</span>' : '<span style="color:var(--txt3);">Green = there, red = missing. Transfer to BGL compiles the txt into the Traffic folder; Remove from BGL takes the BGL out (a copy stays in ' + aitmEsc(im.out.name) + '\\' + AITM_REMOVED + '). Restart the simulator afterwards.</span>') + '</div>'
+    + '<div id="aitm-im-msg" style="min-height:18px;margin-bottom:6px;line-height:1.5;">' + (msg ? (msg.warn ? '<span style="color:#f0b400;">' : '<span style="color:#3fb950;">') + msg.html + '</span>' : '<span style="color:var(--txt3);">Green = there, red = missing. Transfer to BGL compiles the txt into the Traffic folder; Remove from BGL takes the BGL out (a copy stays in ' + aitmEsc(im.out.name) + '\\' + AITM_REMOVED + '); Delete txt deletes the airline\'s three txt files (copies in ' + aitmEsc(im.fpRoot.name) + '\\Backups). Restart the simulator afterwards.</span>') + '</div>'
     + '<div id="aitm-im-scroll" style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:8px;">'
     + '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
     + '<thead><tr style="position:sticky;top:0;z-index:1;background:var(--surf2);color:var(--txt3);text-align:left;">'
@@ -2829,6 +2829,7 @@ function aitmImRender(msg) {
         var tTip = r.fp ? (!r.ac ? 'Aircraft_' + r.name + '.txt is missing' : r.bgl ? 'Compile the txt again and replace ' + r.bgl.name + ' (the old one goes to Backups)' : 'Compile the txt and put the BGL into ' + tPath)
                         : r.bgl ? 'Already in the Traffic folder (no txt to compile)' : r.removed ? 'Put ' + r.removed.name.replace(/\.off$/i, '') + ' back into ' + tPath : '';
         var rTip = r.bgl ? 'Take ' + r.bgl.name + ' out of ' + tPath + ' — a copy stays in ' + im.out.name + '\\' + AITM_REMOVED : 'Not in the Traffic folder';
+        var dTip = r.fp ? 'Delete ' + aitmImTxtFiles(r).map(function (f) { return f.name; }).join(', ') + ' from ' + [im.fpRoot.name].concat(r.path).join('\\') + ' — a copy of each goes to ' + im.fpRoot.name + '\\Backups' : 'No txt files';
         return '<tr class="aitm-im-row" data-i="' + i + '" data-q="' + aitmEsc((r.name + ' ' + r.path.join(' ')).toLowerCase()) + '" style="border-top:1px solid var(--bdr);">'
           + '<td style="padding-left:10px;"><div style="color:#fff;font-weight:600;">' + aitmEsc(r.name) + '</div>' + (note ? '<div style="font-size:11px;margin-top:2px;">' + note + '</div>' : '') + '</td>'
           + '<td style="color:var(--txt3);max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="' + aitmEsc(r.path.join(' \\ ')) + '">' + (r.path.length ? aitmEsc(r.path.join(' \\ ')) : (r.fp ? aitmEsc(im.fpRoot.name) : '—')) + '</td>'
@@ -2840,6 +2841,7 @@ function aitmImRender(msg) {
           + '<button class="aitm-imb" onclick="aitmImAct(\'o\',' + i + ')" title="Open in the AI Traffic Manager">Open</button>'
           + '<button class="aitm-imb t" onclick="aitmImAct(\'t\',' + i + ')" title="' + aitmEsc(tTip) + '"' + (canT ? '' : ' disabled') + '>Transfer to BGL</button>'
           + '<button class="aitm-imb r" onclick="aitmImAct(\'r\',' + i + ')" title="' + aitmEsc(rTip) + '"' + (r.bgl ? '' : ' disabled') + '>Remove from BGL</button>'
+          + '<button class="aitm-imb r" onclick="aitmImAct(\'d\',' + i + ')" title="' + aitmEsc(dTip) + '"' + (r.fp ? '' : ' disabled') + '>Delete txt</button>'
           + '</td></tr>';
       }).join('')
     + '</tbody></table></div>';
@@ -2862,6 +2864,7 @@ async function aitmImAct(act, i) {
   var im = aitm.im, r = im && im.rows[i]; if (!r) return;
   if (act === 'o') { aitmImOpen(i); return; }
   if (aitm.imBusy) return;
+  if (act === 'd') { await aitmImDelete(r); return; }
   if (!(await aitmPermOk(im.out, true))) { aitmImMsg('Chrome did not allow changes in “' + aitmEsc(im.out.name) + '”. Click again and allow it (“Save changes” / “Edit files”).', true); return; }
   aitm.imBusy = true;
   document.querySelectorAll('.aitm-imb').forEach(function (b) { b.disabled = true; });
@@ -2913,6 +2916,42 @@ async function aitmImRemove(r) {
   await im.tdir.removeEntry(name);
   if (im.isPkg) await aitmLayoutSet(await im.out.getFileHandle('layout.json'), 'Scenery/World/Traffic/' + name, null);
   return { html: '✓ <b>' + aitmEsc(name) + '</b> taken out of the Traffic folder' + (im.isPkg ? ' and layout.json' : '') + ' — kept in ' + aitmEsc(im.out.name) + '\\' + AITM_REMOVED + ', Transfer to BGL puts it back. Restart the simulator.' };
+}
+// "Delete txt": the airline's Flightplans_, Aircraft_ and Airports_ files leave their folder in "CRE flightplans"
+// (a copy of each goes to CRE flightplans\Backups, like every replaced txt); old <name>.txt.bak next to them move there too.
+function aitmImTxtFiles(r) { return [r.fp, r.ac, r.ap].filter(Boolean); }
+async function aitmImDelete(r) {
+  var im = aitm.im, files = aitmImTxtFiles(r); if (!files.length) return;
+  var where = [im.fpRoot.name].concat(r.path).join('\\');
+  if (!confirm('Delete these files from ' + where + '?\n\n' + files.map(function (f) { return '   ' + f.name; }).join('\n')
+      + '\n\nA copy of each goes to ' + im.fpRoot.name + '\\Backups.'
+      + (r.bgl ? '\n' + r.bgl.name + ' stays in the Traffic folder (“Remove from BGL” takes it out).' : ''))) return;
+  if (!(await aitmPermOk(im.fpRoot, true))) { aitmImMsg('Chrome did not allow changes in “' + aitmEsc(im.fpRoot.name) + '”. Click again and allow it (“Edit files”).', true); return; }
+  aitm.imBusy = true;
+  document.querySelectorAll('.aitm-imb').forEach(function (b) { b.disabled = true; });
+  aitmImMsg('Deleting the txt files of ' + aitmEsc(r.name) + ' …');
+  var res, done = [];
+  try {
+    var dir = im.fpRoot;
+    for (var k = 0; k < r.path.length; k++) dir = await dir.getDirectoryHandle(r.path[k]);
+    var bak = await aitmTxtBackupDir(dir);
+    var keep = async function (name, file, when) {             // copy into Backups and check it before anything is deleted
+      var bytes = await file.arrayBuffer(), bn = await aitmFreeName(bak.h, aitmBakName(name, when));
+      var w = await (await bak.h.getFileHandle(bn, { create: true })).createWritable(); await w.write(bytes); await w.close();
+      if ((await (await bak.h.getFileHandle(bn)).getFile()).size !== bytes.byteLength) throw new Error('the copy of ' + name + ' could not be written — it was not deleted.');
+    };
+    for (var j = 0; j < files.length; j++) {
+      await keep(files[j].name, await files[j].getFile());
+      await dir.removeEntry(files[j].name); done.push(files[j].name);
+      try { var ob = await dir.getFileHandle(files[j].name + '.bak'), obF = await ob.getFile(); await keep(files[j].name, obF, obF.lastModified); await dir.removeEntry(files[j].name + '.bak'); } catch (e) {}
+    }
+    res = { html: '✓ ' + done.map(function (n) { return '<b>' + aitmEsc(n) + '</b>'; }).join(', ') + ' deleted from ' + aitmEsc(where) + ' — copies in ' + aitmEsc(bak.label) + '.'
+      + (r.bgl ? ' ' + aitmEsc(r.bgl.name) + ' is still in the Traffic folder.' : '') };
+  } catch (e) {
+    res = { warn: true, html: aitmEsc(r.name) + ': ' + aitmEsc(e && e.message || e) + (done.length ? ' — already deleted: ' + done.map(aitmEsc).join(', ') + ' (copies in Backups).' : '') };
+  }
+  aitm.imBusy = false;
+  await aitmImScan(res);
 }
 async function aitmImOpen(i) {
   var r = aitm.im && aitm.im.rows[i]; if (!r) return;
