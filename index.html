@@ -1186,7 +1186,7 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
       <div style="padding:10px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bdr);flex-shrink:0;">
         <button onclick="switchView('aigen')" style="font-size:12px;padding:5px 14px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt2);cursor:pointer;">← Back to routes</button>
         <div style="font-size:14px;font-weight:700;color:#fff;">Rotation Planner</div>
-        <button onclick="generateTToolsFromRotations()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
+        <button onclick="generateTToolsFromRotations()" title="Saves Flightplans_CRE_….txt and Aircraft_CRE_….txt together into one folder — the folder picker opens in the folder used last time (at first in CRE flightplans). Files that are replaced keep a copy in Backups." style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:none;background:#3fb950;color:#fff;cursor:pointer;white-space:nowrap;">⬇ TTools files</button>
         <button onclick="openMergeDialog()" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid #3fb950;background:transparent;color:#3fb950;cursor:pointer;white-space:nowrap;">+ Merge into Flightplan</button>
         <button onclick="aitmFromGenerator()" title="Open these rotations in the AI Traffic Manager: assign your installed aircraft and compile the traffic BGL" style="font-size:12px;font-weight:600;padding:5px 14px;border-radius:var(--r);border:1px solid var(--acc);background:var(--acc);color:#fff;cursor:pointer;white-space:nowrap;">→ AI Traffic Manager</button>
         <button id="rot-daily-all" onclick="toggleRotDailyAll()" title="Daily for all rotations: when on, every rotation is set to Daily — dragging it onto an aircraft fills all 7 days of week 1. Single rotations can still be switched off with their own Daily button."
@@ -11468,7 +11468,7 @@ function buildTToolsData(acNumStart) {
   return { types, aircraftLines, fpLines };
 }
 
-function generateTToolsFromRotations() {
+async function generateTToolsFromRotations() {
   if(!rotAircraft.length){ alert('No aircraft yet. Create rotations and assign some flights first.'); return; }
   const icao = (aiGenMode==='airline' && aiGenAirline) ? aiGenAirline
              : (aiGenMulti && aiGenAlHub) ? aiGenAlHub[0]
@@ -11480,11 +11480,47 @@ function generateTToolsFromRotations() {
   const aircraftTxt = data.aircraftLines.join('\n')+'\n';
   const flightplansTxt = '//FSXDAYS=False\n//SUMMER TIME\n' + data.fpLines.join('\n')+'\n';
 
-  ttoolsDownload(aircraftTxt, 'Aircraft_CRE_'+icao+'.txt');
-  setTimeout(()=> ttoolsDownload(flightplansTxt, 'Flightplans_CRE_'+icao+'.txt'), 400);
-
+  const acName='Aircraft_CRE_'+icao+'.txt', fpName='Flightplans_CRE_'+icao+'.txt';
+  const what=' ('+data.types.length+' type'+(data.types.length>1?'s':'')+', '+data.fpLines.length+' aircraft)';
   const st=document.getElementById('rot-status');
-  if(st) st.textContent='✓ Generated Aircraft_CRE_'+icao+'.txt ('+data.types.length+' type'+(data.types.length>1?'s':'')+') and Flightplans_CRE_'+icao+'.txt ('+data.fpLines.length+' aircraft).';
+  // Chrome: both files in one go into one folder — the folder picker opens in the folder used last time
+  // (at first: the AI Traffic Manager's "CRE flightplans"). Replaced files keep a copy in Backups.
+  if (window.showDirectoryPicker && typeof aitmKvGet==='function') {
+    const res = await ttSaveToFolder([[acName, aircraftTxt], [fpName, flightplansTxt]]);
+    if (res === 'cancel') return;
+    if (res && res.ok) { if(st) st.textContent='✓ Saved '+acName+' and '+fpName+what+' in “'+res.folder+'”'+(res.replaced.length?' — the old '+res.replaced.join(' and ')+' are in '+res.bak:'')+'.'; return; }
+    if (res && res.error && st) st.textContent='⚠ Could not save into the folder ('+res.error+') — downloaded instead.';
+  }
+  ttoolsDownload(aircraftTxt, acName);
+  setTimeout(()=> ttoolsDownload(flightplansTxt, fpName), 400);
+  if(st && !(st.textContent||'').startsWith('⚠')) st.textContent='✓ Generated '+acName+' and '+fpName+what+'.';
+}
+// Writes the files into one folder chosen once (the picker starts in the last folder used, else in "CRE flightplans").
+// → 'cancel' | { ok, folder, replaced, bak } | { error }
+async function ttSaveToFolder(files){
+  let start = null;
+  try { start = (await aitmKvGet('ttExportDir')) || (await aitmKvGet('fpRoot')) || null; } catch(e) {}
+  let dir = null;
+  for (const s of (start ? [start, null] : [null])) {
+    try { dir = await window.showDirectoryPicker(Object.assign({ id: 'tt-export', mode: 'readwrite' }, s ? { startIn: s } : {})); break; }
+    catch(e) { if (e && e.name === 'AbortError') return 'cancel'; }    // other errors (an old folder that is gone): try without it
+  }
+  if (!dir) return { error: 'no folder' };
+  try {
+    try { await aitmKvSet('ttExportDir', dir); } catch(e) {}
+    const replaced = []; let bak = null, bakLabel = '';
+    for (const [name, text] of files) {
+      let old = null; try { old = await (await dir.getFileHandle(name)).getFile(); } catch(e) {}
+      if (old) {
+        if (!bak) { const b = await aitmTxtBackupDir(dir); bak = b.h; bakLabel = b.label; }
+        const bytes = await old.arrayBuffer(), bn = await aitmFreeName(bak, aitmBakName(name, old.lastModified));
+        const w = await (await bak.getFileHandle(bn, { create: true })).createWritable(); await w.write(bytes); await w.close();
+        replaced.push(name);
+      }
+      const w = await (await dir.getFileHandle(name, { create: true })).createWritable(); await w.write(text); await w.close();
+    }
+    return { ok: true, folder: dir.name, replaced, bak: bakLabel };
+  } catch(e) { return { error: (e && e.message) || String(e) }; }
 }
 
 // ── Merge into an existing flightplan ──
