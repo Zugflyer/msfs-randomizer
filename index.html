@@ -10596,7 +10596,7 @@ function rotTipMove(e){
   if (y+h > vh-8) y = Math.max(8, e.clientY-h-14);
   t.style.left=x+'px'; t.style.top=y+'px';
 }
-function rotTipShow(e, html){ const t=rotTipEl(); t.innerHTML=html; t.style.display='block'; rotTipMove(e); }
+function rotTipShow(e, html, opt){ const t=rotTipEl(); t.style.maxWidth=(opt&&opt.maxWidth)||'440px'; t.style.padding=(opt&&opt.pad)||'10px 14px'; t.innerHTML=html; t.style.display='block'; rotTipMove(e); }
 // Weekday of a moment on the planner timeline (minutes from Sunday 00:00 of week 1): "Sun", in a
 // 2-week cycle "Sun¹" / "Sun²".
 function rotWd(m){ const N=ROT_NDAYS*1440; const d=Math.floor((((m%N)+N)%N)/1440); return ROT_DAYS[d%7].slice(0,3)+(ROT_WEEKS>1?(d<7?'¹':'²'):''); }

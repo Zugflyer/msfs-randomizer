@@ -1199,19 +1199,32 @@ function aitmLegsTip(i) {
     var m = min; if (aitm.tmode !== 'utc') { var o = aitmOffset(icao); if (o != null) m += Math.round(o * 60); }
     m = ((m % P) + P) % P; return DN[Math.floor(m / 1440) % 7];
   };
+  // one column per piece of information, padded, numbers right-aligned; a line where a new day starts
+  var td = function (v, st) { return '<td style="padding:3px 9px;white-space:nowrap;' + (st || '') + '">' + v + '</td>'; };
+  var th = function (v, st) { return '<th style="padding:0 9px 5px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);text-align:left;white-space:nowrap;border-bottom:1px solid var(--bdr2);' + (st || '') + '">' + v + '</th>'; };
+  var R = 'text-align:right;', prevDay = null;
   var rows = p.legs.map(function (l, j) {
     var from = p.legs[(j - 1 + n) % n].to;
     var blk = l.arr == null ? null : ((l.arr - l.dep) % P + P) % P;
-    return '<tr><td style="color:var(--txt3);">' + (j + 1) + '</td><td>' + dayName(l.dep, from) + ' ' + aitmStamp(l.dep, P, from).replace(/^\d+\//, '') + '</td>'
-      + '<td>' + aitmEsc(from) + '→<b style="color:#fff;">' + aitmEsc(l.to) + '</b></td>'
-      + '<td>' + dayName(l.arr, l.to) + ' ' + aitmStamp(l.arr, P, l.to).replace(/^\d+\//, '') + '</td>'
-      + '<td>' + (blk == null ? '' : Math.floor(blk / 60) + ':' + String(blk % 60).padStart(2, '0')) + '</td>'
-      + '<td>FL' + l.alt + '</td><td>' + aitmEsc(l.fnum) + '</td></tr>';
+    var dD = dayName(l.dep, from), aD = l.arr == null ? '' : dayName(l.arr, l.to);
+    var dT = aitmStamp(l.dep, P, from).replace(/^\d+\//, ''), aT = l.arr == null ? '' : aitmStamp(l.arr, P, l.to).replace(/^\d+\//, '');
+    var newDay = j > 0 && dD && dD !== prevDay; prevDay = dD;
+    var line = newDay ? 'border-top:1px solid rgba(255,255,255,.14);' : (j > 0 ? 'border-top:1px solid rgba(255,255,255,.04);' : '');
+    return '<tr style="' + line + '">'
+      + td(j + 1, 'color:var(--txt3);' + R)
+      + td(dD, 'color:#9fc7ff;padding-right:4px;') + td(dT, 'color:#fff;font-weight:700;padding-left:0;')
+      + td(aitmEsc(from), 'color:var(--txt2);padding-right:4px;') + td('→', 'color:var(--txt3);padding:3px 2px;') + td(aitmEsc(l.to), 'color:#fff;font-weight:700;padding-left:4px;')
+      + td(aD === dD ? '' : aD, 'color:#9fc7ff;padding-right:4px;' + R) + td(aT, 'color:#fff;padding-left:0;')
+      + td(blk == null ? '' : Math.floor(blk / 60) + ':' + String(blk % 60).padStart(2, '0'), 'color:#3fb950;' + R)
+      + td(l.alt != null && l.alt !== '' ? 'FL' + l.alt : '', 'color:var(--txt2);' + R)
+      + td(aitmEsc(l.fnum), 'color:#e0b341;' + R)
+      + '</tr>';
   }).join('');
-  return '<div style="font-size:13px;font-weight:700;color:#fff;margin-bottom:6px;">' + aitmEsc(p.reg) + ' · AC#' + p.ac + ' ' + aitmEsc(a ? a.title : '') + '</div>'
-    + '<div style="font-size:11px;color:var(--txt3);margin-bottom:6px;">' + aitmEsc(p.period) + ' · ' + p.rules + ' · ' + n + ' legs · times ' + (aitm.tmode === 'utc' ? 'UTC' : 'local') + '</div>'
-    + '<table style="border-collapse:collapse;font-family:monospace;font-size:11px;color:var(--txt2);">'
-    + '<tr style="color:var(--txt3);"><td>#</td><td>Dep</td><td>Route</td><td>Arr</td><td>Block</td><td>Alt</td><td>Flt</td></tr>' + rows + '</table>';
+  return '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:3px;">' + aitmEsc(p.reg) + ' · AC#' + p.ac + ' <span style="font-weight:600;color:var(--txt2);">' + aitmEsc(a ? a.title : '') + '</span></div>'
+    + '<div style="font-size:11px;color:var(--txt3);margin-bottom:10px;">' + aitmEsc(p.period) + ' · ' + p.rules + ' · ' + n + ' legs · times ' + (aitm.tmode === 'utc' ? 'UTC' : 'local') + '</div>'
+    + '<table style="border-collapse:collapse;font-family:monospace;font-size:12.5px;line-height:1.45;">'
+    + '<tr>' + th('#', R) + th('Dep', 'padding-right:4px;') + th('', 'padding-left:0;') + th('From', 'padding-right:4px;') + th('', 'padding:0 2px 5px;') + th('To', 'padding-left:4px;')
+    + th('Arr', 'padding-right:4px;' + R) + th('', 'padding-left:0;') + th('Block', R) + th('Alt', R) + th('Flight', R) + '</tr>' + rows + '</table>';
 }
 // departures per week from each airport (a leg departs from the previous leg's destination; DAY plans count 7×)
 function aitmApDepCounts() {
@@ -1381,7 +1394,7 @@ function aitmBind() {
     legs.addEventListener('mousemove', function (e) {
       var row = e.target.closest('.aitm-pl');
       if (!row) { rotTipHide(); return; }
-      if (aitm._tipRow !== row) { aitm._tipRow = row; rotTipShow(e, aitmLegsTip(parseInt(row.dataset.i, 10))); } else rotTipMove(e);
+      if (aitm._tipRow !== row) { aitm._tipRow = row; rotTipShow(e, aitmLegsTip(parseInt(row.dataset.i, 10)), { maxWidth: '760px', pad: '14px 18px' }); } else rotTipMove(e);
     });
     legs.addEventListener('mouseleave', function () { aitm._tipRow = null; rotTipHide(); });
   }
