@@ -7663,16 +7663,20 @@ function alEnsureLegNos(){
 // ── linking rows into one flight (multi-stop) ──
 // the row this one continues (directly above with the link, or by the same flight number), or null
 function alLinkPred(b){ return aiGenAlLegs.find(a => a !== b && a && a.arr && alRowContinues(a, b)) || null; }
-// rows that arrive where this one departs and have no onward flight yet (and are not flown after it)
-function alLinkCandidates(b){
-  const L = aiGenAlLegs;
-  if (!b || !b.dep || !b.arr || (Array.isArray(b.stops) && b.stops.length)) return [];
-  const after = new Set([b]); let x = b, guard = 0;            // b's own onward flights: linking to them would go round in circles
-  while (guard++ < 200) { const s = L.find(n => n && !after.has(n) && alRowContinues(x, n)); if (!s) break; after.add(s); x = s; }
-  return L.filter(a => a && !after.has(a) && a.arr && a.dep && a.arr[0] === b.dep[0]
-    && !(Array.isArray(a.stops) && a.stops.length)
-    && (!aiGenMulti || alRowAl(a) === alRowAl(b))
-    && !L.some(n => n && n !== b && alRowContinues(a, n)));
+// why row b cannot become the onward flight of row a ('' = it can)
+function alLinkProblem(a, b){
+  const L = aiGenAlLegs, nm = r => ((r.dep && r.dep[0]) || '?')+'–'+((r.arr && r.arr[0]) || '?');
+  const split = r => Array.isArray(r.stops) && r.stops.length;
+  if (!a || !a.dep || !a.arr) return 'The row above is not complete yet (both airports are needed).';
+  if (!b.dep || !b.arr) return 'This row is not complete yet (both airports are needed).';
+  if (a.arr[0] !== b.dep[0]) return 'This row departs from '+b.dep[0]+', but the row above ('+nm(a)+') arrives in '+a.arr[0]+'.\nA flight with a stop has to continue where the previous leg lands.';
+  if (split(a) || split(b)) return 'Rows with a split routing (intermediate stops) cannot be linked — their stops already make them one flight.';
+  if (aiGenMulti && alRowAl(a) !== alRowAl(b)) return 'Both rows have to belong to the same airline ('+(alRowAl(a)||'?')+' / '+(alRowAl(b)||'?')+').';
+  const other = L.find(n => n && n !== b && alRowContinues(a, n));
+  if (other) return 'The row above already continues with '+nm(other)+'. Separate that link first.';
+  let x = b, guard = 0;                                        // a must not be flown after b already (that would go round in circles)
+  while (guard++ < 200) { const s = L.find(n => n && alRowContinues(x, n)); if (!s) break; if (s === a) return 'The row above is already flown after this one ('+nm(b)+' → … → '+nm(a)+').'; x = s; }
+  return '';
 }
 // link b behind a: b (with the rows flown after it) moves directly below a and continues it
 function alLinkTo(b, a){
@@ -7683,18 +7687,6 @@ function alLinkTo(b, a){
   b.cont = true; b.uncont = false;
   _alSortSnap = null;                                          // the sorted view takes the new chain as one block
   renderAiGenAlLegs();
-}
-function alLinkMenu(anchor, items){
-  const old = document.getElementById('al-link-menu'); if (old) old.remove();
-  const m = document.createElement('div'); m.id = 'al-link-menu';
-  const r = anchor.getBoundingClientRect();
-  m.style.cssText = 'position:fixed;z-index:9600;left:'+r.left+'px;top:'+(r.bottom+3)+'px;background:var(--surf2,#1c2128);border:1px solid var(--bdr2);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:4px 0;font-size:12px;min-width:200px;';
-  m.innerHTML = '<div style="padding:4px 12px 6px;font-size:10px;color:var(--txt3);">Onward flight of …</div>';
-  items.forEach(([label, fn]) => { const d = document.createElement('div'); d.textContent = label; d.style.cssText = 'padding:6px 12px;cursor:pointer;color:var(--txt);font-family:monospace;';
-    d.onmouseenter = () => d.style.background = 'var(--surf3)'; d.onmouseleave = () => d.style.background = '';
-    d.onclick = () => { m.remove(); fn(); }; m.appendChild(d); });
-  document.body.appendChild(m);
-  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', h); } }), 0);
 }
 // leg number (LEG # column) as a number, or null
 function alLegNoVal(v){ if (v===null||v===undefined||String(v).trim()==='') return null; const n=parseInt(String(v).replace(/\D/g,''),10); return Number.isFinite(n)?n:null; }
@@ -8358,36 +8350,31 @@ function _renderAiGenAlLegsNow() {
     splitBtn.onclick=()=>aiGenAlSplit(i);
     leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn); leftCol.appendChild(splitBtn);
 
-    // Multi-stop: a row that departs where another row arrives can be linked to it, so both rows become
-    // ONE flight with a stop (A→B→C and back C→B→A). Shown whatever the order of the list or the sort:
-    // purple = linked (click separates), black = can be linked (click links; the row then moves directly
-    // below the row it continues, which is what "linked" means for the flight plan).
-    {
-      const L = aiGenAlLegs, pred = alLinkPred(leg), cands = pred ? [] : alLinkCandidates(leg);
-      if (pred || cands.length) {
-        const linked = !!pred, byNumber = linked && !leg.cont;
-        const nm = r => r.dep[0]+'–'+r.arr[0]+(r.flightNum ? ' '+r.flightNum : '');
-        const above = r => L.indexOf(r) === i-1 && (!aiGenAlSort || rowVisPrev === i-1);
-        const linkBtn=document.createElement('button');
-        linkBtn.dataset.tabseq=i+'.14';
-        linkBtn.textContent = linked ? '⛓ Linked to ' + (above(pred) ? 'row above' : nm(pred))
-                                     : '⛓ Link to ' + (cands.length > 1 ? '… ('+cands.length+')' : above(cands[0]) ? 'row above' : nm(cands[0]));
-        linkBtn.title = linked
-          ? (byNumber ? 'Same flight number as '+nm(pred)+': one flight with a stop in '+leg.dep[0]+'. Click to separate them.'
-                      : 'One flight with '+nm(pred)+' (stop in '+leg.dep[0]+'). Click to separate them again.')
-          : 'Make this row the onward flight of '+(cands.length > 1 ? 'a route arriving in '+leg.dep[0]+' (click to choose)' : nm(cands[0]))+' — one flight with a stop in '+leg.dep[0]+'.';
-        linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
-          + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
-                    : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
-        // one click: purple (linked) ↔ black (separate) — also for rows linked by their flight number
-        linkBtn.onclick=(ev)=>{
-          if (linked) { leg.cont=false; leg.uncont=true; renderAiGenAlLegs(); return; }
-          if (cands.length === 1) { alLinkTo(leg, cands[0]); return; }
-          alLinkMenu(ev.currentTarget, cands.map(c=>[nm(c), ()=>alLinkTo(leg, c)]));
-        };
-        leftCol.appendChild(linkBtn);
-        if (linked && L.indexOf(pred) === i-1) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
-      }
+    // Multi-stop: every row (except the first one shown) has the link field. Purple = this row continues
+    // another one as ONE flight with a stop (click separates); black = separate (click links it to the row
+    // shown directly above — or says why that cannot be one flight).
+    if (rowVisPrev >= 0) {
+      const L = aiGenAlLegs, pred = alLinkPred(leg), P = L[rowVisPrev];
+      const linked = !!pred, byNumber = linked && !leg.cont;
+      const nm = r => ((r.dep && r.dep[0]) || '?')+'–'+((r.arr && r.arr[0]) || '?')+(r.flightNum ? ' '+r.flightNum : '');
+      const linkBtn=document.createElement('button');
+      linkBtn.dataset.tabseq=i+'.14';
+      linkBtn.textContent = linked ? '⛓ Linked to ' + (pred === P ? 'row above' : nm(pred)) : '⛓ Link to row above';
+      linkBtn.title = linked
+        ? (byNumber ? 'Same flight number as '+nm(pred)+': one flight with a stop in '+leg.dep[0]+'. Click to separate them.'
+                    : 'One flight with '+nm(pred)+' (stop in '+leg.dep[0]+'). Click to separate them again.')
+        : 'Make this row the onward flight of the row above ('+nm(P)+') — one flight with a stop.';
+      linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+        + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
+                  : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
+      linkBtn.onclick=()=>{
+        if (linked) { leg.cont=false; leg.uncont=true; renderAiGenAlLegs(); return; }
+        const why = alLinkProblem(P, leg);
+        if (why) { alert('This row cannot be linked to the row above.\n\n'+why); return; }
+        alLinkTo(leg, P);
+      };
+      leftCol.appendChild(linkBtn);
+      if (linked && L.indexOf(pred) === i-1) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
     }
 
     row.appendChild(leftCol);
