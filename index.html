@@ -7641,6 +7641,19 @@ function alSortCmpVal(a,b){
   return (typeof a==='number' && typeof b==='number') ? a-b : String(a).localeCompare(String(b));
 }
 function alFnumVal(v){ const d=String(v||'').replace(/\D/g,''); return d ? +d : null; }
+// Every leg gets a leg number: a route row that has both airports and no number yet gets the next free
+// one (highest number so far + 1) — the outbound leg first, then its return leg (with "Return flight").
+// Numbers stay as they are once given (also when rows move or others are deleted) and can be typed over.
+function alEnsureLegNos(){
+  let max = 0;
+  aiGenAlLegs.forEach(l=>{ if (l) [l.legNo, l.rLegNo].forEach(v=>{ const n=alLegNoVal(v); if (n!=null && n>max) max=n; }); });
+  const ret = !aiGenAlNoReturn;
+  aiGenAlLegs.forEach(l=>{
+    if (!l || !l.dep || !l.arr) return;
+    if (alLegNoVal(l.legNo)==null) l.legNo = ++max;
+    if (ret && alLegNoVal(l.rLegNo)==null) l.rLegNo = ++max;
+  });
+}
 // leg number (LEG # column) as a number, or null
 function alLegNoVal(v){ if (v===null||v===undefined||String(v).trim()==='') return null; const n=parseInt(String(v).replace(/\D/g,''),10); return Number.isFinite(n)?n:null; }
 // lowest leg number of some rows (outbound or return) — a row sorts where its first leg stands
@@ -7750,6 +7763,7 @@ function renderAiGenAlLegs() {
 }
 
 function _renderAiGenAlLegsNow() {
+  alEnsureLegNos();
   if (typeof aiwsDirty==='function') aiwsDirty();
   applyAiGenAlSchedModeUI();
   const container = document.getElementById('aigen-al-legs-container'); if (!container) return;
@@ -8189,14 +8203,15 @@ function _renderAiGenAlLegsNow() {
       fnInp.title='Optional flight number. Empty = generated when the rotations are created.';
       fnInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#9fc7ff;background:transparent;border:1px solid rgba(255,255,255,.18);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
       fnInp.oninput=()=>{ const v=fnInp.value.replace(/[^0-9A-Za-z]/g,'').toUpperCase(); fnInp.value=v; if(isOut) leg.flightNum=v; else leg.rFlightNum=v; };
-      if (alUsesLegNos) {
+      {
         const lgInp=document.createElement('input');
         lgInp.type='text'; lgInp.maxLength=5; lgInp.placeholder='leg#';
         const lv=isOut ? leg.legNo : leg.rLegNo;
         lgInp.value = (lv!=null && lv!=='') ? String(lv) : '';
-        lgInp.title='Leg number (LEG # column of your sheet) — used by "Sort by → Leg number"';
+        lgInp.title='Leg number — every new leg gets the next free number by itself; type over it to change it. "Sort by → Leg number" orders the list by it.';
         lgInp.style.cssText='width:46px;font-size:10px;font-family:monospace;color:#e0b341;background:transparent;border:1px dashed rgba(224,179,65,.45);border-radius:4px;text-align:center;padding:1px 2px;outline:none;';
         lgInp.oninput=()=>{ const v=lgInp.value.replace(/\D/g,''); lgInp.value=v; const n=v?parseInt(v,10):null; if(isOut) leg.legNo=n; else leg.rLegNo=n; };
+        lgInp.onblur=()=>{ if (!lgInp.value) renderAiGenAlLegs(); };   // emptied → gets the next free number again
         cell.appendChild(lgInp);
       }
       cell.appendChild(fnInp);
@@ -8284,7 +8299,7 @@ function _renderAiGenAlLegsNow() {
     const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
     dupBtn.dataset.tabseq=i+'.11';
     dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false, uncont:false, ttImported:false, ttFirst:false}); renderAiGenAlLegs(); };
+    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false, uncont:false, ttImported:false, ttFirst:false, legNo:null, rLegNo:null}); renderAiGenAlLegs(); };
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
