@@ -1199,9 +1199,12 @@ function aitmLegsTip(i) {
     var m = min; if (aitm.tmode !== 'utc') { var o = aitmOffset(icao); if (o != null) m += Math.round(o * 60); }
     m = ((m % P) + P) % P; return DN[Math.floor(m / 1440) % 7];
   };
-  // one column per piece of information, padded, numbers right-aligned; a line where a new day starts
+  // one column per piece of information, padded, numbers right-aligned; a line where a new day starts.
+  // Three colours only: airports and flight numbers white, block times green, everything else grey
+  // (days, departure and arrival times, flight levels, #).
+  var CA = '#fff', CB = '#3fb950', CG = 'var(--txt2)', CT = CG;
   var td = function (v, st) { return '<td style="padding:3px 9px;white-space:nowrap;' + (st || '') + '">' + v + '</td>'; };
-  var th = function (v, st) { return '<th style="padding:0 9px 5px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--txt3);text-align:left;white-space:nowrap;border-bottom:1px solid var(--bdr2);' + (st || '') + '">' + v + '</th>'; };
+  var th = function (v, st) { return '<th style="padding:0 9px 5px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:' + CG + ';text-align:left;white-space:nowrap;border-bottom:1px solid var(--bdr2);' + (st || '') + '">' + v + '</th>'; };
   var R = 'text-align:right;', prevDay = null;
   var rows = p.legs.map(function (l, j) {
     var from = p.legs[(j - 1 + n) % n].to;
@@ -1211,17 +1214,17 @@ function aitmLegsTip(i) {
     var newDay = j > 0 && dD && dD !== prevDay; prevDay = dD;
     var line = newDay ? 'border-top:1px solid rgba(255,255,255,.14);' : (j > 0 ? 'border-top:1px solid rgba(255,255,255,.04);' : '');
     return '<tr style="' + line + '">'
-      + td(j + 1, 'color:var(--txt3);' + R)
-      + td(dD, 'color:#9fc7ff;padding-right:4px;') + td(dT, 'color:#fff;font-weight:700;padding-left:0;')
-      + td(aitmEsc(from), 'color:var(--txt2);padding-right:4px;') + td('→', 'color:var(--txt3);padding:3px 2px;') + td(aitmEsc(l.to), 'color:#fff;font-weight:700;padding-left:4px;')
-      + td(aD === dD ? '' : aD, 'color:#9fc7ff;padding-right:4px;' + R) + td(aT, 'color:#fff;padding-left:0;')
-      + td(blk == null ? '' : Math.floor(blk / 60) + ':' + String(blk % 60).padStart(2, '0'), 'color:#3fb950;' + R)
-      + td(l.alt != null && l.alt !== '' ? 'FL' + l.alt : '', 'color:var(--txt2);' + R)
-      + td(aitmEsc(l.fnum), 'color:#e0b341;' + R)
+      + td(j + 1, 'color:' + CG + ';' + R)
+      + td(dD, 'color:' + CT + ';padding-right:4px;') + td(dT, 'color:' + CT + ';padding-left:0;')
+      + td(aitmEsc(from), 'color:' + CA + ';font-weight:700;padding-right:4px;') + td('→', 'color:' + CG + ';padding:3px 2px;') + td(aitmEsc(l.to), 'color:' + CA + ';font-weight:700;padding-left:4px;')
+      + td(aD === dD ? '' : aD, 'color:' + CT + ';padding-right:4px;' + R) + td(aT, 'color:' + CT + ';padding-left:0;')
+      + td(blk == null ? '' : Math.floor(blk / 60) + ':' + String(blk % 60).padStart(2, '0'), 'color:' + CB + ';' + R)
+      + td(l.alt != null && l.alt !== '' ? 'FL' + l.alt : '', 'color:' + CG + ';' + R)
+      + td(aitmEsc(l.fnum), 'color:' + CA + ';' + R)
       + '</tr>';
   }).join('');
-  return '<div style="font-size:14px;font-weight:700;color:#fff;margin-bottom:3px;">' + aitmEsc(p.reg) + ' · AC#' + p.ac + ' <span style="font-weight:600;color:var(--txt2);">' + aitmEsc(a ? a.title : '') + '</span></div>'
-    + '<div style="font-size:11px;color:var(--txt3);margin-bottom:10px;">' + aitmEsc(p.period) + ' · ' + p.rules + ' · ' + n + ' legs · times ' + (aitm.tmode === 'utc' ? 'UTC' : 'local') + '</div>'
+  return '<div style="font-size:14px;font-weight:700;color:' + CA + ';margin-bottom:3px;">' + aitmEsc(p.reg) + ' · AC#' + p.ac + ' <span style="font-weight:600;color:' + CG + ';">' + aitmEsc(a ? a.title : '') + '</span></div>'
+    + '<div style="font-size:11px;color:' + CG + ';margin-bottom:10px;">' + aitmEsc(p.period) + ' · ' + p.rules + ' · ' + n + ' legs · times ' + (aitm.tmode === 'utc' ? 'UTC' : 'local') + '</div>'
     + '<table style="border-collapse:collapse;font-family:monospace;font-size:12.5px;line-height:1.45;">'
     + '<tr>' + th('#', R) + th('Dep', 'padding-right:4px;') + th('', 'padding-left:0;') + th('From', 'padding-right:4px;') + th('', 'padding:0 2px 5px;') + th('To', 'padding-left:4px;')
     + th('Arr', 'padding-right:4px;' + R) + th('', 'padding-left:0;') + th('Block', R) + th('Alt', R) + th('Flight', R) + '</tr>' + rows + '</table>';
