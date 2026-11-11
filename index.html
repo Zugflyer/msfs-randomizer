@@ -172,6 +172,13 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 ::-webkit-scrollbar{width:4px;height:4px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--surf3);border-radius:2px;}
+/* Rotation Planner: big scrollbars in the time bars and the aircraft panes — always visible, easy to grab and drag */
+#rot-bars-container::-webkit-scrollbar, #rot-lanes-container::-webkit-scrollbar { width:16px; height:16px; }
+#rot-bars-container::-webkit-scrollbar-track, #rot-lanes-container::-webkit-scrollbar-track { background:rgba(255,255,255,.05); border-radius:8px; }
+#rot-bars-container::-webkit-scrollbar-thumb, #rot-lanes-container::-webkit-scrollbar-thumb { background:#5a5f7a; border-radius:8px; border:3px solid transparent; background-clip:padding-box; min-height:40px; min-width:40px; }
+#rot-bars-container::-webkit-scrollbar-thumb:hover, #rot-lanes-container::-webkit-scrollbar-thumb:hover { background:#7b61ff; border:2px solid transparent; background-clip:padding-box; }
+#rot-bars-container::-webkit-scrollbar-thumb:active, #rot-lanes-container::-webkit-scrollbar-thumb:active { background:#9d88ff; border:2px solid transparent; background-clip:padding-box; }
+#rot-bars-container::-webkit-scrollbar-corner, #rot-lanes-container::-webkit-scrollbar-corner { background:transparent; }
 
 @media(max-width:800px){
   .main{flex-direction:column;}
