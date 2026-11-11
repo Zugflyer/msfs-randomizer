@@ -7873,6 +7873,10 @@ function _renderAiGenAlLegsNow() {
       eqpCell.appendChild(alInp);
     }
     eqpCell.appendChild(eqpInp);
+    const eqpMissing = () => { const miss = !leg.ttImported && !String(leg.eqp||'').trim() && !!(leg.dep && leg.arr);
+      eqpCell.style.borderColor = miss ? '#f85149' : ''; eqpCell.style.boxShadow = miss ? '0 0 0 1px #f85149' : '';
+      eqpCell.title = miss ? 'No aircraft type — without one this route is left out of the rotations' : ''; };
+    eqpMissing(); eqpInp.addEventListener('input', eqpMissing);
     const gInpRef = {el:null}; // filled when the ground input is built below
 
     // Helper: a fixed-time input. If `computed` is provided (non-null), render a
@@ -9444,6 +9448,24 @@ async function createRotationsAirline(mode) {
   if (!aiGenAlHub) { alert(aiGenMulti ? 'Please select the airport first.' : 'Please select a hub airport first.'); return; }
   const apiKey = typeof getApiKey === 'function' ? getApiKey() : null;   // only needed for new research
   if (!aiGenMulti) rotAdoptAirline(aiGenAirline);
+
+  // A route with both airports but no aircraft type would be left out of the rotations without a word
+  // on this page — ask which type flies it (suggested: the type of the route above).
+  { const noType = aiGenAlLegs.filter(l => l && !l.ttImported && !String(l.eqp||'').trim() && l.dep && l.arr && (!aiGenMulti || alRowAl(l).length>=2));
+    if (noType.length) {
+      const types = [...new Set(aiGenAlLegs.filter(l => l && String(l.eqp||'').trim()).map(l => String(l.eqp).trim().toUpperCase()))];
+      for (const l of noType) {
+        const i = aiGenAlLegs.indexOf(l), above = aiGenAlLegs.slice(0, i).reverse().find(x => x && String(x.eqp||'').trim());
+        const def = (above ? String(above.eqp).trim().toUpperCase() : '') || types[0] || '';
+        const v = prompt(l.dep[0]+' – '+l.arr[0]+' has no aircraft type, so it would be left out of the rotations.\n\n'
+          + 'Which aircraft type flies it?'+(types.length ? '  (types of the other routes: '+types.join(', ')+')' : '')+'\n\nCancel = leave this route out', def);
+        if (v == null) continue;
+        const ty = String(v).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+        if (ty) l.eqp = ty;
+      }
+      renderAiGenAlLegs();
+    }
+  }
 
   const built = alBuildValidLegs();
   const extras = alExtraValidLegs();                 // irregular rotations from a TTools import
