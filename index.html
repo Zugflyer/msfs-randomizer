@@ -7654,6 +7654,42 @@ function alEnsureLegNos(){
     if (ret && alLegNoVal(l.rLegNo)==null) l.rLegNo = ++max;
   });
 }
+// ── linking rows into one flight (multi-stop) ──
+// the row this one continues (directly above with the link, or by the same flight number), or null
+function alLinkPred(b){ return aiGenAlLegs.find(a => a !== b && a && a.arr && alRowContinues(a, b)) || null; }
+// rows that arrive where this one departs and have no onward flight yet (and are not flown after it)
+function alLinkCandidates(b){
+  const L = aiGenAlLegs;
+  if (!b || !b.dep || !b.arr || (Array.isArray(b.stops) && b.stops.length)) return [];
+  const after = new Set([b]); let x = b, guard = 0;            // b's own onward flights: linking to them would go round in circles
+  while (guard++ < 200) { const s = L.find(n => n && !after.has(n) && alRowContinues(x, n)); if (!s) break; after.add(s); x = s; }
+  return L.filter(a => a && !after.has(a) && a.arr && a.dep && a.arr[0] === b.dep[0]
+    && !(Array.isArray(a.stops) && a.stops.length)
+    && (!aiGenMulti || alRowAl(a) === alRowAl(b))
+    && !L.some(n => n && n !== b && alRowContinues(a, n)));
+}
+// link b behind a: b (with the rows flown after it) moves directly below a and continues it
+function alLinkTo(b, a){
+  const L = aiGenAlLegs, block = [b];
+  for (let j = L.indexOf(b) + 1; j < L.length && L[j] && L[j].cont && L[j - 1] === block[block.length - 1]; j++) block.push(L[j]);
+  block.forEach(r => { const k = L.indexOf(r); if (k >= 0) L.splice(k, 1); });
+  L.splice(L.indexOf(a) + 1, 0, ...block);
+  b.cont = true; b.uncont = false;
+  _alSortSnap = null;                                          // the sorted view takes the new chain as one block
+  renderAiGenAlLegs();
+}
+function alLinkMenu(anchor, items){
+  const old = document.getElementById('al-link-menu'); if (old) old.remove();
+  const m = document.createElement('div'); m.id = 'al-link-menu';
+  const r = anchor.getBoundingClientRect();
+  m.style.cssText = 'position:fixed;z-index:9600;left:'+r.left+'px;top:'+(r.bottom+3)+'px;background:var(--surf2,#1c2128);border:1px solid var(--bdr2);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.5);padding:4px 0;font-size:12px;min-width:200px;';
+  m.innerHTML = '<div style="padding:4px 12px 6px;font-size:10px;color:var(--txt3);">Onward flight of …</div>';
+  items.forEach(([label, fn]) => { const d = document.createElement('div'); d.textContent = label; d.style.cssText = 'padding:6px 12px;cursor:pointer;color:var(--txt);font-family:monospace;';
+    d.onmouseenter = () => d.style.background = 'var(--surf3)'; d.onmouseleave = () => d.style.background = '';
+    d.onclick = () => { m.remove(); fn(); }; m.appendChild(d); });
+  document.body.appendChild(m);
+  setTimeout(() => document.addEventListener('mousedown', function h(e) { if (!m.contains(e.target)) { m.remove(); document.removeEventListener('mousedown', h); } }), 0);
+}
 // leg number (LEG # column) as a number, or null
 function alLegNoVal(v){ if (v===null||v===undefined||String(v).trim()==='') return null; const n=parseInt(String(v).replace(/\D/g,''),10); return Number.isFinite(n)?n:null; }
 // lowest leg number of some rows (outbound or return) — a row sorts where its first leg stands
@@ -8114,7 +8150,7 @@ function _renderAiGenAlLegsNow() {
             leg['_focusSeq']=null; leg['_seedChar']='';
           }
           if (role==='outDep') {
-            buildSuggestBox(inp, ap=>{ leg.dep=ap; leg._editingDep=false; aiGenAlFocusAfter=i+'.'+(apSeq+1); renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
+            buildSuggestBox(inp, ap=>{ leg.dep=ap; leg._editingDep=false; aiGenAlFocusAfter=i+'.'+(apSeq+0.5); renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out'); });
           } else { // outArr
             buildSuggestBox(inp, ap=>{ leg.arr=ap;
               // pre-seed estimated return block (no API) so return ARR shows right away
@@ -8122,7 +8158,7 @@ function _renderAiGenAlLegsNow() {
                 const eff = alEstimateEffectiveBlock(leg.arr, leg.dep || aiGenAlHub);
                 if (eff != null) { leg.rBlockTime = Math.floor(eff/60)+':'+String(eff%60).padStart(2,'0'); leg.rBlockTimeReal=false; }
               }
-              aiGenAlFocusAfter=i+'.'+(apSeq+1);
+              aiGenAlFocusAfter=i+'.'+(apSeq+0.5);
               renderAiGenAlLegs(); aiGenAlFetchBlockTime(i,'out');
             });
           }
@@ -8206,6 +8242,7 @@ function _renderAiGenAlLegsNow() {
       {
         const lgInp=document.createElement('input');
         lgInp.type='text'; lgInp.maxLength=5; lgInp.placeholder='leg#';
+        lgInp.dataset.tabseq=i+'.'+(isOut?'1.5':'3.5');        // Tab: … airport → leg# → flt# …
         const lv=isOut ? leg.legNo : leg.rLegNo;
         lgInp.value = (lv!=null && lv!=='') ? String(lv) : '';
         lgInp.title='Leg number — every new leg gets the next free number by itself; type over it to change it. "Sort by → Leg number" orders the list by it.';
@@ -8315,32 +8352,36 @@ function _renderAiGenAlLegsNow() {
     splitBtn.onclick=()=>aiGenAlSplit(i);
     leftCol.appendChild(dupBtn); leftCol.appendChild(addBtn); leftCol.appendChild(splitBtn);
 
-    // Multi-stop: this row departs where the row above arrives → it can be linked to it,
-    // so both rows become ONE flight with a stop (A→B→C and back C→B→A).
-    const prevLeg = i>0 ? aiGenAlLegs[i-1] : null;
-    const prevSplit = prevLeg && Array.isArray(prevLeg.stops) && prevLeg.stops.length;
-    // sorted view: only offer the link when that row really stands above this one
-    if (prevLeg && !prevSplit && prevLeg.arr && leg.dep && leg.dep[0]===prevLeg.arr[0]
-        && (!aiGenAlSort || rowVisPrev===i-1 || alRowContinues(prevLeg, leg))) {
-      const linked = alRowContinues(prevLeg, leg);
-      const byNumber = linked && !leg.cont;
-      const fdig = v => String(v||'').replace(/\D/g,'');
-      const sameNum = !!(fdig(prevLeg.flightNum) && fdig(prevLeg.flightNum)===fdig(leg.flightNum));
-      const linkBtn=document.createElement('button');
-      linkBtn.dataset.tabseq=i+'.14';
-      linkBtn.textContent = linked ? '⛓ Linked to row above' : '⛓ Link to row above';
-      linkBtn.title = byNumber
-        ? 'Same flight number as the row above: both rows are one flight with a stop in '+leg.dep[0]+'. Click to separate them.'
-        : (linked ? 'Both rows are ONE flight with a stop in '+leg.dep[0]+'. Click to separate them again.'
-                  : (leg.uncont && sameNum ? 'Separated from the row above (same flight number). Click to link them again.'
-                                           : 'Make this row the onward flight of the row above (one flight with a stop in '+leg.dep[0]+').'));
-      linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;'
-        + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
-                  : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
-      // one click: purple (linked) ↔ black (separate) — also for rows linked by their flight number
-      linkBtn.onclick=()=>{ if (linked) { leg.cont=false; leg.uncont=true; } else { leg.cont=true; leg.uncont=false; } renderAiGenAlLegs(); };
-      leftCol.appendChild(linkBtn);
-      if (linked) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
+    // Multi-stop: a row that departs where another row arrives can be linked to it, so both rows become
+    // ONE flight with a stop (A→B→C and back C→B→A). Shown whatever the order of the list or the sort:
+    // purple = linked (click separates), black = can be linked (click links; the row then moves directly
+    // below the row it continues, which is what "linked" means for the flight plan).
+    {
+      const L = aiGenAlLegs, pred = alLinkPred(leg), cands = pred ? [] : alLinkCandidates(leg);
+      if (pred || cands.length) {
+        const linked = !!pred, byNumber = linked && !leg.cont;
+        const nm = r => r.dep[0]+'–'+r.arr[0]+(r.flightNum ? ' '+r.flightNum : '');
+        const above = r => L.indexOf(r) === i-1 && (!aiGenAlSort || rowVisPrev === i-1);
+        const linkBtn=document.createElement('button');
+        linkBtn.dataset.tabseq=i+'.14';
+        linkBtn.textContent = linked ? '⛓ Linked to ' + (above(pred) ? 'row above' : nm(pred))
+                                     : '⛓ Link to ' + (cands.length > 1 ? '… ('+cands.length+')' : above(cands[0]) ? 'row above' : nm(cands[0]));
+        linkBtn.title = linked
+          ? (byNumber ? 'Same flight number as '+nm(pred)+': one flight with a stop in '+leg.dep[0]+'. Click to separate them.'
+                      : 'One flight with '+nm(pred)+' (stop in '+leg.dep[0]+'). Click to separate them again.')
+          : 'Make this row the onward flight of '+(cands.length > 1 ? 'a route arriving in '+leg.dep[0]+' (click to choose)' : nm(cands[0]))+' — one flight with a stop in '+leg.dep[0]+'.';
+        linkBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);cursor:pointer;width:100%;box-sizing:border-box;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+          + (linked ? 'border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;'
+                    : 'border:1px dashed rgba(123,97,255,.6);background:transparent;color:#a78bfa;');
+        // one click: purple (linked) ↔ black (separate) — also for rows linked by their flight number
+        linkBtn.onclick=(ev)=>{
+          if (linked) { leg.cont=false; leg.uncont=true; renderAiGenAlLegs(); return; }
+          if (cands.length === 1) { alLinkTo(leg, cands[0]); return; }
+          alLinkMenu(ev.currentTarget, cands.map(c=>[nm(c), ()=>alLinkTo(leg, c)]));
+        };
+        leftCol.appendChild(linkBtn);
+        if (linked && L.indexOf(pred) === i-1) { wrapper.style.marginTop='-3px'; row.style.boxShadow='inset 4px 0 0 var(--acc)'; }
+      }
     }
 
     row.appendChild(leftCol);
@@ -8365,7 +8406,12 @@ function _renderAiGenAlLegsNow() {
     const seq = aiGenAlFocusAfter; aiGenAlFocusAfter = null;
     // look the field up when focusing (a second re-render may have happened meanwhile)
     setTimeout(()=>{
-      const target = document.querySelector('#aigen-al-legs-container [data-tabseq="'+seq+'"]');
+      const cont = document.getElementById('aigen-al-legs-container'); if (!cont) return;
+      let target = cont.querySelector('[data-tabseq="'+seq+'"]');
+      if (!target) {                       // that field is not there (e.g. no return leg): the next one that is
+        const want = alTabKey(seq);
+        target = [...cont.querySelectorAll('[data-tabseq]')].map(x=>[alTabKey(x.dataset.tabseq), x]).filter(a=>a[0]>=want).sort((a,b)=>a[0]-b[0]).map(a=>a[1])[0];
+      }
       if (target) { try{ target.focus(); if(target.select) target.select(); }catch(_){} }
     }, 0);
   }
@@ -12284,6 +12330,9 @@ function buildSceneryRow(row, ri) {
   });
 })();
 
+// "<row>.<pos>" → a sort key (pos may have a decimal part, e.g. "3.1.5" = row 3, pos 1.5)
+function alTabKey(seq){ const s=String(seq||''), k=s.indexOf('.'); const r=+s.slice(0,k), p=parseFloat(s.slice(k+1))||0;
+  const rk=(typeof _alVisRank!=='undefined' && _alVisRank && _alVisRank[r]!=null) ? _alVisRank[r] : r; return rk*100 + p; }
 // ── Custom Tab order across the Airline route-row fields ────────────────────────
 // Fields carry data-tabseq="<rowIndex>.<pos>". Tab moves forward, Shift+Tab backward.
 // After the last field of a row (pos 14) Tab continues at pos 0 of the next row;
@@ -12299,7 +12348,7 @@ function buildSceneryRow(row, ri) {
     if (!cont) return;
     const back = e.shiftKey;
     // all tab stops currently on screen, in row/position order (collapsed rows have none)
-    const key = x => { const [r,p]=String(x.dataset.tabseq).split('.'); const rk=(_alVisRank && _alVisRank[+r]!=null) ? _alVisRank[+r] : +r; return rk*100 + (+p); };
+    const key = x => alTabKey(x.dataset.tabseq);
     const stops = [...cont.querySelectorAll('[data-tabseq]')].sort((a,b)=>key(a)-key(b));
     const idx = stops.indexOf(el);
     const next = stops[idx + (back?-1:1)];
