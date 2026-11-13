@@ -1045,6 +1045,9 @@ function aitmFromGenerator() {
   if (typeof buildTToolsData !== 'function' || !rotAircraft || !rotAircraft.length) { alert('No rotations yet. Create rotations and assign them to aircraft first.'); return; }
   var data = buildTToolsData(1);
   if (!data) { alert('No flights have been assigned to any aircraft yet. Drag rotations onto the aircraft first.'); return; }
+  // The AI Traffic Manager restores its last flight plan when it is opened for the first time; do that now,
+  // before the rotations are put in — otherwise the old plan would come back over them.
+  if (!aitm.inited) aitmInit();
   var acs = AITM_CODEC.parseAircraftTxt(data.aircraftLines.join('\n'));
   var fp = AITM_CODEC.parseFlightplansTxt(data.fpLines.join('\n'));
   // AC# -> aircraft type of the planner (fpLines are written in rotAircraft order)
@@ -1062,6 +1065,7 @@ function aitmFromGenerator() {
   var name = (code && typeof AIRLINE_NAMES !== 'undefined' && AIRLINE_NAMES[code]) || code;
   if (hub) aitmLoad({ aircraft: list, plans: fp.plans, apx: {}, base: 'CRE_' + hub, name: hub, airport: hub, kind: 'airport', period: period, source: 'AI Generator' });
   else aitmLoad({ aircraft: list, plans: fp.plans, apx: {}, base: 'CRE_' + String(name || code || 'Airline').replace(/\s+/g, ''), name: name, period: period, code: code, source: 'AI Generator' });
+  aitmSaveNow();                                           // what was open in the AI Traffic Manager is replaced
   switchView('aitm');
 }
 
