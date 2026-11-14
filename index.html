@@ -398,6 +398,12 @@ textarea.json-area{width:100%;padding:7px;font-family:'SF Mono','Fira Code','Cou
 .aitm-pldel:hover{background:rgba(248,81,73,.3);}
 .aitm-in{font-size:12px;padding:5px 8px;border-radius:5px;border:1px solid var(--bdr2);background:var(--bg);color:var(--txt);font-family:var(--ff);}
 </style>
+<!-- Phone layout: on a phone <html> gets the class "m"; mobile.css / mobile.js then re-arrange the same page (they do nothing on a PC, Mac or iPad).
+     ?m=1 forces it for one visit (to look at it on a PC), "Desktop layout" in the phone's More menu switches it off on that phone. -->
+<script>(function(){try{var q=new URLSearchParams(location.search).get('m'),s=null;try{s=localStorage.getItem('mm_force');}catch(e){}
+var phone=Math.min(screen.width,screen.height)<=500&&(('ontouchstart' in window)||navigator.maxTouchPoints>0);
+if(q==='1'||(q!=='0'&&s!=='0'&&phone))document.documentElement.classList.add('m');}catch(e){}})();</script>
+<link rel="stylesheet" href="mobile.css">
 </head>
 <body>
 <div class="app">
@@ -12933,5 +12939,6 @@ window.addEventListener('focus', () => {
 });
 </script>
 <script src="aitm.js"></script>
+<script src="mobile.js"></script>
 </body>
 </html>
