@@ -1718,7 +1718,7 @@ async function saveCategory(cat) {
 async function loadAllFromCloud() {
   setCloudStatus('Loading…', 'ing');
   try {
-    const { data, error } = await sb.from('categories').select('name, items').neq('name', '__aigen_work__');
+    const { data, error } = await sb.from('categories').select('name, items').neq('name', '__aigen_work__').neq('name', '__logbook_meta__');
     if (error) throw error;
     if (data && data.length > 0) {
       const byId = {};
@@ -4556,12 +4556,12 @@ function renderLogbook() {
       <td style="padding:2px 5px;white-space:nowrap;">
         <input value="${f.airline||''}" maxlength="5"
           style="width:48px;font-size:11px;padding:2px 4px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
-          oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].airline=this.value;saveLogbook();">
+          oninput="this.value=this.value.toUpperCase();lbSetField('${f.id}','airline',this.value,${realIdx});">
       </td>
       <td style="padding:2px 5px;white-space:nowrap;">
         <input value="${f.aircraft||''}" maxlength="8"
           style="width:58px;font-size:11px;padding:2px 4px;border-radius:3px;border:1px solid var(--bdr);background:var(--bg);color:var(--txt);font-family:var(--ff);text-transform:uppercase;"
-          oninput="this.value=this.value.toUpperCase();logbookFlights[${realIdx}].aircraft=this.value;saveLogbook();">
+          oninput="this.value=this.value.toUpperCase();lbSetField('${f.id}','aircraft',this.value,${realIdx});">
       </td>
       <td style="padding:2px 6px;text-align:left;white-space:nowrap;">${f.airline ? logoHtml : ''}</td>
       ${actionBtn}
@@ -4593,12 +4593,12 @@ function deleteLogbookFlight(i) {
 }
 
 // ── Logbook edit modal ──────────────────────────────────────────────────────
-let _lbEditIdx = null;
+let _lbEditIdx = null, _lbEditId = null;
 let _lbEditAps = {};
 
 function openEditLbRow(idx) {
   const f = logbookFlights[idx]; if (!f) return;
-  _lbEditIdx = idx;
+  _lbEditIdx = idx; _lbEditId = f.id || null;
   _lbEditAps = {};
   const modal = document.getElementById('lb-edit-modal');
   document.getElementById('lb-edit-linenum').textContent = `#${idx + 1}`;
@@ -4614,8 +4614,9 @@ function closeEditLbRow() {
   ['lb-edit-dep-suggest','lb-edit-arr-suggest'].forEach(id => {
     const el = document.getElementById(id); if (el) el.style.display = 'none';
   });
-  _lbEditIdx = null;
+  _lbEditIdx = null; _lbEditId = null;
   _lbEditAps = {};
+  if (typeof _lbPendingRefresh !== 'undefined' && _lbPendingRefresh) setTimeout(() => lbPull(true), 0);   // what came in meanwhile
 }
 
 function lbEditSuggest(inputEl, side) {
@@ -4651,6 +4652,7 @@ function lbEditSelectAp(e, code, side) {
 
 function saveEditLbRow() {
   if (_lbEditIdx === null) return;
+  if (_lbEditId) { const k = logbookFlights.findIndex(x => x && x.id === _lbEditId); if (k >= 0) _lbEditIdx = k; }   // the row may have moved meanwhile
   const f = logbookFlights[_lbEditIdx]; if (!f) return;
 
   // Resolve DEP
@@ -4705,45 +4707,195 @@ function markFlightLanded(i) {
   if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); }
 }
 
-async function saveLogbook() {
-  try {
-    await sb.from('categories').upsert({ name: '__logbook__', items: logbookFlights }, { onConflict: 'name' });
-    const st = document.getElementById('lb-status');
-    if (st) { st.textContent = '✓ Saved'; setTimeout(() => { st.textContent = ''; }, 2500); }
-  } catch(e) { console.error('Logbook save error:', e); }
+// ── Logbook: every change is saved, and every open MSFS Manager page (other tabs, other computers,
+// the phone) gets it at once ──────────────────────────────────────────────────────────────────────────
+// • Changes are saved 0.4 s after the last one, one save after the other (typing "B738" can no longer end
+//   up as "B73" because an older save arrived last), and only reported as saved when the cloud said OK;
+//   a failed save is retried until it works, and closing the page while a change is not saved yet warns.
+// • Every row has an id. If another page saved in between, its changes and ours are merged row by row
+//   (a page that was open for hours can no longer overwrite what was changed elsewhere).
+// • After each save the other pages are told at once (same browser: BroadcastChannel; other devices:
+//   Supabase realtime) and fetch the new logbook; besides they look every 15 s and when they get the focus.
+const LB_ROW = '__logbook__', LB_META = '__logbook_meta__';
+const LB_PAGE = Math.random().toString(36).slice(2, 10);
+let _lbStamp = '', _lbBase = null, _lbLoaded = false, _lbDirty = false, _lbSaving = false, _lbAgain = false;
+let _lbReplaceAll = false, _lbSaveT = null, _lbRetryT = null, _lbWaiters = [], _lbPulling = null, _lbPendingRefresh = false;
+
+function lbHash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); }
+// rows without an id get one from their position and content — every page that loaded the same list gives the same ids
+function lbEnsureIds(list) {
+  const seen = new Set();
+  (list || []).forEach((f, i) => {
+    if (!f || typeof f !== 'object') return;
+    if (!f.id || seen.has(f.id)) {
+      const c = Object.assign({}, f); delete c.id;
+      let id = 'l' + lbHash(i + '|' + JSON.stringify(c)), k = 2;
+      while (seen.has(id)) id = id.replace(/_\d+$/, '') + '_' + (k++);
+      f.id = id;
+    }
+    seen.add(f.id);
+  });
+  return list;
+}
+function lbSnapshot(list) { const m = new Map(); (list || []).forEach(f => { if (f && f.id) m.set(f.id, JSON.stringify(f)); }); return m; }
+// three-way merge: base = the cloud state this page last had, local = this page now, remote = the cloud now
+function lbMerge(base, local, remote) {
+  lbEnsureIds(remote);
+  const B = base || new Map(), L = new Map(local.map(f => [f.id, f])), R = new Map(remote.map(f => [f.id, f]));
+  const changedHere = id => !B.has(id) || B.get(id) !== JSON.stringify(L.get(id));
+  const out = [];
+  local.forEach(f => {
+    if (!R.has(f.id)) { if (B.has(f.id) && !changedHere(f.id)) return; out.push(f); return; }   // deleted elsewhere (unless changed here)
+    out.push(changedHere(f.id) ? f : R.get(f.id));                                                   // changed elsewhere only → theirs
+  });
+  remote.forEach((f, k) => {                                      // added elsewhere: after the row it follows there
+    if (L.has(f.id) || B.has(f.id)) return;                       // here already, or deleted here
+    let pos = k === 0 ? 0 : out.length;
+    for (let j = k - 1; j >= 0; j--) { const at = out.findIndex(x => x.id === remote[j].id); if (at >= 0) { pos = at + 1; break; } }
+    out.splice(pos, 0, f);
+  });
+  return out;
+}
+function lbStatus(msg, warn) {
+  const st = document.getElementById('lb-status'); if (!st) return;
+  st.textContent = msg || ''; st.style.color = warn ? '#f85149' : '';
+  clearTimeout(st._t); if (msg && /^✓/.test(msg)) st._t = setTimeout(() => { if (st.textContent === msg) st.textContent = ''; }, 2500);
+}
+async function lbFetch(name) {
+  const r = await sb.from('categories').select('items').eq('name', name).maybeSingle();
+  if (r && r.error) throw r.error;
+  return r && r.data ? r.data.items : null;
+}
+function lbRefreshViews() {
+  // not while a row is being edited (edit window open, or a field of the logbook has the focus)
+  if (lbEditing()) { _lbPendingRefresh = true; return; }
+  _lbPendingRefresh = false;
+  try { renderLogbook(); } catch(e) {}
+  try { if (rosterMap) { clearRosterLayers(); drawLogbookLines(); updateRosterLines(); } } catch(e) {}
 }
 
-async function loadLogbook() {
+// a field typed in a logbook row (found by its id, else by its position)
+function lbSetField(id, key, val, idx) {
+  const f = (id && id !== 'undefined' && logbookFlights.find(x => x && x.id === id)) || logbookFlights[idx];
+  if (!f) return;
+  f[key] = val; saveLogbook();
+}
+function lbEditing() { const a = document.activeElement; return _lbEditIdx != null || !!(a && a.closest && a.closest('#lb-body') && /INPUT|SELECT|TEXTAREA/.test(a.tagName)); }   // a row of the table is being edited
+// called after every change of logbookFlights
+function saveLogbook() {
+  _lbDirty = true;
+  lbStatus('Saving…');
+  clearTimeout(_lbSaveT); _lbSaveT = setTimeout(lbSaveNow, 400);
+  return new Promise(res => _lbWaiters.push(res));
+}
+async function lbSaveNow() {
+  clearTimeout(_lbSaveT); _lbSaveT = null; clearTimeout(_lbRetryT);
+  if (_lbSaving) { _lbAgain = true; return; }
+  if (!_lbDirty) { lbDone(); return; }
+  _lbSaving = true; _lbDirty = false;
+  let merged = false;
   try {
-    const { data } = await sb.from('categories').select('items').eq('name', '__logbook__').single();
-    if (data?.items?.length > 0) {
-      logbookFlights = data.items;
-    } else {
-      logbookFlights = DEFAULT_LOGBOOK.map(f => {
-        const depDb = schedByCode[f.dep_icao];
-        const arrDb = schedByCode[f.arr_icao];
-        return { ...f,
-          dep_lat: depDb?.[3] ?? null, dep_lon: depDb?.[4] ?? null,
-          arr_lat: arrDb?.[3] ?? null, arr_lon: arrDb?.[4] ?? null,
-        };
-      });
-      await saveLogbook();
+    if (!_lbLoaded) { await lbPull(true); if (!_lbLoaded) throw new Error('logbook not loaded'); }
+    lbEnsureIds(logbookFlights);
+    let rows = logbookFlights;
+    if (!_lbReplaceAll) {
+      const meta = await lbFetch(LB_META), m = meta && meta[0];
+      if (m && m.stamp && m.stamp !== _lbStamp) {               // another page saved in the meantime
+        const remote = (await lbFetch(LB_ROW)) || [];
+        rows = lbMerge(_lbBase, logbookFlights, remote);
+        logbookFlights = rows; merged = true;
+      }
     }
+    const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const snap = rows.slice();
+    let r = await sb.from('categories').upsert({ name: LB_ROW, items: snap }, { onConflict: 'name' });
+    if (r && r.error) throw r.error;
+    r = await sb.from('categories').upsert({ name: LB_META, items: [{ stamp, at: new Date().toISOString(), n: snap.length, page: LB_PAGE }] }, { onConflict: 'name' });
+    if (r && r.error) throw r.error;
+    _lbStamp = stamp; _lbBase = lbSnapshot(snap); _lbReplaceAll = false;
+    lbTellOthers(stamp);
+    lbStatus(_lbDirty ? 'Saving…' : '✓ Saved');
+    if (merged) lbRefreshViews();
   } catch(e) {
-    logbookFlights = DEFAULT_LOGBOOK.map(f => {
-      const depDb = schedByCode[f.dep_icao];
-      const arrDb = schedByCode[f.arr_icao];
-      return { ...f,
-        dep_lat: depDb?.[3] ?? null, dep_lon: depDb?.[4] ?? null,
-        arr_lat: arrDb?.[3] ?? null, arr_lon: arrDb?.[4] ?? null,
-      };
-    });
+    console.error('Logbook save error:', e);
+    _lbDirty = true;
+    lbStatus('⚠ Not saved yet — trying again…', true);
+    _lbRetryT = setTimeout(lbSaveNow, 5000);
+  } finally {
+    _lbSaving = false;
+    if (_lbAgain) { _lbAgain = false; lbSaveNow(); } else lbDone();   // callers that wait go on (a failed save keeps retrying)
   }
+}
+function lbDone() { const w = _lbWaiters; _lbWaiters = []; w.forEach(f => { try { f(); } catch(e) {} }); }
+
+// fetch what another page saved (force: also when nothing seems to have changed)
+function lbPull(force) {
+  if (_lbPulling) return _lbPulling;
+  _lbPulling = (async () => {
+    try {
+      const meta = await lbFetch(LB_META), m = meta && meta[0];
+      if (!force && _lbLoaded && (!m || !m.stamp || m.stamp === _lbStamp)) return;
+      const remote = await lbFetch(LB_ROW);
+      if (!remote) { _lbLoaded = true; return; }             // nothing in the cloud yet
+      lbEnsureIds(remote);
+      if (_lbDirty || _lbSaving) { if (!_lbSaving) lbSaveNow(); return; }   // our own change goes out first (it merges)
+      if (lbEditing()) { _lbPendingRefresh = true; return; }             // a row is being edited: after that
+      logbookFlights = remote; _lbBase = lbSnapshot(remote); _lbStamp = (m && m.stamp) || ''; _lbLoaded = true;
+      lbRefreshViews();
+    } catch(e) { console.warn('Logbook sync:', e); }
+  })().finally(() => { _lbPulling = null; });
+  return _lbPulling;
+}
+// tell the other pages: same browser at once (BroadcastChannel), other devices via Supabase realtime
+let _lbBc = null, _lbRt = null;
+try { _lbBc = new BroadcastChannel('msfs-logbook'); _lbBc.onmessage = ev => { if (ev.data && ev.data.page !== LB_PAGE && ev.data.stamp !== _lbStamp) lbPull(); }; } catch(e) {}
+function lbRealtime() {
+  if (_lbRt || typeof sb === 'undefined' || !sb.channel) return;
+  try {
+    _lbRt = sb.channel('msfs-logbook', { config: { broadcast: { self: false } } })
+      .on('broadcast', { event: 'saved' }, msg => { const p = msg && msg.payload; if (p && p.page !== LB_PAGE && p.stamp !== _lbStamp) lbPull(); })
+      .subscribe();
+  } catch(e) { _lbRt = null; }
+}
+function lbTellOthers(stamp) {
+  try { if (_lbBc) _lbBc.postMessage({ stamp, page: LB_PAGE }); } catch(e) {}
+  try { if (_lbRt && _lbRt.send) _lbRt.send({ type: 'broadcast', event: 'saved', payload: { stamp, page: LB_PAGE } }); } catch(e) {}
+}
+setInterval(() => { if (document.visibilityState === 'visible' && _lbLoaded) lbPull(); }, 15000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') { if (_lbLoaded) lbPull(); }
+  else if (_lbDirty) lbSaveNow();                               // leaving the page: save right away
+});
+window.addEventListener('focus', () => { if (_lbLoaded) lbPull(); });
+window.addEventListener('pagehide', () => { if (_lbDirty) lbSaveNow(); });
+window.addEventListener('beforeunload', e => { if (_lbDirty || _lbSaving) { lbSaveNow(); e.preventDefault(); e.returnValue = 'A logbook change is not saved yet.'; return e.returnValue; } });
+// the edit window closed / a field lost the focus: show what came in from elsewhere meanwhile
+document.addEventListener('focusout', () => { if (_lbPendingRefresh) setTimeout(() => { if (_lbPendingRefresh && !lbEditing()) { _lbPendingRefresh = false; lbPull(true).then(lbRefreshViews); } }, 300); }, true);
+
+async function loadLogbook() {
+  lbRealtime();
+  let remote = null, meta = null, ok = false;
+  try { [remote, meta] = await Promise.all([lbFetch(LB_ROW), lbFetch(LB_META)]); ok = true; } catch(e) { console.error('Logbook load error:', e); }
+  if (ok && remote && remote.length > 0) {
+    logbookFlights = lbEnsureIds(remote); _lbBase = lbSnapshot(logbookFlights); _lbStamp = (meta && meta[0] && meta[0].stamp) || ''; _lbLoaded = true;
+    return;
+  }
+  logbookFlights = DEFAULT_LOGBOOK.map(f => {
+    const depDb = schedByCode[f.dep_icao];
+    const arrDb = schedByCode[f.arr_icao];
+    return { ...f,
+      dep_lat: depDb?.[3] ?? null, dep_lon: depDb?.[4] ?? null,
+      arr_lat: arrDb?.[3] ?? null, arr_lon: arrDb?.[4] ?? null,
+    };
+  });
+  if (ok) { _lbLoaded = true; _lbReplaceAll = true; await saveLogbook(); }    // first start: the default logbook goes to the cloud
+  else setTimeout(() => lbStatus('⚠ The logbook could not be loaded from the cloud — changes are saved once it is reachable', true), 500);
 }
 
 function clearLogbook() {
   if (!confirm(`Clear ALL ${logbookFlights.length} flights from logbook?`)) return;
   logbookFlights = [];
+  _lbReplaceAll = true;
   saveLogbook();
   renderLogbook();
 }
@@ -4790,6 +4942,7 @@ function importLogbookXlsx(input) {
         });
         prevRow = row; added++;
       });
+      _lbReplaceAll = true;
       await saveLogbook();
       renderLogbook();
       // Redraw map lines
