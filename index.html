@@ -4478,7 +4478,7 @@ async function calculateRoadRoute(legIdx, fromLonLat, toLonLat) {
   // Extract coordinates from GeoJSON geometry
   const coords = data.routes[0].geometry.coordinates;
   // Convert [lon, lat] → [lat, lon] for Leaflet
-  const waypoints = coords.map(c => [c[1], c[0]]);
+  const waypoints = lbSlimRoute(coords.map(c => [c[1], c[0]]));
   const distKm = Math.round(data.routes[0].distance / 1000);
   const durMin = Math.round(data.routes[0].duration / 60);
 
@@ -4721,6 +4721,31 @@ const LB_PAGE = Math.random().toString(36).slice(2, 10);
 let _lbStamp = '', _lbBase = null, _lbLoaded = false, _lbDirty = false, _lbSaving = false, _lbAgain = false;
 let _lbReplaceAll = false, _lbSaveT = null, _lbRetryT = null, _lbWaiters = [], _lbPulling = null, _lbPendingRefresh = false;
 
+// A road route as the map needs it: OSRM sends every bend (up to ~60,000 points, 1 MB+ per leg), which made
+// the logbook 3.5 MB and saving it slow enough to fail. Douglas-Peucker with ~80 m tolerance, 5 decimals.
+function lbSlimRoute(pts, tol) {
+  if (!Array.isArray(pts) || pts.length < 3) return pts;
+  tol = tol || 0.0007;
+  const n = pts.length, keep = new Uint8Array(n), stack = [[0, n - 1]]; keep[0] = keep[n - 1] = 1;
+  while (stack.length) {
+    const [a, b] = stack.pop(), ax = +pts[a][0], ay = +pts[a][1], dx = pts[b][0] - ax, dy = pts[b][1] - ay, L2 = dx * dx + dy * dy;
+    let md = 0, mi = -1;
+    for (let i = a + 1; i < b; i++) {
+      const px = pts[i][0] - ax, py = pts[i][1] - ay;
+      let t = L2 ? (px * dx + py * dy) / L2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const ex = px - t * dx, ey = py - t * dy, d = ex * ex + ey * ey;
+      if (d > md) { md = d; mi = i; }
+    }
+    if (mi >= 0 && md > tol * tol) { keep[mi] = 1; stack.push([a, mi], [mi, b]); }
+  }
+  const out = []; for (let i = 0; i < n; i++) if (keep[i]) out.push([Math.round(pts[i][0] * 1e5) / 1e5, Math.round(pts[i][1] * 1e5) / 1e5]);
+  return out;
+}
+function lbSlimAll(list) {   // older rows still carry the full OSRM geometry
+  let changed = false;
+  (list || []).forEach(f => { if (f && !f.roadRouteSlim && Array.isArray(f.roadRouteWaypoints) && f.roadRouteWaypoints.length > 1500) { f.roadRouteWaypoints = lbSlimRoute(f.roadRouteWaypoints); f.roadRouteSlim = 1; changed = true; } });
+  return changed;
+}
 function lbHash(s) { let h = 2166136261 >>> 0; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; } return h.toString(36); }
 // rows without an id get one from their position and content — every page that loaded the same list gives the same ids
 function lbEnsureIds(list) {
@@ -4756,9 +4781,9 @@ function lbMerge(base, local, remote) {
   });
   return out;
 }
-function lbStatus(msg, warn) {
+function lbStatus(msg, warn, why) {
   const st = document.getElementById('lb-status'); if (!st) return;
-  st.textContent = msg || ''; st.style.color = warn ? '#f85149' : '';
+  st.textContent = msg || ''; st.style.color = warn ? '#f85149' : ''; st.title = why || '';
   clearTimeout(st._t); if (msg && /^✓/.test(msg)) st._t = setTimeout(() => { if (st.textContent === msg) st.textContent = ''; }, 2500);
 }
 async function lbFetch(name) {
@@ -4795,7 +4820,14 @@ async function lbSaveNow() {
   _lbSaving = true; _lbDirty = false;
   let merged = false;
   try {
-    if (!_lbLoaded) { await lbPull(true); if (!_lbLoaded) throw new Error('logbook not loaded'); }
+    if (!_lbLoaded) {
+      // the logbook could not be loaded at start: what is shown is not the real logbook — load it now instead of saving
+      if (!(await lbLoadRemote())) throw new Error('the logbook could not be loaded from the cloud');
+      _lbDirty = false; lbRefreshViews();
+      lbStatus('⚠ The logbook was only loaded now — please make your last change again', true);
+      return;
+    }
+    lbSlimAll(logbookFlights);
     lbEnsureIds(logbookFlights);
     let rows = logbookFlights;
     if (!_lbReplaceAll) {
@@ -4819,7 +4851,7 @@ async function lbSaveNow() {
   } catch(e) {
     console.error('Logbook save error:', e);
     _lbDirty = true;
-    lbStatus('⚠ Not saved yet — trying again…', true);
+    lbStatus('⚠ Not saved yet — trying again…', true, 'Reason: ' + ((e && (e.message || e.details || e.hint || e.code)) || String(e)));
     _lbRetryT = setTimeout(lbSaveNow, 5000);
   } finally {
     _lbSaving = false;
@@ -4828,11 +4860,21 @@ async function lbSaveNow() {
 }
 function lbDone() { const w = _lbWaiters; _lbWaiters = []; w.forEach(f => { try { f(); } catch(e) {} }); }
 
+// load the logbook from the cloud as it is (true = done)
+async function lbLoadRemote() {
+  try {
+    const [remote, meta] = await Promise.all([lbFetch(LB_ROW), lbFetch(LB_META)]);
+    if (remote && remote.length) { logbookFlights = lbEnsureIds(remote); _lbBase = lbSnapshot(logbookFlights); }
+    _lbStamp = (meta && meta[0] && meta[0].stamp) || ''; _lbLoaded = true;
+    return true;
+  } catch(e) { console.warn('Logbook load:', e); return false; }
+}
 // fetch what another page saved (force: also when nothing seems to have changed)
 function lbPull(force) {
   if (_lbPulling) return _lbPulling;
   _lbPulling = (async () => {
     try {
+      if (!_lbLoaded) { if (await lbLoadRemote()) lbRefreshViews(); return; }
       const meta = await lbFetch(LB_META), m = meta && meta[0];
       if (!force && _lbLoaded && (!m || !m.stamp || m.stamp === _lbStamp)) return;
       const remote = await lbFetch(LB_ROW);
@@ -4861,7 +4903,7 @@ function lbTellOthers(stamp) {
   try { if (_lbBc) _lbBc.postMessage({ stamp, page: LB_PAGE }); } catch(e) {}
   try { if (_lbRt && _lbRt.send) _lbRt.send({ type: 'broadcast', event: 'saved', payload: { stamp, page: LB_PAGE } }); } catch(e) {}
 }
-setInterval(() => { if (document.visibilityState === 'visible' && _lbLoaded) lbPull(); }, 15000);
+setInterval(() => { if (document.visibilityState === 'visible') lbPull(); }, 15000);
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') { if (_lbLoaded) lbPull(); }
   else if (_lbDirty) lbSaveNow();                               // leaving the page: save right away
@@ -4889,7 +4931,7 @@ async function loadLogbook() {
     };
   });
   if (ok) { _lbLoaded = true; _lbReplaceAll = true; await saveLogbook(); }    // first start: the default logbook goes to the cloud
-  else setTimeout(() => lbStatus('⚠ The logbook could not be loaded from the cloud — changes are saved once it is reachable', true), 500);
+  else setTimeout(() => lbStatus('⚠ The logbook could not be loaded from the cloud yet — trying again…', true), 500);
 }
 
 function clearLogbook() {
