@@ -861,7 +861,7 @@ function aitmLoad(d) {
     var ap = aitmAp(ic); aitm.code = ''; aitm.name = ap ? (ap.city || ap.name || ic) : ic;
     aitm.outName = 'Traffic_' + (aitm.fileBase || ('CRE_' + ic)) + '.bgl';
     aitm.sel = []; aitm.acSel = []; aitm.fleetQ = null; aitm.fleetSel = [];
-    if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; }
+    aitmLogoRevoke();
     aitmSave(); aitmRenderAll(); return;
   }
   if (!aitm.code) aitm.code = aitmGuessCode();
@@ -874,9 +874,79 @@ function aitmLoad(d) {
   aitm.sel = []; aitm.acSel = []; aitm.fleetQ = null; aitm.fleetSel = [];
   aitmSave(); aitmRenderAll(); aitmFindLogo();
 }
-// Open txt: pick Flightplans_<name>.txt — Aircraft_<name>.txt and Airports_<name>.txt are taken
-// from the same folder (the page asks once per folder for permission to look there).
+// Open txt: a list of only the Flightplans_….txt files of your flight plan folders ("CRE flightplans" with its sub
+// folders, and folders added before). A click loads it together with Aircraft_ and Airports_ of the same name.
+// (Windows' own file window cannot be limited to names starting with "Flightplans_" — a web page can only
+// give it file types — so the list is shown here.)
 async function aitmOpenTxt() {
+  if (!window.showDirectoryPicker) { aitmOpenTxtInput(); return; }
+  var roots = [], fpRoot = await aitmKvGet('fpRoot'), extra = (await aitmKvGet('txtDirs')) || [];
+  if (fpRoot) roots.push(fpRoot);
+  for (var i = 0; i < extra.length; i++) {
+    var dup = false;
+    for (var j = 0; j < roots.length && !dup; j++) { try { if (await roots[j].isSameEntry(extra[i])) dup = true; else if (await roots[j].resolve(extra[i])) dup = true; } catch (e) {} }
+    if (!dup) roots.push(extra[i]);
+  }
+  if (!roots.length) {
+    aitmModal('Open txt — your flight plan folder',
+      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Choose your flight plan folder <b>once</b> — best the top one, '
+      + '<span style="font-family:monospace;">…\\Fligthplans - Fictional and vintage\\CRE flightplans</span>. '
+      + 'Then <b>Open txt</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
+      [['Choose folder…', async function () {
+        try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(); } catch (e) {}
+      }], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(); }, true]]);
+    return;
+  }
+  var ok = [];
+  for (var r = 0; r < roots.length; r++) { if (await aitmPermOk(roots[r])) ok.push(roots[r]); }
+  if (!ok.length) { aitmToast('Chrome did not allow reading the flight plan folder — click Open txt again and allow it.', true); return; }
+  aitmModal('Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>',
+    [['Other folder…', async function () {
+      try { var h = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read' }); var d = (await aitmKvGet('txtDirs')) || []; d.push(h); await aitmKvSet('txtDirs', d); aitmCloseModal(); aitmOpenTxt(); } catch (e) {}
+    }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(); }, true]], 'wide');
+  var list = [];
+  async function walk(d, root, path, depth) {
+    var files = {}, subs = [];
+    for await (var e of d.values()) {
+      if (e.kind === 'directory') { if (depth > 0 && !/^backups$/i.test(e.name) && !/^removed bgls$/i.test(e.name)) subs.push(e); continue; }
+      var m = /^(flightplans|aircraft|airports)(_.+)\.txt$/i.exec(e.name); if (!m) continue;
+      var x = files[m[2].toLowerCase()] = files[m[2].toLowerCase()] || {};
+      x[m[1].toLowerCase()] = e;
+    }
+    Object.keys(files).forEach(function (k) {
+      var x = files[k]; if (!x.flightplans) return;
+      list.push({ name: x.flightplans.name, fp: x.flightplans, ac: x.aircraft || null, ap: x.airports || null, dir: d, label: [root.name].concat(path).join(' \\ ') });
+    });
+    for (var s = 0; s < subs.length; s++) await walk(subs[s], root, path.concat([subs[s].name]), depth - 1);
+  }
+  for (var q = 0; q < ok.length; q++) { try { await walk(ok[q], ok[q], [], 5); } catch (e) {} }
+  list.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
+  aitm._otList = list;
+  var box = document.getElementById('aitm-ot'); if (!box) return;
+  box.innerHTML = '<input id="aitm-ot-q" class="aitm-in" placeholder="Search name or folder …" style="width:100%;box-sizing:border-box;margin-bottom:8px;" oninput="aitmOpenTxtList()">'
+    + '<div id="aitm-ot-list" style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;"></div>';
+  aitmOpenTxtList();
+  setTimeout(function () { var qi = document.getElementById('aitm-ot-q'); if (qi) qi.focus(); }, 30);
+}
+function aitmOpenTxtList() {
+  var el = document.getElementById('aitm-ot-list'); if (!el) return;
+  var q = ((document.getElementById('aitm-ot-q') || {}).value || '').toLowerCase().trim();
+  var rows = (aitm._otList || []).map(function (x, i) { return [x, i]; }).filter(function (p) { return !q || (p[0].name + ' ' + p[0].label).toLowerCase().indexOf(q) >= 0; });
+  el.innerHTML = rows.length ? rows.map(function (p) {
+    var x = p[0];
+    return '<div onclick="aitmOpenTxtPick(' + p[1] + ')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;gap:16px;align-items:baseline;" onmouseenter="this.style.background=\'var(--surf3)\'" onmouseleave="this.style.background=\'\'">'
+      + '<span style="color:#fff;font-weight:600;white-space:nowrap;">' + aitmEsc(x.name.replace(/\.txt$/i, '')) + '</span>'
+      + '<span style="color:var(--txt3);font-size:11px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(x.label) + (x.ac ? '' : ' · <span style="color:#d29922;">no Aircraft_</span>') + '</span></div>';
+  }).join('') : '<div style="padding:12px;color:var(--txt3);">' + ((aitm._otList || []).length ? 'Nothing matches.' : 'No Flightplans_….txt in these folders.') + '</div>';
+}
+async function aitmOpenTxtPick(i) {
+  var x = (aitm._otList || [])[i]; if (!x) return;
+  aitmCloseModal();
+  await aitmLoadTxtHandles(x.fp, x.ac, x.ap);
+  aitm._srcDir = { h: x.dir, label: x.label };
+}
+// pick a file in Windows' own window (the way before): Aircraft_/Airports_ are taken from the same folder
+async function aitmOpenTxtPicker() {
   if (!window.showOpenFilePicker) { aitmOpenTxtInput(); return; }
   var hs;
   try { hs = await window.showOpenFilePicker({ id: 'aitm-open-txt', multiple: true, types: [{ description: 'TTools flight plan', accept: { 'text/plain': ['.txt'] } }] }); }
@@ -1155,7 +1225,7 @@ function aitmEditHead() {
       aitm.kind = document.getElementById('aitm-h-kind').value;
       aitm.name = document.getElementById('aitm-h-name').value.trim();
       var cd = document.getElementById('aitm-h-code').value.trim().toUpperCase();
-      if (aitm.kind === 'airport') { aitm.apIcao = cd; aitm.code = ''; if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; } }
+      if (aitm.kind === 'airport') { aitm.apIcao = cd; aitm.code = ''; aitmLogoRevoke(); }
       else { aitm.code = cd; aitm.apIcao = ''; }
       aitm.period = document.getElementById('aitm-h-period').value.trim();
       aitmSave(); aitmCloseModal(); aitmRenderAll(); aitmFindLogo();
@@ -2698,22 +2768,62 @@ async function aitmLogoIndex(ask) {
   }
   aitm.logos = ix; return ix;
 }
+// The airline logo top left, found the way Rotation Map finds logos and the rest of MSFS Manager shows them:
+//  1. the logo folders ("Airline Logos" first): traffic file name, callsigns of the installed models, the airline
+//     name in the aircraft titles ("AIGAIM_Korean Air Boeing 747-8F" → "Korean Air", makers are no airline),
+//     the plan's name, the airline codes (plan, titles, icao_airline and parking codes of the models)
+//  2. by those codes as everywhere else in the tool: "Airline Logos" by code or airline name, the cloud logos, the GitHub logos
+function aitmLogoRevoke() { if (aitm.logoUrl && aitm.logoOwn) { try { URL.revokeObjectURL(aitm.logoUrl); } catch (e) {} } aitm.logoUrl = null; aitm.logoOwn = false; }
+function aitmImgOk(url) {
+  return new Promise(function (res) {
+    var im = new Image(), t = setTimeout(function () { res(false); }, 6000);
+    im.onload = function () { clearTimeout(t); res(im.naturalWidth > 0); };
+    im.onerror = function () { clearTimeout(t); res(false); };
+    im.src = url;
+  });
+}
+function aitmBrandOf(title) {
+  var t = String(title || '').replace(/^AIG(AIM)?[_ ]/i, '');
+  var low = t.toLowerCase();
+  [' opb ', '- opb', '(opb', ' operated by', ' op by ', ' - '].forEach(function (c) { var i = low.indexOf(c); if (i >= 0) { t = t.slice(0, i); low = low.slice(0, i); } });
+  var mk = AITM_MAKERS.exec(' ' + t); if (mk) t = (' ' + t).slice(0, mk.index);
+  t = t.replace(/\b[A-Z0-9]*\d[A-Z0-9-]*\b.*$/i, '').trim();          // a type ("A321-200neo") ends the name
+  return t.length >= 4 && !/^[A-Z0-9]{2,4}$/.test(t) ? t : '';
+}
 async function aitmFindLogo(ask) {
   try {
-    if (!window.showDirectoryPicker || aitm.kind === 'airport') return;
-    var ix = await aitmLogoIndex(ask);
-    var keys = [];
-    if (aitm.outName) keys.push(aitm.outName.replace(/\.bgl$/i, ''));
-    if (aitm.fileBase) keys.push('Traffic_' + aitm.fileBase);
-    var cs = {};
-    aitm.ac.forEach(function (a) { var e = aitmInstalled(a.title); if (e && e.atcAirline) cs[e.atcAirline] = (cs[e.atcAirline] || 0) + 1; });
-    Object.keys(cs).sort(function (a, b) { return cs[b] - cs[a]; }).forEach(function (k) { keys.push(k); });
-    if (aitm.name) { keys.push(aitm.name); keys.push(aitm.name.replace(/\s+/g, '')); }
-    if (aitm.code) keys.push(aitm.code);
+    if (aitm.kind === 'airport') return;
+    var ix = {};
+    if (window.showDirectoryPicker) { try { ix = (await aitmLogoIndex(ask)) || {}; } catch (e) {} }
+    var keys = [], add = function (k) { k = String(k || '').trim(); if (k && keys.indexOf(k) < 0) keys.push(k); };
+    if (aitm.outName) add(aitm.outName.replace(/\.bgl$/i, ''));
+    if (aitm.fileBase) add('Traffic_' + aitm.fileBase);
+    var cs = {}, cc = {}, br = {};
+    var addC = function (c, w) { c = String(c || '').toUpperCase().trim(); if (/^[A-Z0-9]{2,4}$/.test(c) && !/^(MIL|GOV|CARGO|GA|CIV|VIP|PAX|AC\d+)$/.test(c)) cc[c] = (cc[c] || 0) + w; };
+    aitm.ac.forEach(function (a) {
+      var e = aitmInstalled(a.title);
+      if (e && e.atcAirline) cs[e.atcAirline] = (cs[e.atcAirline] || 0) + 1;
+      var info = aitmAcAirlineInfo(a); addC(info.code, 3);
+      if (e) { addC(e.airline, 2); String(e.codes || '').split(',').forEach(function (p) { addC(p, 1); }); }
+      var b = info.name || aitmBrandOf(a.title); if (b) br[b] = (br[b] || 0) + 1;
+    });
+    var byCount = function (o) { return Object.keys(o).sort(function (x, y) { return o[y] - o[x]; }); };
+    byCount(cs).forEach(add);
+    byCount(br).forEach(function (b) { add(b); add(b.replace(/\s+/g, '')); });
+    if (aitm.name) { add(aitm.name); add(aitm.name.replace(/\s+/g, '')); }
+    var codes = []; if (aitm.code) codes.push(String(aitm.code).toUpperCase());
+    byCount(cc).forEach(function (c) { if (codes.indexOf(c) < 0) codes.push(c); });
+    codes.forEach(add);
     var hit = null;
-    for (var i = 0; i < keys.length && !hit; i++) hit = ix[String(keys[i]).toLowerCase()];
-    if (aitm.logoUrl) { URL.revokeObjectURL(aitm.logoUrl); aitm.logoUrl = null; }
-    if (hit) aitm.logoUrl = URL.createObjectURL(await hit.getFile());
+    for (var i = 0; i < keys.length && !hit; i++) hit = ix[keys[i].toLowerCase()];
+    aitmLogoRevoke();
+    if (hit) { aitm.logoUrl = URL.createObjectURL(await hit.getFile()); aitm.logoOwn = true; }
+    else if (typeof getLogoUrl === 'function') {
+      for (var j = 0; j < codes.length && !aitm.logoUrl; j++) {
+        var u = getLogoUrl(codes[j]);
+        if (u && (await aitmImgOk(u))) { aitm.logoUrl = u; aitm.logoOwn = false; }
+      }
+    }
     aitmRenderHeader();
   } catch (e) { console.warn('logo', e); }
 }
