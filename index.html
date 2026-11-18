@@ -1164,6 +1164,8 @@ if(q==='1'||(q!=='0'&&s!=='0'&&phone))document.documentElement.classList.add('m'
 
           <!-- Generate rotations · Update unassigned · Load planner: one group, side by side (it wraps as a whole) -->
           <div style="display:flex;align-items:center;gap:12px;flex-wrap:nowrap;flex-shrink:0;">
+          <button id="aigen-al-hideassigned" onclick="toggleAiGenAlHideAssigned()" style="display:none;font-size:12px;font-weight:700;padding:0 14px;height:60px;border-radius:6px;border:1.5px solid #3fb950;background:rgba(63,185,80,.1);color:#7ee787;cursor:pointer;white-space:nowrap;flex-shrink:0;line-height:1.25;"
+            title="Show only the routes that are not on an aircraft in the Rotation Planner yet"></button>
           <button id="aigen-al-generate" onclick="createRotationsAirline()" class="aigen-gen-btn"
             title="Builds all rotations new from the routes above. Rotations already assigned to an aircraft are removed (it asks first).">
             ⊞ Generate Rotations<br><span>builds all rotations new</span>
@@ -7914,6 +7916,45 @@ function aiGenReset() {
   // the empty state goes to the cloud too — otherwise the old work would come back from there
   if (typeof aiwsSave === 'function') { _aiwsReady = true; aiwsSave(true); }
 }
+// "Hide already assigned": the route list shows only the routes whose rotation is not on an aircraft in the
+// Rotation Planner yet (same rule as the planner's own "Hide assigned": placed at least once; split legs
+// both directions).
+var aiGenAlHideAssigned = (function(){ try { return localStorage.getItem('aigen_al_hide_assigned') === '1'; } catch(e) { return false; } })();
+function toggleAiGenAlHideAssigned() {
+  aiGenAlHideAssigned = !aiGenAlHideAssigned;
+  try { localStorage.setItem('aigen_al_hide_assigned', aiGenAlHideAssigned ? '1' : '0'); } catch(e) {}
+  renderAiGenAlLegs();
+}
+// the input rows whose planner rotation is placed on an aircraft
+function alAssignedRows() {
+  const out = new Set();
+  try {
+    if (!rotLegKeys || !rotAircraft.length || !rotHasAssignments()) return out;
+    const b = alBuildValidLegs(), keys = rotRouteKeys(b.validLegs), used = new Set();
+    keys.forEach((key, j) => {
+      let k = -1;
+      for (let x = 0; x < rotLegKeys.length; x++) if (!used.has(x) && rotLegKeys[x] === key) { k = x; break; }
+      if (k < 0) return;
+      used.add(k);
+      const done = rotSplitLegs.has(k) ? (legDepartureDays(k, 'out').size > 0 && legDepartureDays(k, 'ret').size > 0) : rotLegAssignmentCount(k) > 0;
+      if (done) (b.units[j] || []).forEach(r => out.add(r));
+    });
+  } catch(e) {}
+  return out;
+}
+function alHideAssignedUI(assigned) {
+  const btn = document.getElementById('aigen-al-hideassigned'); if (!btn) return;
+  const n = [...assigned].filter(r => !(r.ttImported && !aiGenAlShowImported)).length;
+  let has = false; try { has = rotHasAssignments(); } catch(e) {}
+  btn.style.display = has ? '' : 'none';
+  btn.innerHTML = (aiGenAlHideAssigned ? '👁 Show assigned' : '🙈 Hide already assigned')
+    + '<br><span style="font-size:10px;font-weight:500;color:' + (aiGenAlHideAssigned ? 'rgba(255,255,255,.75)' : 'var(--txt3)') + ';">'
+    + (aiGenAlHideAssigned ? n + ' route' + (n === 1 ? '' : 's') + ' hidden' : n + ' route' + (n === 1 ? ' is' : 's are') + ' on an aircraft') + '</span>';
+  btn.style.background = aiGenAlHideAssigned ? '#3fb950' : 'rgba(63,185,80,.1)';
+  btn.style.color = aiGenAlHideAssigned ? '#fff' : '#7ee787';
+  btn.title = aiGenAlHideAssigned ? 'Show the routes that are already on an aircraft in the Rotation Planner again'
+                                  : 'Show only the routes that are not on an aircraft in the Rotation Planner yet';
+}
 // leg number (LEG # column) as a number, or null
 function alLegNoVal(v){ if (v===null||v===undefined||String(v).trim()==='') return null; const n=parseInt(String(v).replace(/\D/g,''),10); return Number.isFinite(n)?n:null; }
 // lowest leg number of some rows (outbound or return) — a row sorts where its first leg stands
@@ -8084,8 +8125,11 @@ function _renderAiGenAlLegsNow() {
   const alOrder = alDisplayOrder();
   _alVisRank = {}; alOrder.forEach((ix,k)=>{ _alVisRank[ix]=k; });
   let visPrev = -1, rowVisPrev = -1;          // row shown directly above (for "Link to row above")
+  const assignedRows = alAssignedRows();
+  const hiddenRow = leg => (leg.ttImported && !aiGenAlShowImported) || (aiGenAlHideAssigned && assignedRows.has(leg));
+  alHideAssignedUI(assignedRows);
   const renderRow = (leg, i) => {
-    if (leg.ttImported && !aiGenAlShowImported) return;          // collapsed (see the line above)
+    if (hiddenRow(leg)) return;          // collapsed imported routes / already on an aircraft
     if (!leg.dep && !leg._editingDep && !aiGenMulti) leg.dep = aiGenAlHub;
     if (!leg.dd1) leg.dd1 = mDepFrom;
     if (!leg.dd2) leg.dd2 = mDepUntil;
@@ -8616,8 +8660,14 @@ function _renderAiGenAlLegsNow() {
   alOrder.forEach(i=>{
     const leg=aiGenAlLegs[i]; if (!leg) return;
     rowVisPrev=visPrev; renderRow(leg, i);
-    if (!(leg.ttImported && !aiGenAlShowImported)) visPrev=i;
+    if (!hiddenRow(leg)) visPrev=i;
   });
+  if (aiGenAlHideAssigned && assignedRows.size && aiGenAlLegs.every(l => !l || hiddenRow(l) || !l.arr)) {
+    const note = document.createElement('div');
+    note.style.cssText = 'font-size:12px;color:#7ee787;padding:10px 4px;';
+    note.textContent = '✓ Every route is on an aircraft in the Rotation Planner — click 👁 Show assigned to see them again.';
+    container.insertBefore(note, container.querySelector('[data-al-empty]') || container.lastChild);
+  }
 
   // Restore focus to a specific field after re-render (keeps Tab flowing across
   // airport selections that trigger a full re-render).
