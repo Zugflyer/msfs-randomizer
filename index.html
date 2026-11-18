@@ -7467,14 +7467,48 @@ function alChainFillFnums(segs) {
   });
   return segs;
 }
+// ── Times fixed in the Rotation Planner ──────────────────────────────────────────────
+// A time typed on the planner belongs to its route: it is written back into the input row
+// (rotPinLeg) so that "Generate Rotations" / "Update unassigned" builds that rotation at
+// exactly these times again instead of drawing new random ones.
+//  RANDOM schedule: pinDep / rPinDep (local DEP, "HH:MM"), the block as typed
+//                   (blockTimeMan / rBlockTimeMan), ground and minimum turn after the flight
+//                   (pinGnd / pinTurn, rPinGnd / rPinTurn).
+//  KNOWN schedule:  the typed DEP/ARR fields themselves; planFix / rPlanFix remember the
+//                   times the planner wrote, so the planner's ground times only apply while
+//                   those times are unchanged.
+function alPlanSig(row, half) {
+  return half==='ret' ? [row.rDepFixed||'', row.rArrFixed||'', row.rArrDayOff||0].join('|')
+                      : [row.depFixed||'',  row.arrFixed||'',  row.arrDayOff||0].join('|');
+}
+function alHalfPin(row, half) {           // → { fixed, dep, gnd, turn } for one half of a row
+  const ret = half==='ret';
+  const num = v => (v===''||v==null||isNaN(+v)) ? null : +v;
+  const okT = v => !!(v && /^\d{1,2}:\d{2}$/.test(v));
+  if (aiGenAlSchedMode==='known') {
+    const f = ret ? row.rPlanFix : row.planFix;
+    const fixed = !!f && f===alPlanSig(row, half);
+    return { fixed, dep:null, gnd: fixed ? num(ret ? row.rPinGnd : row.pinGnd) : null, turn: fixed ? num(ret ? row.rPinTurn : row.pinTurn) : null };
+  }
+  const dep = ret ? row.rPinDep : row.pinDep;
+  const fixed = okT(dep);
+  return { fixed, dep: fixed ? dep : null, gnd: fixed ? num(ret ? row.rPinGnd : row.pinGnd) : null, turn: fixed ? num(ret ? row.rPinTurn : row.pinTurn) : null };
+}
+// Release the planner times of a row (one half, or both) → random times again
+function alClearPins(row, half) {
+  if (!row) return;
+  if (half!=='ret') { delete row.pinDep; delete row.pinGnd; delete row.pinTurn; delete row.planFix; }
+  if (half!=='out') { delete row.rPinDep; delete row.rPinGnd; delete row.rPinTurn; delete row.rPlanFix; }
+}
 // One rotation from a chain of rows: outbound legs in row order, then the return legs
 // in reverse row order (708 SBGL→LPPT→LPPR, then 709 LPPR→LPPT→SBGL).
 // noRet (No return flight): only the outbound legs, in row order.
 function alKnownChainLeg(rows, noRet) {
   const first=rows[0], last=rows[rows.length-1];
   const segs=[];
-  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum, leg:alLegNoVal(r.legNo) }));
-  if (!noRet) rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }));
+  const pinOf = (r,h) => { const p=alHalfPin(r,h); return { pinned:p.fixed, gnd:p.gnd, turn:p.turn }; };
+  rows.forEach(r=> segs.push(Object.assign({ half:'out', dep:r.dep, arr:r.arr, depFixed:r.depFixed, block:alKnownBlock(r,'out'), fnum:r.flightNum, leg:alLegNoVal(r.legNo) }, pinOf(r,'out'))));
+  if (!noRet) rows.slice().reverse().forEach(r=> segs.push(Object.assign({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), depFixed:r.rDepFixed, block:alKnownBlock(r,'ret'), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo) }, pinOf(r,'ret'))));
   alChainFillFnums(segs);
   return {
     dep:first.dep, arr:last.arr, airline:alRowAl(first), aircraft:first.eqp,
@@ -7497,23 +7531,30 @@ function alRandomChainLeg(rows, noRet) {
   const inWin = (m,a,b) => (a==null||b==null) ? true : (a<=b ? (m>=a&&m<=b) : (m>=a||m<=b));
   const ground = alGroundTime(first.eqp, first);
   const segs=[];
-  rows.forEach(r=> segs.push({ half:'out', dep:r.dep, arr:r.arr, blk:Math.max(5, r5(hm(r.blockTime)||120)), fnum:r.flightNum, leg:alLegNoVal(r.legNo),
-                               w:[hm(r.dd1),hm(r.dd2),hm(r.aa1),hm(r.aa2)] }));
-  if (!noRet) rows.slice().reverse().forEach(r=> segs.push({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:Math.max(5, r5(hm(r.rBlockTime)||120)), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo),
-                               w:[hm(r.rdd1),hm(r.rdd2),hm(r.raa1),hm(r.raa2)] }));
+  // a block typed by the user (or on the planner) is taken as typed, estimates in 5-minute steps
+  const blkOf = (v, man) => (man && hm(v)) ? hm(v) : Math.max(5, r5(hm(v)||120));
+  const pinOf = (r,h) => { const p=alHalfPin(r,h); return { pinned:p.fixed, pin:hm(p.dep), gnd:p.gnd, turn:p.turn }; };
+  rows.forEach(r=> segs.push(Object.assign({ half:'out', dep:r.dep, arr:r.arr, blk:blkOf(r.blockTime, r.blockTimeMan), fnum:r.flightNum, leg:alLegNoVal(r.legNo),
+                               w:[hm(r.dd1),hm(r.dd2),hm(r.aa1),hm(r.aa2)] }, pinOf(r,'out'))));
+  if (!noRet) rows.slice().reverse().forEach(r=> segs.push(Object.assign({ half:'ret', dep:r.arr, arr:(r.dep||aiGenAlHub), blk:blkOf(r.rBlockTime, r.rBlockTimeMan), fnum:r.rFlightNum, leg:alLegNoVal(r.rLegNo),
+                               w:[hm(r.rdd1),hm(r.rdd2),hm(r.raa1),hm(r.raa2)] }, pinOf(r,'ret'))));
+  // A departure fixed on the planner is kept as it is: the chain starts there (no random
+  // draw) and a later fixed flight leaves at its own time instead of arrival + ground.
   const plan = list => {
-    const lo = list[0].w[0] ?? 360, hi = list[0].w[1] ?? 1350;
+    const p0 = list[0].pin;
+    const lo = p0 ?? list[0].w[0] ?? 360, hi = p0 ?? list[0].w[1] ?? 1350;
     const span = (lo<=hi) ? (hi-lo) : (1440-lo+hi);
     let best=[], bestPen=Infinity;
     for (let st=0; st<=span; st+=5) {
-      let t = r5(lo+st), pen=0; const times=[];
+      let t = p0!=null ? p0 : r5(lo+st), pen=0; const times=[];
       list.forEach((sg,k)=>{
+        if (k>0 && sg.pin!=null) t = sg.pin;
         const depLocal = ((t%1440)+1440)%1440;
         const arrLocal = (((depLocal + sg.blk + (getUtcOffset(sg.arr)-getUtcOffset(sg.dep))*60)%1440)+1440)%1440;
         if (k>0 && !inWin(depLocal, sg.w[0], sg.w[1])) pen++;
         if (!inWin(arrLocal, sg.w[2], sg.w[3])) pen++;
         times.push(depLocal);
-        t = Math.ceil((arrLocal + ground)/5)*5;      // onward flight after the ground time
+        t = Math.ceil((arrLocal + (sg.gnd!=null ? sg.gnd : ground))/5)*5;      // onward flight after the ground time
       });
       if (pen<bestPen) { bestPen=pen; best=[times]; } else if (pen===bestPen) best.push(times);
     }
@@ -7601,6 +7642,9 @@ function aiGenAlReverseLeg(i) {
   sw('flightNum','rFlightNum');
   sw('blockTime','rBlockTime'); sw('blockTimeReal','rBlockTimeReal');
   sw('depFixed','rDepFixed'); sw('arrFixed','rArrFixed'); sw('arrDayOff','rArrDayOff');
+  // times fixed on the Rotation Planner go with their flight; the turnaround does not fit anymore
+  sw('blockTimeMan','rBlockTimeMan'); sw('pinDep','rPinDep'); sw('planFix','rPlanFix');
+  ['pinGnd','pinTurn','rPinGnd','rPinTurn'].forEach(k=>{ delete l[k]; });
   [['dd1','rdd1'],['dd2','rdd2'],['aa1','raa1'],['aa2','raa2']].forEach(([a,b])=>{ sw(a,b); sw('_custom_'+a,'_custom_'+b); });
   // the new return departure is the former outbound departure → keep it as typed
   l._custom_rDepFixed = !!(l.rDepFixed && /^\d{1,2}:\d{2}$/.test(String(l.rDepFixed)));
@@ -7643,11 +7687,15 @@ function rebuildAlChainHops(leg) {
     const out = [];
     for (let k=0; k<seq.length-1; k++) {
       const prev = (oldHops && oldHops[k]) || {};
+      // times fixed on the Rotation Planner stay with the hop while its airports stay the same
+      const same = !!(prev.dep && prev.arr && seq[k] && seq[k+1] && prev.dep[0]===seq[k][0] && prev.arr[0]===seq[k+1][0]);
+      const pins = {};
+      if (same) ['pinDep','planFix','pinGnd','pinTurn','blockTimeMan'].forEach(f=>{ if (prev[f]!=null && prev[f]!=='') pins[f]=prev[f]; });
       out.push(Object.assign(aiGenAlEmptyHop(seq[k], seq[k+1]), {
         depFixed: prev.depFixed||'', dd1: prev.dd1||'', dd2: prev.dd2||'',
         blockTime: prev.blockTime||'', blockTimeReal: !!prev.blockTimeReal,
         dep: seq[k], arr: seq[k+1],
-      }));
+      }, pins));
     }
     return out;
   };
@@ -8238,9 +8286,38 @@ function _renderAiGenAlLegsNow() {
         const I=document.createElement('input'); I.type='text'; I.value=leg[fld]||''; I.maxLength=5;
         I.style.cssText='width:50px;font-size:11px;font-family:monospace;padding:2px 4px;border-radius:4px;border:1px solid rgba(255,255,255,.2);background:var(--bg);color:#fff;text-align:center;outline:none;';
         I.oninput=()=>{ leg[fld]=I.value; leg['_custom_'+fld]=true; };
-        I.onblur=()=>{ I.value=formatTimeStr(I.value)||I.value; leg[fld]=I.value; };
+        I.onblur=()=>{
+          I.value=formatTimeStr(I.value)||I.value;
+          leg[fld]=I.value;
+          // a new window = a random time inside it again: the planner's fixed time of this
+          // flight is released
+          const half = /^r/.test(fld) ? 'ret' : 'out';
+          if (I.dataset.v0!==I.value && (half==='ret' ? leg.rPinDep : leg.pinDep)) { alClearPins(leg, half); renderAiGenAlLegs(); }
+        };
+        I.dataset.v0 = I.value;
         col.appendChild(L); col.appendChild(I); wrap.appendChild(col);
       });
+      return wrap;
+    }
+    // RANDOM schedule: a departure fixed on the Rotation Planner (gold). It is kept when the
+    // rotations are generated again; emptying it gives a random time inside the window again.
+    function pinnedDepField(half) {
+      const f = half==='ret' ? 'rPinDep' : 'pinDep';
+      const wrap=document.createElement('div'); wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:2px;';
+      const L=document.createElement('div'); L.style.cssText='font-size:9px;color:#e0b341;'; L.textContent='DEP 📌';
+      const I=document.createElement('input'); I.type='text'; I.maxLength=5; I.value=leg[f]||'';
+      I.className='al-pin-dep';
+      I.title='Fixed on the Rotation Planner — this flight keeps this departure when the rotations are generated again (no new random time).\nType another time to change it · empty = a random time inside the from/until window again.';
+      I.style.cssText='width:46px;box-sizing:border-box;font-size:11px;font-weight:700;font-family:monospace;padding:2px 3px;border-radius:4px;border:1px solid rgba(224,179,65,.7);background:rgba(224,179,65,.10);color:#e0b341;text-align:center;outline:none;';
+      I.onblur=()=>{
+        const v=I.value.trim();
+        if (!v) { alClearPins(leg, half); renderAiGenAlLegs(); return; }
+        const t=formatTimeStr(v);
+        if (/^\d{1,2}:\d{2}$/.test(t) && t!==leg[f]) leg[f]=t;
+        renderAiGenAlLegs();
+      };
+      I.onkeydown=e=>{ if(e.key==='Enter'){ e.preventDefault(); I.blur(); } };
+      wrap.appendChild(L); wrap.appendChild(I);
       return wrap;
     }
 
@@ -8387,8 +8464,9 @@ function _renderAiGenAlLegsNow() {
           apWrap.tabIndex=0; apWrap.dataset.tabseq=i+'.'+apSeq; apWrap.style.outline='none';
           const openEdit=()=>{
             if (role==='outDep'){ leg.dep=null; leg._editingDep=true; }
-            else { leg.arr=null; leg.rBlockTime=''; leg.rBlockTimeReal=false; }
-            leg.blockTime=''; leg.blockTimeReal=false;
+            else { leg.arr=null; leg.rBlockTime=''; leg.rBlockTimeReal=false; leg.rBlockTimeMan=false; }
+            leg.blockTime=''; leg.blockTimeReal=false; leg.blockTimeMan=false;
+            alClearPins(leg);                        // another airport: the planner times no longer apply
             leg['_focusSeq']=i+'.'+apSeq;   // after re-render, focus the new search box
             renderAiGenAlLegs();
           };
@@ -8449,7 +8527,10 @@ function _renderAiGenAlLegsNow() {
       const isArrCol = (role==='outArr'||role==='retArr');
       const knownMode = aiGenAlSchedMode==='known';
       if (!knownMode) {
-        // RANDOM schedule: no fixed times — only the from/until windows (+ offset below)
+        // RANDOM schedule: no fixed times — only the from/until windows (+ offset below),
+        // unless the Rotation Planner fixed this departure
+        if (role==='outDep' && leg.pinDep) timeRow.appendChild(pinnedDepField('out'));
+        if (role==='retDep' && leg.rPinDep && !aiGenAlNoReturn) timeRow.appendChild(pinnedDepField('ret'));
       } else if (isArrCol) {
         // Arrival time: shows the computed arrival by default, BUT is editable.
         // If the user types an arrival time, the BLOCK time is derived from DEP→ARR.
@@ -8529,7 +8610,12 @@ function _renderAiGenAlLegsNow() {
         inp.type='text'; inp.id=id; inp.value=val||''; inp.placeholder='H:MM';
         inp.dataset.tabseq=i+'.'+(isOut?6:9);
         inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(real?'#3fb950':'#777')+';font-weight:'+(real?700:400)+';'+(real?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
-        inp.oninput=()=>{ if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;} };
+        const man = isOut ? leg.blockTimeMan : leg.rBlockTimeMan;
+        if (man && val) {                              // typed by you (here or on the planner): kept as typed
+          inp.style.color='#e0b341'; inp.style.fontWeight='700'; inp.style.fontStyle='normal'; inp.style.borderColor='rgba(224,179,65,.6)';
+          inp.title='Block time typed by you — used as typed, kept by "Look up all block times". Empty = estimate again; → looks it up.';
+        }
+        inp.oninput=()=>{ const t=!!inp.value.trim(); if(isOut){leg.blockTime=inp.value;leg.blockTimeReal=false;leg.blockTimeMan=t;}else{leg.rBlockTime=inp.value;leg.rBlockTimeReal=false;leg.rBlockTimeMan=t;} };
         inp.onblur=()=>{ const f=fmtDuration(inp.value); if(isOut){leg.blockTime=f;} else {leg.rBlockTime=f;} renderAiGenAlLegs(); };
         cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
         return cell;
@@ -8556,11 +8642,14 @@ function _renderAiGenAlLegsNow() {
     const gnd = alGroundTime(leg.eqp, leg);
     const groundCell = document.createElement('div');
     groundCell.style.cssText='display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;flex-shrink:0;width:120px;min-width:120px;min-height:54px;border-left:1px solid rgba(255,255,255,.08);border-right:1px solid rgba(255,255,255,.08);';
-    const gInp=document.createElement('input'); gInp.type='text'; gInp.value=String(gnd); gInp.maxLength=3;
-    const gOver = (leg.groundOverride!=null && leg.groundOverride!=='');
+    // a turnaround set on the Rotation Planner (a departure typed closer to the arrival) is shown here
+    const gPin = (()=>{ const p=alHalfPin(leg,'out'); return (p.fixed && p.gnd!=null && p.gnd!==gnd) ? p.gnd : null; })();
+    const gInp=document.createElement('input'); gInp.type='text'; gInp.value=String(gPin!=null ? gPin : gnd); gInp.maxLength=3;
+    const gOver = (leg.groundOverride!=null && leg.groundOverride!=='') || gPin!=null;
     gInp.style.cssText='width:38px;font-size:13px;font-family:monospace;color:'+(gOver?'#e0b341':'#fff')+';font-weight:700;text-align:center;background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;padding:2px 3px;outline:none;';
     gInp.title='Turnaround minutes. Default by EQP (heavy 100 · narrowbody 45 · commuter 25). Override here.';
-    gInp.oninput=()=>{ leg.groundOverride=gInp.value.replace(/\D/g,''); };
+    if (gPin!=null) gInp.title='Turnaround set on the Rotation Planner ('+gPin+' min). Type another value to change it.';
+    gInp.oninput=()=>{ leg.groundOverride=gInp.value.replace(/\D/g,''); ['pinGnd','pinTurn','rPinGnd','rPinTurn'].forEach(k=>{ delete leg[k]; }); };
     gInp.onblur=()=>{ renderAiGenAlLegs(); };
     gInpRef.el = gInp;
     const gUnit=document.createElement('div'); gUnit.style.cssText='font-size:11px;color:var(--txt3);'; gUnit.textContent='min';
@@ -8604,7 +8693,9 @@ function _renderAiGenAlLegsNow() {
     const dupBtn=document.createElement('button'); dupBtn.textContent='⧉ Duplicate';
     dupBtn.dataset.tabseq=i+'.11';
     dupBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
-    dupBtn.onclick=()=>{ aiGenAlLegs.splice(i+1,0,{...aiGenAlLegs[i], cont:false, uncont:false, ttImported:false, ttFirst:false, legNo:null, rLegNo:null}); renderAiGenAlLegs(); };
+    dupBtn.onclick=()=>{ const c={...aiGenAlLegs[i], cont:false, uncont:false, ttImported:false, ttFirst:false, legNo:null, rLegNo:null};
+      alClearPins(c);                                // the copy is another frequency: its own (random) times
+      aiGenAlLegs.splice(i+1,0,c); renderAiGenAlLegs(); };
     const addBtn=document.createElement('button'); addBtn.textContent='+ Add flight';
     addBtn.dataset.tabseq=i+'.12';
     addBtn.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid var(--bdr);background:transparent;color:var(--txt3);cursor:pointer;width:100%;box-sizing:border-box;';
@@ -8717,13 +8808,16 @@ function renderAlChainLeg(container, leg, i, ctx) {
       const b = hm(h.blockTime);
       let depMin;
       if (k === 0) depMin = hm(h.depFixed);          // typed by the user
+      else if (hm(h.pinDep)!=null) depMin = hm(h.pinDep);   // fixed on the Rotation Planner
       else depMin = (cur!=null) ? cur : null;        // previous ARR + ground
       if (depMin==null || b==null || !h.dep || !h.arr) { res.push({dep:null,arr:null}); cur=null; return; }
       const dOff=getUtcOffset(h.dep), aOff=getUtcOffset(h.arr);
       const depLocal=((depMin%1440)+1440)%1440;
-      const arrLocal=((round5(depLocal+b+(aOff-dOff)*60))%1440+1440)%1440;
-      res.push({dep:fmtHM(depLocal), arr:fmtHM(arrLocal)});
-      cur = arrLocal + gnd;                          // next segment's departure (same airport)
+      const exact = h.blockTimeMan || hm(h.pinDep)!=null;
+      const arrLocal=(((exact ? x=>x : round5)(depLocal+b+(aOff-dOff)*60))%1440+1440)%1440;
+      res.push({dep:fmtHM(depLocal), arr:fmtHM(arrLocal), pinned: k>0 && hm(h.pinDep)!=null});
+      const g = (h.pinGnd!=null && h.pinGnd!=='' && !isNaN(+h.pinGnd)) ? +h.pinGnd : gnd;
+      cur = arrLocal + g;                            // next segment's departure (same airport)
     });
     return res;
   }
@@ -8757,6 +8851,15 @@ function renderAlChainLeg(container, leg, i, ctx) {
     const timeRow=document.createElement('div'); timeRow.style.cssText='display:flex;align-items:flex-start;gap:6px;';
     if (k === 0) {
       timeRow.appendChild(alSmallFixed('DEP', hop.depFixed, v=>{ hop.depFixed=v; }, ()=>renderAiGenAlLegs()));
+    } else if (timesFor(side,k).pinned) {
+      // fixed on the Rotation Planner (gold) — click to release it (chained again)
+      const ro = alSmallFixedRO('DEP', timesFor(side,k).dep), I = ro.querySelector('input');
+      if (I) {
+        I.style.color='#e0b341'; I.style.fontWeight='700'; I.style.borderColor='rgba(224,179,65,.7)'; I.style.background='rgba(224,179,65,.10)'; I.style.cursor='pointer';
+        I.title='Fixed on the Rotation Planner — kept when the rotations are generated again. Click to release it (previous arrival + ground time again).';
+        I.onclick=()=>{ ['pinDep','pinGnd','pinTurn'].forEach(f=>{ delete hop[f]; }); renderAiGenAlLegs(); };
+      }
+      timeRow.appendChild(ro);
     } else {
       timeRow.appendChild(alSmallFixedRO('DEP', timesFor(side,k).dep));
     }
@@ -8809,7 +8912,8 @@ function renderAlChainLeg(container, leg, i, ctx) {
     arrow.onclick=()=>aiGenAlFetchHopBlock(i, side, k);
     const inp=document.createElement('input'); inp.type='text'; inp.value=hop.blockTime||''; inp.placeholder='H:MM';
     inp.style.cssText='width:46px;font-size:11px;font-family:monospace;color:'+(hop.blockTimeReal?'#3fb950':'#777')+';font-weight:'+(hop.blockTimeReal?700:400)+';'+(hop.blockTimeReal?'':'font-style:italic;')+'background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:4px;text-align:center;padding:2px 3px;outline:none;';
-    inp.oninput=()=>{ hop.blockTime=inp.value; hop.blockTimeReal=false; };
+    if (hop.blockTimeMan && hop.blockTime) { inp.style.color='#e0b341'; inp.style.fontWeight='700'; inp.style.fontStyle='normal'; inp.title='Block time typed by you — used as typed, kept by "Look up all block times".'; }
+    inp.oninput=()=>{ hop.blockTime=inp.value; hop.blockTimeReal=false; hop.blockTimeMan=!!inp.value.trim(); };
     inp.onblur=()=>renderAiGenAlLegs();
     const L=document.createElement('div'); L.style.cssText='font-size:9px;color:var(--txt3);'; L.textContent='block';
     cell.appendChild(arrow); cell.appendChild(inp); cell.appendChild(L);
@@ -8886,7 +8990,9 @@ function buildChainLeftCol(leg, i) {
   leftCol.appendChild(logoEqpRow);
 
   const mk=(txt,col,fn)=>{ const b=document.createElement('button'); b.textContent=txt; b.style.cssText='font-size:10px;padding:3px 10px;border-radius:var(--r);border:1px solid '+(col||'var(--bdr)')+';background:transparent;color:'+(col?'#a78bfa':'var(--txt3)')+';cursor:pointer;width:100%;box-sizing:border-box;'; b.onclick=fn; return b; };
-  leftCol.appendChild(mk('⧉ Duplicate',null,()=>{ const c=JSON.parse(JSON.stringify(aiGenAlLegs[i])); aiGenAlLegs.splice(i+1,0,c); renderAiGenAlLegs(); }));
+  leftCol.appendChild(mk('⧉ Duplicate',null,()=>{ const c=JSON.parse(JSON.stringify(aiGenAlLegs[i]));
+    [...(c.outHops||[]), ...(c.retHops||[])].forEach(h=>['pinDep','planFix','pinGnd','pinTurn'].forEach(f=>{ delete h[f]; }));
+    aiGenAlLegs.splice(i+1,0,c); renderAiGenAlLegs(); }));
   leftCol.appendChild(mk('+ Add flight',null,()=>{ aiGenAlLegs.splice(i+1,0,aiGenAlEmptyLeg()); renderAiGenAlLegs(); }));
   leftCol.appendChild(mk('⑂ Split routing +','rgba(123,97,255,.5)',()=>aiGenAlSplit(i)));
   leftCol.appendChild(mk('⑀ Split routing −','rgba(123,97,255,.5)',()=>aiGenAlUnsplit(i)));
@@ -8953,7 +9059,7 @@ async function aiGenAlFetchHopBlock(i, side, k) {
   const hops = side==='out' ? leg.outHops : leg.retHops;
   const hop = hops && hops[k]; if (!hop || !hop.dep || !hop.arr) return;
   const apiKey = typeof getApiKey==='function' ? getApiKey() : null;
-  const set=(v,real)=>{ hop.blockTime=v; hop.blockTimeReal=real; renderAiGenAlLegs(); };
+  const set=(v,real)=>{ hop.blockTime=v; hop.blockTimeReal=real; hop.blockTimeMan=false; renderAiGenAlLegs(); };
   if (apiKey) {
     try {
       const depIata=hop.dep[1]||hop.dep[0], arrIata=hop.arr[1]||hop.arr[0];
@@ -8986,8 +9092,8 @@ async function aiGenAlFetchBlockTime(i, dir) {
   if (!dep || !arr) return;
   const elId = isOut ? ('aigen-al-bt-'+i) : ('aigen-al-rbt-'+i);
   const setVal = (v, real) => {
-    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; }
-    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; }
+    if (isOut) { leg.blockTime=v; leg.blockTimeReal=real; leg.blockTimeMan=false; }
+    else { leg.rBlockTime=v; leg.rBlockTimeReal=real; leg.rBlockTimeMan=false; }
   };
   const btEl = document.getElementById(elId);
   if (btEl) { btEl.value='🔍'; btEl.style.color='#777'; }
@@ -9043,7 +9149,7 @@ async function aiGenAlFetchAllBlockTimes(){
     if (Array.isArray(leg.stops) && leg.stops.length) {
       ['out','ret'].forEach(side=>{
         ((side==='out'?leg.outHops:leg.retHops)||[]).forEach((h,k)=>{
-          if (!h || !h.dep || !h.arr) return;
+          if (!h || !h.dep || !h.arr || (h.blockTimeMan && h.blockTime)) return;     // typed by the user: kept
           targets.push({ dep:h.dep, arr:h.arr, real:!!h.blockTimeReal, cur:h.blockTime,
             set:(v,r)=>{ const H=((side==='out'?leg.outHops:leg.retHops)||[])[k]; if (H) { H.blockTime=v; H.blockTimeReal=r; } } });
         });
@@ -9051,13 +9157,17 @@ async function aiGenAlFetchAllBlockTimes(){
       return;
     }
     if (!leg.dep || !leg.arr) return;
-    targets.push({ dep:leg.dep, arr:leg.arr, real:!!leg.blockTimeReal, cur:leg.blockTime,
+    // a block typed by the user (on this page or on the planner) is kept as typed
+    if (!(leg.blockTimeMan && leg.blockTime)) targets.push({ dep:leg.dep, arr:leg.arr, real:!!leg.blockTimeReal, cur:leg.blockTime,
       set:(v,r)=>{ leg.blockTime=v; leg.blockTimeReal=r; } });
     const back = leg.dep || aiGenAlHub;
-    if (back) targets.push({ dep:leg.arr, arr:back, real:!!leg.rBlockTimeReal, cur:leg.rBlockTime,
+    if (back && !(leg.rBlockTimeMan && leg.rBlockTime)) targets.push({ dep:leg.arr, arr:back, real:!!leg.rBlockTimeReal, cur:leg.rBlockTime,
       set:(v,r)=>{ leg.rBlockTime=v; leg.rBlockTimeReal=r; } });
   });
-  if (!targets.length) { say('No complete routes yet (both airports needed).','#e0b341'); return; }
+  if (!targets.length) {
+    const any = aiGenAlLegs.some(l => l && l.dep && l.arr);
+    say(any ? '✓ Every block time is typed by you — nothing to look up.' : 'No complete routes yet (both airports needed).', any ? '#3fb950' : '#e0b341'); return;
+  }
   // green values from earlier lookups → nearest 5 minutes as well (no API call needed)
   let nRounded=0;
   targets.forEach(t=>{ if (!t.real) return; const m=alHmToMin(String(t.cur||'').trim()); if (m!=null && m%5) { t.set(rnd5Hm(t.cur), true); nRounded++; } });
@@ -9724,12 +9834,21 @@ function alBuildValidLegs() {
       // A split chain → one rotation. hops = outbound hops then return hops, in order.
       // Only the first outbound hop has a start time (l.startFixed); the rest chain via
       // block + ground at build time.
-      const hops = (noRet ? [...l.outHops] : [...l.outHops, ...l.retHops]).map((h,idx) => ({
-        dep: h.dep, arr: h.arr, block: h.blockTime,
-        depFixed: (h.depFixed && /^\d{1,2}:\d{2}$/.test(h.depFixed)) ? h.depFixed : null,
-        half: idx < l.outHops.length ? 'out' : 'ret',
-        firstOfRow: (idx === 0) || (idx === l.outHops.length), // first segment of outbound / of return row
-      }));
+      const okH = v => !!(v && /^\d{1,2}:\d{2}$/.test(v));
+      const numH = v => (v===''||v==null||isNaN(+v)) ? null : +v;
+      const hops = (noRet ? [...l.outHops] : [...l.outHops, ...l.retHops]).map((h,idx) => {
+        const firstOfRow = (idx === 0) || (idx === l.outHops.length); // first segment of outbound / of return row
+        // fixed on the planner: a later segment's own DEP (pinDep), the first one's typed DEP
+        const pinned = okH(h.pinDep) || (firstOfRow && !!h.planFix && h.planFix===h.depFixed);
+        return {
+          dep: h.dep, arr: h.arr, block: h.blockTime, blockMan: !!h.blockTimeMan,
+          depFixed: okH(h.depFixed) ? h.depFixed : null,
+          pinDep: okH(h.pinDep) ? h.pinDep : null, pinned,
+          gnd: pinned ? numH(h.pinGnd) : null, turn: pinned ? numH(h.pinTurn) : null,
+          half: idx < l.outHops.length ? 'out' : 'ret',
+          firstOfRow,
+        };
+      });
       return {
         dep: l.dep, arr: l.arr, airline: alRowAl(l), aircraft: l.eqp,
         groundTime: String(alGroundTime(l.eqp, l)), dnOut:'any', dnRet:'any',
@@ -9740,9 +9859,15 @@ function alBuildValidLegs() {
     // KNOWN schedule: departures pinned to the typed times, block = ARR − DEP (exact, no
     // rounding), own flight numbers. RANDOM schedule: times drawn inside the windows.
     const okT = v => !!(v && /^\d{1,2}:\d{2}$/.test(v));
-    const outFixed = (knownMode && okT(l.depFixed))  ? l.depFixed  : null;
-    const retFixed = (knownMode && okT(l.rDepFixed)) ? l.rDepFixed : null;
+    // Times fixed on the Rotation Planner (random schedule: pinDep / rPinDep) are kept as
+    // they are, exactly like a typed known schedule.
+    const pO = alHalfPin(l,'out'), pR = alHalfPin(l,'ret');
+    const outFixed = (knownMode && okT(l.depFixed))  ? l.depFixed  : pO.dep;
+    const retFixed = (knownMode && okT(l.rDepFixed)) ? l.rDepFixed : pR.dep;
     return {
+      fixOut: pO.fixed, fixRet: pR.fixed, gndOut: pO.gnd, gndRet: pR.gnd, turnOut: pO.turn, turnRet: pR.turn,
+      // a block typed by the user is used as typed (no 5-minute rounding, no research value)
+      blkManOut: !knownMode && !!l.blockTimeMan, blkManRet: !knownMode && !!l.rBlockTimeMan,
       dep: l.dep, arr: l.arr, airline: alRowAl(l), aircraft: l.eqp,
       blockTime:  knownMode ? alKnownBlock(l,'out') : l.blockTime,
       rBlockTime: knownMode ? alKnownBlock(l,'ret') : l.rBlockTime,
@@ -10105,7 +10230,8 @@ function buildRotationBars(validLegs, research) {
           depIcao:sg.dep[0], arrIcao:sg.arr[0],
           depLocal, arrLocal:((arrRaw%1440)+1440)%1440, dayCross:Math.floor(arrRaw/1440),
           depOff:dOff, arrOff:aOff,
-          block:blockMin, ground, minTurn: (l.exact===false ? undefined : KNOWN_MIN_TURN), fnum:fn, legNo:(sg.leg!=null?sg.leg:null),
+          block:blockMin, ground:(sg.gnd!=null ? sg.gnd : ground), minTurn: (sg.turn!=null ? sg.turn : (l.exact===false ? undefined : KNOWN_MIN_TURN)), fnum:fn, legNo:(sg.leg!=null?sg.leg:null),
+          pinned: !!sg.pinned,
           ok:true, reason:'', assigned:0
         });
       });
@@ -10118,28 +10244,34 @@ function buildRotationBars(validLegs, research) {
       let curLocal = null;                // local clock at current hop's departure airport
       l.hops.forEach((h,hi)=>{
         const dOff=utc[h.dep[0]]??0, aOff=utc[h.arr[0]]??0;
-        const blockMin=round5(hm(h.block)||120);
+        // times fixed on the planner (or a typed block) are taken as they are
+        const R = (h.pinned || h.blockMan) ? (x=>x) : round5;
+        const blockMin = h.blockMan ? (hm(h.block)||120) : round5(hm(h.block)||120);
         // The first segment of each row (outbound start, return start) uses the user's
-        // typed departure time; later segments chain from (previous arrival + ground).
+        // typed departure time; later segments chain from (previous arrival + ground),
+        // unless the planner fixed their own departure (pinDep).
         let depMin;
-        if (h.firstOfRow && hm(h.depFixed)!=null) depMin = hm(h.depFixed);
+        if (hm(h.pinDep)!=null) depMin = hm(h.pinDep);
+        else if (h.firstOfRow && hm(h.depFixed)!=null) depMin = hm(h.depFixed);
         else if (h.firstOfRow) depMin = (curLocal!=null ? curLocal : 480); // fallback
         else depMin = (curLocal!=null ? curLocal : 480);
-        const depLocal=round5(((depMin%1440)+1440)%1440)%1440;
+        const depLocal=R(((depMin%1440)+1440)%1440)%1440;
         const arrLocalRaw = depLocal + blockMin + (aOff-dOff)*60;
-        const arrLocal=round5(((arrLocalRaw%1440)+1440)%1440)%1440;
+        const arrLocal=R(((arrLocalRaw%1440)+1440)%1440)%1440;
         const dayCross=Math.floor((depLocal+blockMin+(aOff-dOff)*60)/1440);
+        const gnd = h.gnd!=null ? h.gnd : ground;
         rotBars.push({
           legIdx:idx, dir:h.half, hop:hi, chain:true,
           airline:l.airline, eqp:l.aircraft,
           depIcao:h.dep[0], arrIcao:h.arr[0],
           depLocal, arrLocal, dayCross,
           depOff:dOff, arrOff:aOff,
-          block:blockMin, ground, fnum:cleanFnum(null, String(1000+idx*11+hi).padStart(4,'0')),
+          block:blockMin, ground:gnd, minTurn:(h.turn!=null ? h.turn : undefined), fnum:cleanFnum(null, String(1000+idx*11+hi).padStart(4,'0')),
+          pinned: !!h.pinned,
           ok:true, reason:'', assigned:0
         });
         // next segment's departure local clock = this arrival + ground (same airport)
-        curLocal = arrLocal + ground;
+        curLocal = arrLocal + gnd;
       });
       return;
     }
@@ -10167,7 +10299,13 @@ function buildRotationBars(validLegs, research) {
     if(!hm(ri.block_out) && !hm(ri.block_in)){
       if(outIsEastWest) blockOut = baseBlock + 40; else blockIn = baseBlock + 40;
     }
-    if (!l.exact) { blockOut = round5(blockOut); blockIn = round5(blockIn); } // snap estimates to 5-minute steps (known schedules stay exact)
+    // a block typed by the user (on the routes page or on the planner) is used as typed
+    if (l.blkManOut && hm(l.blockTime))  blockOut = hm(l.blockTime);
+    if (l.blkManRet && hm(l.rBlockTime)) blockIn  = hm(l.rBlockTime);
+    if (!l.exact) {                                   // snap estimates to 5-minute steps (known schedules stay exact)
+      if (!l.blkManOut) blockOut = round5(blockOut);
+      if (!l.blkManRet) blockIn  = round5(blockIn);
+    }
     const r5 = l.exact ? (x=>x) : round5;
 
     // Windows (local minutes)
@@ -10179,8 +10317,14 @@ function buildRotationBars(validLegs, research) {
     // Find outbound dep (local at DEP) so arrival (local at ARR) is within window + day/night.
     // Collect ALL valid departure times, then pick one at random (so duplicate routes differ).
     // Return chaining (return after outbound arrival + ground) is enforced at placement time.
-    const findTime=(depWinL,arrWinL,depOff,arrOff,dayNight,blockMin)=>{
+    const findTime=(depWinL,arrWinL,depOff,arrOff,dayNight,blockMin,fixed)=>{
       const lo=depWinL[0], hi=depWinL[1];
+      // a departure fixed on the planner: exactly that time (no random draw, no rounding)
+      if (fixed) {
+        const depLocal=((lo%1440)+1440)%1440;
+        const raw=depLocal+blockMin+(arrOff-depOff)*60;
+        return {depLocal, arrLocal:((raw%1440)+1440)%1440, dayCross:Math.floor(raw/1440), ok:true, depUTCm:(((depLocal-depOff*60)%1440)+1440)%1440};
+      }
       const span=(lo<=hi)?(hi-lo):(1440-lo+hi);
       const valid=[];
       let arrWinMiss=0, dnMiss=0, earlyMiss=0;
@@ -10210,24 +10354,26 @@ function buildRotationBars(validLegs, research) {
     };
 
     // Outbound
-    const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,blockOut);
+    const out = findTime(depWin,arrWin,depUtc,arrUtc,l.dnOut,blockOut,!!(l.fixOut && hm(l.dd1)!=null));
     rotBars.push({
       legIdx:idx, dir:'out', airline:l.airline, eqp:l.aircraft,
       depIcao:l.dep[0], arrIcao:l.arr[0],
       depLocal:out.depLocal, arrLocal:out.arrLocal, dayCross:out.dayCross,
       depOff:depUtc, arrOff:arrUtc,
-      block:blockOut, ground, fnum:fnumOut, minTurn: l.exact ? KNOWN_MIN_TURN : undefined, legNo:(l.legNo!=null?l.legNo:null),
+      block:blockOut, ground:(l.gndOut!=null ? l.gndOut : ground), fnum:fnumOut, minTurn: (l.turnOut!=null ? l.turnOut : (l.exact ? KNOWN_MIN_TURN : undefined)), legNo:(l.legNo!=null?l.legNo:null),
+      pinned: !!l.fixOut,
       ok: out.ok, reason: out.reason||'', assigned:0
     });
 
     // Return
-    const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,blockIn);
+    const ret = findTime(retWin,homeWin,arrUtc,depUtc,l.dnRet,blockIn,!!(l.fixRet && hm(l.ad1)!=null));
     rotBars.push({
       legIdx:idx, dir:'ret', airline:l.airline, eqp:l.aircraft,
       depIcao:l.arr[0], arrIcao:l.dep[0],
       depLocal:ret.depLocal, arrLocal:ret.arrLocal, dayCross:ret.dayCross,
       depOff:arrUtc, arrOff:depUtc,
-      block:blockIn, ground, fnum:fnumIn, minTurn: l.exact ? KNOWN_MIN_TURN : undefined, legNo:(l.rLegNo!=null?l.rLegNo:null),
+      block:blockIn, ground:(l.gndRet!=null ? l.gndRet : ground), fnum:fnumIn, minTurn: (l.turnRet!=null ? l.turnRet : (l.exact ? KNOWN_MIN_TURN : undefined)), legNo:(l.rLegNo!=null?l.rLegNo:null),
+      pinned: !!l.fixRet,
       ok: ret.ok, reason: ret.reason||'', assigned:0
     });
   });
@@ -10332,8 +10478,12 @@ function renderRotationBars() {
       inp.value = fmt(which==='dep'?bar.depLocal:bar.arrLocal);
       inp.style.cssText='width:46px;font-size:13px;font-weight:700;font-family:monospace;color:#fff;background:transparent;border:none;border-bottom:1px dashed rgba(255,255,255,.25);text-align:center;outline:none;padding:0;line-height:1.1;cursor:text;';
       inp.title='Type any time (4 digits, e.g. 0825), Enter/Tab to confirm. DEP moves the flight, ARR sets the block time (shorter is fine). A departure typed after the previous flight sets the ground time there. Your times are taken as typed.';
-      const edited = which==='dep' ? bar.editedDep : bar.editedArr;
-      if (edited) inp.style.color = '#e0b341';                   // typed on this page
+      const edited = bar.pinned || (which==='dep' ? bar.editedDep : bar.editedArr);
+      if (edited) {                                              // typed on this page → fixed
+        inp.style.color = '#e0b341';
+        inp.title = 'Fixed time — typed on this page, kept when you go back to the routes and generate the rotations again (no new random time). '
+          + 'To get a random time again: on the routes page clear the gold DEP of this flight. ' + inp.title;
+      }
       inp.onclick=e=>{ e.stopPropagation(); inp.select(); };
       inp.onfocus=()=>inp.select();
       inp.ondragstart=e=>e.preventDefault();
@@ -10388,6 +10538,8 @@ function renderRotationBars() {
           }
         }
         syncBarTimesToLanes(bar.legIdx);
+        // the times of this rotation are the user's now: written back into the routes
+        if (rotPinLeg(bar.legIdx)) rotBars.forEach(b=>{ if (b.legIdx===bar.legIdx) b.pinned = true; });
         // Point 5: redraw without jumping — capture and restore scroll of both panes,
         // and re-apply after the browser reflow (rAF) so it can't be reset to 0.
         const cont=document.getElementById('rot-bars-container');
@@ -11458,6 +11610,70 @@ function moveAssignment(fromAcIdx, uid, toAcIdx, dropMinAbs) {
 }
 
 // When a bar's time is edited, recompute every placed copy of that leg (keep their dropDay)
+// A time typed on the planner: write the whole rotation of that route (every flight with
+// its departure, block, ground and minimum turn) back into its input row(s), so the next
+// "Generate Rotations" / "Update unassigned" builds it at exactly these times. The route is
+// found by its key (airline | type | airports), so the rows may have been redrawn or
+// re-sorted meanwhile. Returns true when the times were written.
+function rotPinLeg(legIdx) {
+  if (!rotLegKeys || rotLegKeys[legIdx]==null || !Array.isArray(aiGenAlLegs)) return false;
+  let built; try { built = alBuildValidLegs(); } catch(e) { return false; }
+  const extras = alExtraValidLegs();
+  const keys = rotRouteKeys(built.validLegs.concat(extras));
+  const j = keys.indexOf(rotLegKeys[legIdx]);
+  if (j < 0) return false;
+  const bars = rotBars.filter(b=>b.legIdx===legIdx).sort(rotBarOrder);
+  if (!bars.length) return false;
+  const fmt = m => { m=((m%1440)+1440)%1440; return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); };
+  const dur = m => Math.floor(m/60)+':'+String(m%60).padStart(2,'0');
+  const turnOf = b => (b.minTurn!=null ? b.minTurn : '');
+  const hopOf = b => b.hop || 0;
+  if (j >= built.validLegs.length) {                 // irregular rotation from a TTools import
+    const segs = (extras[j-built.validLegs.length].knownSegs) || [];
+    bars.forEach(b=>{
+      const sg = segs.filter(x=>x.half===b.dir)[hopOf(b)]; if (!sg) return;
+      sg.depFixed = fmt(b.depLocal); sg.block = dur(b.block);
+      sg.gnd = b.ground; sg.turn = (b.minTurn!=null ? b.minTurn : null); sg.pinned = true;
+    });
+    return true;
+  }
+  const rows = built.units[j] || [];
+  const l0 = rows[0]; if (!l0) return false;
+  if (Array.isArray(l0.stops) && l0.stops.length) {   // split routing: one row, hops out + back
+    const nOut = (l0.outHops||[]).length;
+    bars.forEach(b=>{
+      const k = hopOf(b), h = k < nOut ? (l0.outHops||[])[k] : (l0.retHops||[])[k-nOut]; if (!h) return;
+      if (k===0 || k===nOut) { h.depFixed = fmt(b.depLocal); h.planFix = h.depFixed; delete h.pinDep; }
+      else h.pinDep = fmt(b.depLocal);
+      const hb = (String(h.blockTime||'').match(/^(\d{1,2}):(\d{2})$/)||[]).slice(1).reduce((a,x,i)=>a+(i?+x:+x*60),0) || null;
+      if (h.blockTimeMan ? hb!==b.block : round5(hb||120)!==b.block) { h.blockTime = dur(b.block); h.blockTimeMan = true; h.blockTimeReal = false; }
+      h.pinGnd = b.ground; h.pinTurn = turnOf(b);
+    });
+    return true;
+  }
+  const n = rows.length, known = built.knownMode;
+  const hm = v => { const m=String(v||'').match(/^(\d{1,2}):(\d{2})$/); return m ? (+m[1])*60+(+m[2]) : null; };
+  bars.forEach(b=>{
+    const out = b.dir!=='ret', k = hopOf(b);
+    const row = n===1 ? rows[0] : (out ? rows[k] : rows[n-1-k]);
+    if (!row) return;
+    if (known) {                                     // the typed DEP / ARR fields themselves
+      if (out) { row.depFixed=fmt(b.depLocal); row.arrFixed=fmt(b.arrLocal); row.arrDayOff=b.dayCross||0; row.planFix=alPlanSig(row,'out'); }
+      else { row.rDepFixed=fmt(b.depLocal); row._custom_rDepFixed=true; row.rArrFixed=fmt(b.arrLocal); row.rArrDayOff=b.dayCross||0; row.rPlanFix=alPlanSig(row,'ret'); }
+    } else {
+      const bf = out ? 'blockTime' : 'rBlockTime';
+      // the block only becomes "typed" when the planner changed it (ARR typed there)
+      const r5 = x => Math.round(x/5)*5;
+      if (row[bf+'Man'] ? hm(row[bf])!==b.block : r5(hm(row[bf])||-1)!==b.block) {
+        row[bf] = dur(b.block); row[bf+'Man'] = true; row[bf+'Real'] = false;
+      }
+      if (out) row.pinDep = fmt(b.depLocal); else row.rPinDep = fmt(b.depLocal);
+    }
+    if (out) { row.pinGnd = b.ground; row.pinTurn = turnOf(b); }
+    else     { row.rPinGnd = b.ground; row.rPinTurn = turnOf(b); }
+  });
+  return true;
+}
 function syncBarTimesToLanes(legIdx) {
   rotAircraft.forEach(ac=>{
     Object.keys(ac.assignments).forEach(di=>{
