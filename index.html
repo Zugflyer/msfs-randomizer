@@ -1083,12 +1083,12 @@ if(q==='1'||(q!=='0'&&s!=='0'&&phone))document.documentElement.classList.add('m'
 
           <!-- Import routes from Excel: with times → Known schedule, without times → Random schedule -->
           <div id="aigen-al-import" style="display:flex;flex-direction:column;align-items:center;gap:3px;">
-            <label title="Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD): DEP/ARR empty = Random schedule, FLN empty = flight numbers are generated. — TTools files: select Flightplans_CRE_….txt and Aircraft_CRE_….txt together; the routes and the rotation planner are rebuilt with the exact times."
-              style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;">
+            <button type="button" onclick="aiGenAlImportClick()" title="TTools: pick the Flightplans_….txt in the list of your flight plan folders — Aircraft_….txt of the same name (same folder) is loaded with it automatically, the routes and the Rotation Planner are filled from the plan. — Excel file (columns AIRLINE, FLN, FROM, DEP, ARR, NIGHTFLIGHT, TO, EQP, GRD): button &quot;Excel file…&quot; in the list. DEP/ARR empty = Random schedule, FLN empty = flight numbers are generated."
+              style="font-size:12px;font-weight:600;padding:7px 14px;border-radius:var(--r);border:1px solid var(--acc);color:#c9b8ff;background:rgba(123,97,255,.12);cursor:pointer;white-space:nowrap;font-family:inherit;">
               ⬆ Import XLS / TTools
-              <input id="aigen-al-import-file" type="file" accept=".xlsx,.xlsm,.xlsb,.xls,.ods,.csv,.txt" multiple style="display:none;"
-                onchange="if(this.files&&this.files.length){ aiGenAlImportFiles(this.files); } this.value='';">
-            </label>
+            </button>
+            <input id="aigen-al-import-file" type="file" accept=".xlsx,.xlsm,.xlsb,.xls,.ods,.csv,.txt" multiple style="display:none;"
+              onchange="if(this.files&&this.files.length){ aiGenAlImportFiles(this.files); } this.value='';">
             <span id="aigen-al-import-status" style="font-size:10px;color:var(--txt3);max-width:260px;text-align:center;"></span>
           </div>
 
@@ -7401,6 +7401,28 @@ async function aiGenAlImportTTools(files, opts){
   }
 }
 // One import button for both: .txt → TTools files, otherwise Excel
+// Import button: a list of only the Flightplans_….txt files of your flight plan folders (the same list as
+// "Open txt" in the AI Traffic Manager). A click loads the plan together with Aircraft_….txt of the same
+// name from the same folder — no second file to pick. "Excel file…" opens the file window for XLS/CSV.
+// Browsers without folder access (Safari, Firefox): the file window as before (select both txt files).
+function aiGenAlImportClick() {
+  const inp = document.getElementById('aigen-al-import-file');
+  if (!window.showDirectoryPicker || typeof aitmOpenTxt !== 'function') { inp.click(); return; }
+  const say = (t, warn) => { const st=document.getElementById('aigen-al-import-status'); if (st) { st.textContent=t; st.style.color = warn ? '#f0b400' : 'var(--txt3)'; } };
+  aitmOpenTxt({
+    name: 'Import TTools', title: 'Import TTools — Flightplans_ files (Aircraft_ is loaded with it)',
+    say,
+    input: () => inp.click(),
+    more: [['Excel file…', () => { aitmCloseModal(); inp.click(); }, true]],
+    onPick: async (fpH, acH) => {
+      try {
+        const files = [await fpH.getFile()];
+        if (acH) files.push(await acH.getFile());
+        await aiGenAlImportTTools(files);
+      } catch (e) { say('Could not read ' + (fpH && fpH.name || 'the file') + ': ' + e.message, true); }
+    },
+  });
+}
 function aiGenAlImportFiles(fileList){
   const files=[...(fileList||[])];
   if (!files.length) return;

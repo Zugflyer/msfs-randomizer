@@ -878,8 +878,16 @@ function aitmLoad(d) {
 // folders, and folders added before). A click loads it together with Aircraft_ and Airports_ of the same name.
 // (Windows' own file window cannot be limited to names starting with "Flightplans_" — a web page can only
 // give it file types — so the list is shown here.)
-async function aitmOpenTxt() {
-  if (!window.showDirectoryPicker) { aitmOpenTxtInput(); return; }
+// Other pages of the tool use the same list (AI Generator: Import TTools, Rotation Planner: Merge) with
+// O = { name, title, onPick(fpHandle, acHandle, apHandle, src), say(msg, warn), input(), more: [[label, fn, secondary]] }.
+function aitmOtDone(O, fpH, acH, apH, src) {
+  if (O && O.onPick) return Promise.resolve(O.onPick(fpH, acH, apH, src));
+  return aitmLoadTxtHandles(fpH, acH, apH).then(function () { if (src) aitm._srcDir = src; });
+}
+async function aitmOpenTxt(O) {
+  O = O || {};
+  var say = O.say || aitmToast, nm = O.name || 'Open txt';
+  if (!window.showDirectoryPicker) { if (O.input) O.input(); else aitmOpenTxtInput(); return; }
   var roots = [], fpRoot = await aitmKvGet('fpRoot'), extra = (await aitmKvGet('txtDirs')) || [];
   if (fpRoot) roots.push(fpRoot);
   for (var i = 0; i < extra.length; i++) {
@@ -888,22 +896,23 @@ async function aitmOpenTxt() {
     if (!dup) roots.push(extra[i]);
   }
   if (!roots.length) {
-    aitmModal('Open txt — your flight plan folder',
+    aitmModal(aitmEsc(nm) + ' — your flight plan folder',
       '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Choose your flight plan folder <b>once</b> — best the top one, '
       + '<span style="font-family:monospace;">…\\Fligthplans - Fictional and vintage\\CRE flightplans</span>. '
-      + 'Then <b>Open txt</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
+      + 'Then <b>' + aitmEsc(nm) + '</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
       [['Choose folder…', async function () {
-        try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(); } catch (e) {}
-      }], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(); }, true]]);
+        try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
+      }], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
     return;
   }
   var ok = [];
   for (var r = 0; r < roots.length; r++) { if (await aitmPermOk(roots[r])) ok.push(roots[r]); }
-  if (!ok.length) { aitmToast('Chrome did not allow reading the flight plan folder — click Open txt again and allow it.', true); return; }
-  aitmModal('Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>',
+  if (!ok.length) { say('Chrome did not allow reading the flight plan folder — click ' + nm + ' again and allow it.', true); return; }
+  aitm._otOpts = O;
+  aitmModal(O.title || 'Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>',
     [['Other folder…', async function () {
-      try { var h = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read' }); var d = (await aitmKvGet('txtDirs')) || []; d.push(h); await aitmKvSet('txtDirs', d); aitmCloseModal(); aitmOpenTxt(); } catch (e) {}
-    }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(); }, true]], 'wide');
+      try { var h = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read' }); var d = (await aitmKvGet('txtDirs')) || []; d.push(h); await aitmKvSet('txtDirs', d); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
+    }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []), 'wide');
   var list = [];
   async function walk(d, root, path, depth) {
     var files = {}, subs = [];
@@ -942,12 +951,13 @@ function aitmOpenTxtList() {
 async function aitmOpenTxtPick(i) {
   var x = (aitm._otList || [])[i]; if (!x) return;
   aitmCloseModal();
-  await aitmLoadTxtHandles(x.fp, x.ac, x.ap);
-  aitm._srcDir = { h: x.dir, label: x.label };
+  await aitmOtDone(aitm._otOpts, x.fp, x.ac, x.ap, { h: x.dir, label: x.label });
 }
 // pick a file in Windows' own window (the way before): Aircraft_/Airports_ are taken from the same folder
-async function aitmOpenTxtPicker() {
-  if (!window.showOpenFilePicker) { aitmOpenTxtInput(); return; }
+async function aitmOpenTxtPicker(O) {
+  O = O || {};
+  var say = O.say || aitmToast;
+  if (!window.showOpenFilePicker) { if (O.input) O.input(); else aitmOpenTxtInput(); return; }
   var hs;
   try { hs = await window.showOpenFilePicker({ id: 'aitm-open-txt', multiple: true, types: [{ description: 'TTools flight plan', accept: { 'text/plain': ['.txt'] } }] }); }
   catch (e) { return; }
@@ -955,9 +965,9 @@ async function aitmOpenTxtPicker() {
   var acH = hs.find(function (h) { return /^aircraft/i.test(h.name); }) || null;
   var apH = hs.find(function (h) { return /^airports/i.test(h.name); }) || null;
   var anyH = fpH || acH || apH;
-  if (!anyH) { aitmLoadTxtHandles(hs[0], null, null); return; }   // not named the TTools way
+  if (!anyH) { aitmOtDone(O, hs[0], null, null); return; }   // not named the TTools way
   var suffix = anyH.name.replace(/^(flightplans|aircraft|airports)/i, '');
-  if (fpH && acH && apH) { aitmLoadTxtHandles(fpH, acH, apH); return; }
+  if (fpH && acH && apH) { aitmOtDone(O, fpH, acH, apH); return; }
   var dirs = (await aitmKvGet('txtDirs')) || [];
   var fpRoot = await aitmKvGet('fpRoot');           // the Installation Manager's flight plan folder counts too
   var cands = fpRoot ? [fpRoot].concat(dirs) : dirs;
@@ -966,10 +976,10 @@ async function aitmOpenTxtPicker() {
   var go = async function (dir) {
     var sib = await aitmSiblings(dir, path || (await dir.resolve(anyH)) || [anyH.name], ['flightplans' + suffix.toLowerCase(), 'aircraft' + suffix.toLowerCase(), 'airports' + suffix.toLowerCase()]);
     var f = fpH || sib[0];
-    if (!f) { aitmToast('Flightplans' + suffix + ' not found next to ' + anyH.name + '.', true); return; }
-    await aitmLoadTxtHandles(f, acH || sib[1], apH || sib[2]);
-    var pp = path || (await dir.resolve(anyH)) || [anyH.name], sd = dir;
-    try { for (var k = 0; k < pp.length - 1; k++) sd = await sd.getDirectoryHandle(pp[k]); aitm._srcDir = { h: sd, label: [dir.name].concat(pp.slice(0, -1)).join(' \\ ') }; } catch (e) {}
+    if (!f) { say('Flightplans' + suffix + ' not found next to ' + anyH.name + '.', true); return; }
+    var pp = path || (await dir.resolve(anyH)) || [anyH.name], sd = dir, src = null;
+    try { for (var k = 0; k < pp.length - 1; k++) sd = await sd.getDirectoryHandle(pp[k]); src = { h: sd, label: [dir.name].concat(pp.slice(0, -1)).join(' \\ ') }; } catch (e) {}
+    await aitmOtDone(O, f, acH || sib[1], apH || sib[2], src);
   };
   if (known && (await known.queryPermission({ mode: 'read' })) === 'granted') { await go(known); return; }
   aitmModal('One more click: allow the folder',
@@ -985,12 +995,12 @@ async function aitmOpenTxtPicker() {
         else {
           dir = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read', startIn: anyH });
           path = await dir.resolve(anyH);
-          if (!path) { aitmToast(anyH.name + ' is not inside “' + dir.name + '” — choose the folder that holds it.', true); return; }
+          if (!path) { say(anyH.name + ' is not inside “' + dir.name + '” — choose the folder that holds it.', true); return; }
           dirs.push(dir); await aitmKvSet('txtDirs', dirs);
         }
         aitmCloseModal(); await go(dir);
-      } catch (e) { if (e && e.name !== 'AbortError') aitmToast(e.message, true); }
-    }]].concat(fpH ? [['Load without them', function () { aitmCloseModal(); aitmLoadTxtHandles(fpH, acH, apH); }, true]] : []));
+      } catch (e) { if (e && e.name !== 'AbortError') say(e.message, true); }
+    }]].concat(fpH ? [['Load without them', function () { aitmCloseModal(); aitmOtDone(O, fpH, acH, apH); }, true]] : []));
 }
 // files whose lower-case names are in `want`, in the folder of path (path = parts from dir, file last)
 async function aitmSiblings(dir, path, want) {
