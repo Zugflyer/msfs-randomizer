@@ -7128,7 +7128,8 @@ function alExtraValidLegs(){ return aiGenMulti ? aiGenAlExtraLegs.slice() : aiGe
 function aiGenAlDiscardExtras(){ aiGenAlExtraLegs = []; renderAiGenAlLegs(); }
 
 function ttParseStamp(v){                        // "D/HH:MM" or "1/D/HH:MM" → minutes in the cycle
-  const p=String(v||'').trim().split('/');
+  // also "D/HH:MM:SS" (seconds) and "@D/HH:MM" (@ = TTools: arrive exactly at this time)
+  const p=String(v||'').trim().replace(/^@\s*/,'').replace(/^(.*\d:\d{2}):\d{2}$/,'$1').split('/');
   let w=0, d, t;
   if (p.length===3) { w=parseInt(p[0],10); d=parseInt(p[1],10); t=p[2]; }
   else if (p.length===2) { d=parseInt(p[0],10); t=p[1]; }
@@ -7140,7 +7141,7 @@ function ttParseStamp(v){                        // "D/HH:MM" or "1/D/HH:MM" →
 function ttParseFlightplans(text){
   const acs=[];
   String(text||'').split(/\r?\n/).forEach(raw=>{
-    const line=raw.trim();
+    const line=raw.replace(/\/\/.*$/,'').trim();              // "// …" = comment (//FSXDAYS=FALSE, notes)
     if (!/^AC#\d+/i.test(line) || /"/.test(line)) return;      // aircraft-file lines carry a quoted title
     const f=line.split(',').map(x=>x.trim());
     let i=2; while (i<f.length && ttParseStamp(f[i])==null) i++;
@@ -7407,9 +7408,12 @@ async function aiGenAlImportTTools(files, opts){
 // Browsers without folder access (Safari, Firefox): the file window as before (select both txt files).
 function aiGenAlImportClick() {
   const inp = document.getElementById('aigen-al-import-file');
-  if (!window.showDirectoryPicker || typeof aitmOpenTxt !== 'function') { inp.click(); return; }
+  // no folder access in this browser, or an older aitm.js still in the browser cache → the file window as before
+  if (!window.showDirectoryPicker || typeof aitmOtDone !== 'function') { inp.click(); return; }
   const say = (t, warn) => { const st=document.getElementById('aigen-al-import-status'); if (st) { st.textContent=t; st.style.color = warn ? '#f0b400' : 'var(--txt3)'; } };
-  aitmOpenTxt({
+  say('Reading your flight plan folders …');
+  const shown = () => !!document.getElementById('aitm-modal');
+  Promise.resolve().then(() => aitmOpenTxt({
     name: 'Import TTools', title: 'Import TTools — Flightplans_ files (Aircraft_ is loaded with it)',
     say,
     input: () => inp.click(),
@@ -7421,6 +7425,9 @@ function aiGenAlImportClick() {
         await aiGenAlImportTTools(files);
       } catch (e) { say('Could not read ' + (fpH && fpH.name || 'the file') + ': ' + e.message, true); }
     },
+  })).then(() => { if (shown()) say(''); }).catch(e => {
+    say('Folder list failed (' + (e && e.message || e) + ') — pick the files in the file window.', true);
+    try { inp.click(); } catch (x) {}
   });
 }
 function aiGenAlImportFiles(fileList){
@@ -13421,7 +13428,7 @@ window.addEventListener('focus', () => {
   if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
 });
 </script>
-<script src="aitm.js"></script>
+<script src="aitm.js?v=20261119b"></script>
 <script src="mobile.js"></script>
 </body>
 </html>

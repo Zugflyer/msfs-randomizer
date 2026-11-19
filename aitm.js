@@ -907,7 +907,20 @@ async function aitmOpenTxt(O) {
   }
   var ok = [];
   for (var r = 0; r < roots.length; r++) { if (await aitmPermOk(roots[r])) ok.push(roots[r]); }
-  if (!ok.length) { say('Chrome did not allow reading the flight plan folder — click ' + nm + ' again and allow it.', true); return; }
+  if (!ok.length) {
+    // no silent stop: Chrome's question was missed or refused → ask again with a fresh click, or choose anew
+    aitmModal(aitmEsc(nm) + ' — allow the flight plan folder',
+      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome does not let the page read “<b>' + aitmEsc(roots[0].name) + '</b>” right now. '
+      + 'Click <b>Allow</b> and confirm Chrome’s question — or choose the folder again.</div>',
+      [['Allow', async function () {
+        var any = false;
+        for (var r2 = 0; r2 < roots.length; r2++) { if (await aitmPermOk(roots[r2])) any = true; }
+        if (any) { aitmCloseModal(); aitmOpenTxt(O); } else say('Chrome still does not allow it — choose the folder again.', true);
+      }], ['Choose folder again…', async function () {
+        try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
+      }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
+    return;
+  }
   aitm._otOpts = O;
   aitmModal(O.title || 'Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>',
     [['Other folder…', async function () {
