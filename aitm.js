@@ -961,7 +961,7 @@ function aitmOpenTxt(O) {
       if (r === 'granted') { aitm._otState = 'granted'; aitmOpenTxtList0(O); return; }
       aitmModal((O.name || 'Open txt'), '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome did not allow the flight plan folder. Choose it again (Windows folder window) — '
         + 'and next time pick <b>“Allow on every visit”</b> in Chrome’s question.</div>',
-        [['Choose folder…', function () { aitmCloseModal(); aitmOtPickRoot(O); }], ['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }, true]]);
+        [['Choose folder…', function () { aitmCloseModal(); aitmOtPickRoot(O); }, false, null, 'enter'], ['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }, true]]);
     });
     return;
   }
@@ -980,7 +980,7 @@ function aitmOtPickRoot(O) {
   }, function (e) {
     if (e && e.name === 'AbortError') { aitmToast(''); return; }
     aitmModal((O.name || 'Open txt'), '<div style="font-size:13px;color:var(--txt2);">Chrome did not open the folder window: ' + aitmEsc(e && e.message || String(e)) + '</div>',
-      [['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }]]);
+      [['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }, false, null, 'enter']]);
   });
 }
 // folders Chrome allows right now — never asks
@@ -1029,7 +1029,7 @@ async function aitmOpenTxtList0(O) {
       + 'Then <b>' + aitmEsc(nm) + '</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
       [['Choose folder…', async function () {
         try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitm._otGranted = true; aitmCloseModal(); aitmOpenTxtList0(O); } catch (e) {}
-      }], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
+      }, false, null, 'enter'], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
     return;
   }
   var ok = [];
@@ -1043,7 +1043,7 @@ async function aitmOpenTxtList0(O) {
         var any = false;
         for (var r2 = 0; r2 < roots.length; r2++) { if (await aitmPermOk(roots[r2])) any = true; }
         if (any) { aitm._otGranted = true; aitmCloseModal(); aitmOpenTxtList0(O); } else say('Chrome still does not allow it — choose the folder again.', true);
-      }], ['Choose folder again…', async function () {
+      }, false, null, 'enter'], ['Choose folder again…', async function () {
         try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitm._otGranted = true; aitmCloseModal(); aitmOpenTxtList0(O); } catch (e) {}
       }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
     return;
@@ -1140,7 +1140,7 @@ async function aitmOpenTxtPicker(O) {
         }
         aitmCloseModal(); await go(dir);
       } catch (e) { if (e && e.name !== 'AbortError') say(e.message, true); }
-    }]].concat(fpH ? [['Load without them', function () { aitmCloseModal(); aitmOtDone(O, fpH, acH, apH); }, true]] : []));
+    }, false, null, 'enter']].concat(fpH ? [['Load without them', function () { aitmCloseModal(); aitmOtDone(O, fpH, acH, apH); }, true]] : []));
 }
 // files whose lower-case names are in `want`, in the folder of path (path = parts from dir, file last)
 async function aitmSiblings(dir, path, want) {
@@ -1244,7 +1244,7 @@ async function aitmTxtCompanions(fp, ac, ap, done) {
     + '<b>once per session</b>: click <b>Choose folder…</b>, pick <b>Fligthplans - Fictional and vintage</b> (or the folder of this file), '
     + 'then “Select folder” and “View files”. After that every Flightplans_ you open comes with its Aircraft_.</div>'
     + '<div id="aitm-ac-msg" style="font-size:12px;color:var(--txt3);margin-top:8px;"></div>',
-    [['Choose folder…', chooseFolder], ['Select ' + want + ' by hand', function () {
+    [['Choose folder…', chooseFolder, false, null, 'enter'], ['Select ' + want + ' by hand', function () {
       var old2 = document.getElementById('aitm-txt-input2'); if (old2) old2.remove();
       var i2 = document.createElement('input'); i2.id = 'aitm-txt-input2'; i2.type = 'file'; i2.accept = '.txt'; i2.multiple = true; i2.style.display = 'none';
       document.body.appendChild(i2);
@@ -1291,7 +1291,7 @@ function aitmToGenerator() {
   aitmModal('Airports unknown to the AI Generator',
     '<div style="font-size:12px;color:var(--txt2);line-height:1.6;">' + unknown.length + ' airport' + (unknown.length === 1 ? ' is' : 's are') + ' not in the airport database: <b style="color:#fff;font-family:monospace;">' + unknown.map(aitmEsc).join(', ') + '</b>.<br>'
     + 'The AI Generator leaves out the rotations that use ' + (unknown.length === 1 ? 'it' : 'them') + '. Add ' + (unknown.length === 1 ? 'it' : 'them') + ' first (right-click the airport → Airport Data), or transfer without those rotations.</div>',
-    [['Transfer anyway', function () { aitmCloseModal(); aitmToGeneratorGo(); }]]);
+    [['Transfer anyway', function () { aitmCloseModal(); aitmToGeneratorGo(); }, false, null, 'enter']]);
 }
 async function aitmToGeneratorGo() {
   var maps = aitmAirlineMaps(), info = {}, isAp = aitm.kind === 'airport';
@@ -1446,7 +1446,7 @@ function aitmEditHead() {
       else { aitm.code = cd; aitm.apIcao = ''; }
       aitm.period = document.getElementById('aitm-h-period').value.trim();
       aitmSave(); aitmCloseModal(); aitmRenderAll(); aitmFindLogo();
-    }]]);
+    }, false, null, 'enter']]);
 }
 // minute in period -> display stamp in the chosen time mode at airport icao
 function aitmStamp(min, P, icao) {
@@ -2365,7 +2365,7 @@ function aitmRmProblem(err, msg, wasFetch) {
     : 'Rotation Map does not answer: ' + notRun
         + (wasFetch ? '<br><span style="color:var(--txt3);">“Try again” opens a small Rotation Map window that hands the list over — Chrome blocks this page’s background requests to programs on your PC.</span>' : '');
   aitmModal('Update installed aircraft', '<div style="font-size:12px;color:var(--txt2);line-height:1.7;">' + txt + '</div>',
-    [['Try again', function () { aitmCloseModal(); aitmUpdateInstalled({ bridge: true }); }], ['Read a folder by hand…', function () { aitmCloseModal(); aitmReadAircraftFolder(); }, true]]);
+    [['Try again', function () { aitmCloseModal(); aitmUpdateInstalled({ bridge: true }); }, false, null, 'enter'], ['Read a folder by hand…', function () { aitmCloseModal(); aitmReadAircraftFolder(); }, true]]);
 }
 
 // ── Check flightplans → Sort by aircraft size → Compile: red until done, green when done; Compile grey until both
@@ -2417,13 +2417,54 @@ function aitmModal(title, body, buttons, wide) {
     + '<div id="aitm-modal-btns" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;"></div>';
   pop.appendChild(card); document.body.appendChild(pop);
   var bb = card.querySelector('#aitm-modal-btns');
+  // a pure message (nothing to choose, nothing to fill in): Enter closes it (keydown handler below)
+  pop._ack = !(buttons || []).length;
+  // the button that opened the dialog keeps no focus behind it (Enter would press it again)
+  try { if (document.activeElement && !pop.contains(document.activeElement)) document.activeElement.blur(); } catch (e) {}
   (buttons || []).concat([['Close', aitmCloseModal, true]]).forEach(function (b) {
     var btn = document.createElement('button'); btn.textContent = b[0];
     btn.style.cssText = 'font-size:12px;font-weight:600;padding:6px 16px;border-radius:6px;cursor:pointer;' + (b[2] ? 'border:1px solid var(--bdr);background:transparent;color:var(--txt2);' : 'border:none;background:' + (b[3] || 'var(--acc)') + ';color:#fff;');
     btn.onclick = b[1]; bb.appendChild(btn);
+    if (b[4] === 'enter') { pop._enterBtn = btn; btn.innerHTML = aitmEsc(b[0]) + ' <span style="opacity:.65;font-weight:400;">↵</span>'; btn.title = 'Enter'; }
+    if (b[1] === aitmCloseModal && pop._ack) {
+      // "Close ↵" while the body has nothing to fill in or choose (bodies filled later are watched)
+      var body = card.children[1], focused = false;
+      var mark = function () {
+        var ack = !aitmModalBusy(body);
+        btn.innerHTML = ack ? 'Close <span style="opacity:.6;font-weight:400;">↵</span>' : 'Close';
+        btn.title = ack ? 'Enter' : '';
+        btn.style.borderColor = ack ? 'var(--acc)' : 'var(--bdr)'; btn.style.color = ack ? '#fff' : 'var(--txt2)';
+        if (ack && !focused) { focused = true; setTimeout(function () { try { if (!aitmModalBusy(body)) btn.focus({ preventScroll: true }); } catch (e) {} }, 0); }
+        if (!ack && document.activeElement === btn) btn.blur();      // filled in later: Enter no longer closes
+      };
+      mark();
+      try { new MutationObserver(mark).observe(body, { childList: true, subtree: true }); } catch (e) {}
+    }
   });
   return card;
 }
+// something to fill in or choose inside the dialog body → Enter does not close it
+function aitmModalBusy(body) { return !!(body && body.querySelector('input:not([type=hidden]),select,textarea,button,[contenteditable="true"]')); }
+// Enter = Close for a pure message (only a Close button, nothing to fill in), so no trip to the mouse
+// A dialog with a default button (Save as txt: Save): Enter presses it — also from the name field —
+// unless the focus is on another button of the dialog (Enter presses that one) or in a multi-line text.
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+  var pop = document.getElementById('aitm-modal'); if (!pop) return;
+  var t = e.target;
+  if (pop._enterBtn && document.body.contains(pop._enterBtn)) {
+    if (t && pop.contains(t) && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'BUTTON' && t !== pop._enterBtn) || t.isContentEditable)) return;
+    e.preventDefault(); e.stopPropagation();
+    if (!pop._enterBtn.disabled) pop._enterBtn.click();
+    return;
+  }
+  if (!pop._ack) return;
+  var card = pop.firstChild;
+  if (t && pop.contains(t) && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  if (card && aitmModalBusy(card.children[1])) return;
+  e.preventDefault(); e.stopPropagation();
+  aitmCloseModal();
+}, true);
 function aitmCloseModal() { var p = document.getElementById('aitm-modal'); if (p) p.remove(); aitm._updDlg = false; }
 function aitmToast(msg, warn) {
   var el = document.getElementById('aitm-status'); if (!el) return;
@@ -2445,7 +2486,7 @@ function aitmAcDialog(i) {
     + '<input id="aitm-split-title" class="aitm-in" style="width:100%;box-sizing:border-box;" value="' + aitmEsc(a.title) + '">'
     + '<div style="font-size:11px;color:var(--txt3);margin-top:4px;">Title of the new aircraft — add an ending (e.g. a registration) or type something completely different.</div>'
     + (nfp === 0 && aitm.ac.length > 1 ? '<div style="margin-top:14px;font-size:11px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;font-weight:600;">Delete</div><div style="font-size:12px;color:var(--txt2);">No flight plan uses this aircraft — it can be removed.</div>' : ''),
-    [['Split', function () { aitmSplit(i, document.getElementById('aitm-split-title').value); }]]
+    [['Split', function () { aitmSplit(i, document.getElementById('aitm-split-title').value); }, false, null, 'enter']]
       .concat(nfp === 0 && aitm.ac.length > 1 ? [['Delete AC#' + a.n, function () { aitmDeleteAc(i); }, false, '#da3633']] : []));
   var inp = card.querySelector('#aitm-split-title');
   inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length);
@@ -2485,7 +2526,7 @@ function aitmEditPlan(i) {
       var r = AITM_CODEC.parseFlightplansTxt(document.getElementById('aitm-plan-txt').value.replace(/\n/g, ''));
       if (r.errors.length || r.plans.length !== 1) { document.getElementById('aitm-plan-err').textContent = r.errors[0] || 'Exactly one line “AC#…” please.'; return; }
       aitm.plans[i] = r.plans[0]; aitmCloseModal(); aitmSave(); aitmRenderAll();
-    }], ['Delete flight plan', function () {
+    }, false, null, 'enter'], ['Delete flight plan', function () {
       if (!confirm('Delete the flight plan of ' + p.reg + '?')) return;
       aitm.plans.splice(i, 1); aitm.sel = []; aitmCloseModal(); aitmSave(); aitmRenderAll();
     }, false, '#da3633']], true);
@@ -2620,7 +2661,7 @@ function aitmMoveAirports(fromIcao) {
       });
       aitmCloseModal(); aitmSave(); aitmRenderAll();
       aitmToast(n ? from + ' → ' + to + ': ' + n + ' leg' + (n === 1 ? '' : 's') + ' in ' + np + ' flight plan' + (np === 1 ? '' : 's') + ' changed.' : from + ' was not found' + (scope === 'sel' ? ' in the selected flights.' : '.'), !n);
-    }]]);
+    }, false, null, 'enter']]);
   document.getElementById(fromIcao ? 'aitm-mv-to' : 'aitm-mv-from').focus();
 }
 
@@ -2790,7 +2831,7 @@ async function aitmCompile() {
           if (!(await write(d))) download();
           aitmRenderBottom && aitmRenderBottom();
         }, function () {});
-      }], ['Download instead', function () { aitmCloseModal(); download(); }, true]]);
+      }, false, null, 'enter'], ['Download instead', function () { aitmCloseModal(); download(); }, true]]);
     return;
   }
   download();
@@ -2881,7 +2922,7 @@ async function aitmSaveTxt() {
     + '<div style="font-size:11px;color:var(--txt3);margin-top:12px;line-height:1.5;">Saved as it is compiled: aircraft sorted by size (AC#1 = largest), the same aircraft only once, aircraft without flights left out.</div>'
     + (ckErrs.length ? '<div style="font-size:11px;color:#f0b400;margin-top:6px;line-height:1.5;">⚠ Check flightplans finds ' + ckErrs.length + ' error' + (ckErrs.length === 1 ? '' : 's') + ' (' + aitmEsc(ckErrs[0].slice(0, 90)) + (ckErrs.length > 1 ? ' …' : '') + ') — this plan cannot be compiled yet. It is saved anyway.</div>' : '')
     + '<div id="aitm-sv-msg" style="font-size:11px;margin-top:10px;min-height:14px;line-height:1.5;"></div>',
-    [['Save', function () { aitmSaveTxtGo(places); }, false, '#238636'], ['Download instead', function () { aitmSaveTxtGo(null); }, true]]);
+    [['Save', function () { aitmSaveTxtGo(places); }, false, '#238636', 'enter'], ['Download instead', function () { aitmSaveTxtGo(null); }, true]]);
   var inp = card.querySelector('#aitm-sv-name');
   var show = function () { var b = inp.value.trim(); card.querySelector('#aitm-sv-files').textContent = b ? 'Flightplans_' + b + '.txt · Aircraft_' + b + '.txt · Airports_' + b + '.txt' : ''; card.querySelector('#aitm-sv-msg').textContent = ''; aitm._svConfirm = null; };
   inp.addEventListener('input', show); show();
