@@ -908,10 +908,32 @@ function aitmQPx(h, mode) {
     new Promise(function (r) { setTimeout(function () { r('broken'); }, 1500); })
   ]);
 }
+// Every other saved folder (logos, TTools save folder …): dead entries are dropped once per page load, so the feature
+// asks for its folder again once instead of hanging. (Seen in the user's Chrome: Rotation map, Airline Logos, CRE …)
+function aitmDropDeadFolders() {
+  if (aitm._deadChecked || !window.showDirectoryPicker) return;
+  aitm._deadChecked = true;
+  ['logoFolders', 'logoUploadDir', 'ttExportDir', 'txtFolder', 'outFolder'].forEach(function (k) {
+    aitmKvGet(k).then(function (v) {
+      if (!v) return;
+      var list = Array.isArray(v) ? v : [v];
+      return Promise.all(list.map(function (h) {
+        if (!h || !h.queryPermission) return Promise.resolve('keep');
+        return Promise.race([h.queryPermission({ mode: 'read' }).catch(function () { return 'broken'; }), new Promise(function (r) { setTimeout(function () { r('broken'); }, 2500); })]);
+      })).then(function (st) {
+        var keep = list.filter(function (h, i) { return st[i] !== 'broken'; });
+        if (keep.length === list.length) return;
+        try { console.info('[folders] dropped a dead entry:', k); } catch (e) {}
+        return aitmKvSet(k, Array.isArray(v) ? keep : (keep[0] || null));
+      });
+    }).catch(function () {});
+  });
+}
 // Read ahead (page load, tab opened, back in the window) so the click knows at once what to do; dead entries are
 // dropped, so they are chosen again once and never block anything again.
 function aitmOtPrefetch() {
   if (!window.showDirectoryPicker) return Promise.resolve();
+  aitmDropDeadFolders();
   return Promise.all([aitmKvGet('fpRoot'), aitmKvGet('txtDirs')]).then(function (v) {
     var h = v[0], dirs = v[1] || [];
     var checks = [h ? aitmQPx(h) : Promise.resolve('none')].concat(dirs.map(function (d) { return aitmQPx(d); }));
