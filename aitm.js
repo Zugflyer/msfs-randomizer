@@ -704,7 +704,7 @@ async function aitmPermOk(h, write) {
   var mode = write ? 'readwrite' : 'read';
   if ((await aitmQP(h, mode)) === 'granted') return true;
   try {
-    return (await Promise.race([h.requestPermission({ mode: mode }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 15000); })])) === 'granted';
+    return (await Promise.race([h.requestPermission({ mode: mode }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 8000); })])) === 'granted';
   } catch (e) { return false; }
 }
 function aitmReadAircraftFolder() {
@@ -2658,18 +2658,42 @@ async function aitmCompile() {
   if (res.errors) { aitmModal('Cannot compile', res.errors.map(aitmEsc).join('<br>')); return; }
   var info = res.plans + ' flight plans, ' + res.aircraft + ' aircraft, ' + res.airports + ' airports · ' + Math.round(res.bytes.length / 1024) + ' KB';
   var dir = await aitmKvGet('outFolder');
-  if (dir && window.showDirectoryPicker) {
-    if (!(await aitmPermOk(dir, true))) { aitmToast('No write access to ' + dir.name + ' — click Compile again and allow it.', true); return; }
+  var write = async function (d) {
     try {
-      var where = await aitmWriteBgl(dir, name, res.bytes);
+      var where = await aitmWriteBgl(d, name, res.bytes);
       aitmToast('✓ ' + name + ' written to ' + where + ' (' + info + ', ' + ((Date.now() - t0) / 1000).toFixed(1) + ' s).');
       aitm.compiledSig = doneSig; aitmSave();
-      return;
-    } catch (e) { aitmToast('Could not write into ' + dir.name + ': ' + e.message + ' — downloading instead.', true); }
+      return true;
+    } catch (e) { aitmToast('Could not write into ' + d.name + ': ' + e.message, true); return false; }
+  };
+  var download = function () {
+    aitmDownload(res.bytes, name, 'application/octet-stream');
+    aitmToast('✓ ' + name + ' downloaded (' + info + ').');
+    aitm.compiledSig = doneSig; aitmSave();
+  };
+  if (dir && window.showDirectoryPicker) {
+    // Chrome's permission question does not answer on the user's PC: no waiting for it. Allowed → written at
+    // once; otherwise a dialog: choose the folder (the Windows window gives the OK) or download.
+    if ((await aitmQP(dir, 'readwrite')) === 'granted') { if (await write(dir)) return; }
+    aitmModal('Compile — write into “' + aitmEsc(dir.name) + '”',
+      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">' + aitmEsc(name) + ' is compiled (' + aitmEsc(info) + ').<br>'
+      + 'Chrome does not let the page write into <b>' + aitmEsc(dir.name) + '</b> right now. Click <b>Choose folder…</b> and pick it again in the Windows window '
+      + '(“Select folder”, then allow “Edit files”) — or download the BGL.</div>',
+      [['Choose folder…', function () {
+        var opt = { id: 'aitm-out', mode: 'readwrite' };
+        try { opt.startIn = dir; } catch (e) {}
+        window.showDirectoryPicker(opt).catch(function (e) {
+          if (e && e.name === 'AbortError') throw e;
+          return window.showDirectoryPicker({ id: 'aitm-out', mode: 'readwrite' });
+        }).then(async function (d) {
+          await aitmKvSet('outFolder', d); aitmCloseModal();
+          if (!(await write(d))) download();
+          aitmRenderBottom && aitmRenderBottom();
+        }, function () {});
+      }], ['Download instead', function () { aitmCloseModal(); download(); }, true]]);
+    return;
   }
-  aitmDownload(res.bytes, name, 'application/octet-stream');
-  aitmToast('✓ ' + name + ' downloaded (' + info + ').');
-  aitm.compiledSig = doneSig; aitmSave();
+  download();
 }
 // package root (has layout.json): write Scenery/World/Traffic/<name> and update layout.json; else write into the folder
 async function aitmWriteBgl(dir, name, bytes, opt) {
@@ -2799,7 +2823,7 @@ async function aitmSaveTxtGo(places) {
     try { dir = await window.showDirectoryPicker({ id: 'aitm-txt', mode: 'readwrite' }); } catch (e) { return; }
     await aitmKvSet('txtFolder', dir); label = dir.name;
   } else { dir = places[+pick].h; label = places[+pick].label; }
-  if (!(await aitmPermOk(dir, true))) { say('Chrome did not allow writing into “' + aitmEsc(label) + '”. Click Save again and allow it.', '#f0b400'); return; }
+  if (!(await aitmPermOk(dir, true))) { say('Chrome did not allow writing into “' + aitmEsc(label) + '”. Choose “another folder…” and pick it in the Windows window — that gives the OK.', '#f0b400'); return; }
   var exist = [];
   for (var i = 0; i < files.length; i++) { try { await dir.getFileHandle(files[i][0]); exist.push(files[i][0]); } catch (e) {} }
   var key = label + '|' + base;
