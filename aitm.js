@@ -1321,7 +1321,7 @@ function aitmEditHead() {
       else { aitm.code = cd; aitm.apIcao = ''; }
       aitm.period = document.getElementById('aitm-h-period').value.trim();
       aitmSave(); aitmCloseModal(); aitmRenderAll(); aitmFindLogo();
-    }]]);
+    }, false, null, 'enter']]);
 }
 // minute in period -> display stamp in the chosen time mode at airport icao
 function aitmStamp(min, P, icao) {
@@ -2332,6 +2332,7 @@ function aitmModal(title, body, buttons, wide) {
     var btn = document.createElement('button'); btn.textContent = b[0];
     btn.style.cssText = 'font-size:12px;font-weight:600;padding:6px 16px;border-radius:6px;cursor:pointer;' + (b[2] ? 'border:1px solid var(--bdr);background:transparent;color:var(--txt2);' : 'border:none;background:' + (b[3] || 'var(--acc)') + ';color:#fff;');
     btn.onclick = b[1]; bb.appendChild(btn);
+    if (b[4] === 'enter') { pop._enterBtn = btn; btn.innerHTML = aitmEsc(b[0]) + ' <span style="opacity:.65;font-weight:400;">↵</span>'; btn.title = 'Enter'; }
     if (b[1] === aitmCloseModal && pop._ack) {
       // "Close ↵" while the body has nothing to fill in or choose (bodies filled later are watched)
       var body = card.children[1], focused = false;
@@ -2352,10 +2353,20 @@ function aitmModal(title, body, buttons, wide) {
 // something to fill in or choose inside the dialog body → Enter does not close it
 function aitmModalBusy(body) { return !!(body && body.querySelector('input:not([type=hidden]),select,textarea,button,[contenteditable="true"]')); }
 // Enter = Close for a pure message (only a Close button, nothing to fill in), so no trip to the mouse
+// A dialog with a default button (Save as txt: Save): Enter presses it — also from the name field —
+// unless the focus is on another button of the dialog (Enter presses that one) or in a multi-line text.
 document.addEventListener('keydown', function (e) {
   if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
-  var pop = document.getElementById('aitm-modal'); if (!pop || !pop._ack) return;
-  var card = pop.firstChild, t = e.target;
+  var pop = document.getElementById('aitm-modal'); if (!pop) return;
+  var t = e.target;
+  if (pop._enterBtn && document.body.contains(pop._enterBtn)) {
+    if (t && pop.contains(t) && (t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || (t.tagName === 'BUTTON' && t !== pop._enterBtn) || t.isContentEditable)) return;
+    e.preventDefault(); e.stopPropagation();
+    if (!pop._enterBtn.disabled) pop._enterBtn.click();
+    return;
+  }
+  if (!pop._ack) return;
+  var card = pop.firstChild;
   if (t && pop.contains(t) && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
   if (card && aitmModalBusy(card.children[1])) return;
   e.preventDefault(); e.stopPropagation();
@@ -2788,7 +2799,7 @@ async function aitmSaveTxt() {
     + '<div style="font-size:11px;color:var(--txt3);margin-top:12px;line-height:1.5;">Saved as it is compiled: aircraft sorted by size (AC#1 = largest), the same aircraft only once, aircraft without flights left out.</div>'
     + (ckErrs.length ? '<div style="font-size:11px;color:#f0b400;margin-top:6px;line-height:1.5;">⚠ Check flightplans finds ' + ckErrs.length + ' error' + (ckErrs.length === 1 ? '' : 's') + ' (' + aitmEsc(ckErrs[0].slice(0, 90)) + (ckErrs.length > 1 ? ' …' : '') + ') — this plan cannot be compiled yet. It is saved anyway.</div>' : '')
     + '<div id="aitm-sv-msg" style="font-size:11px;margin-top:10px;min-height:14px;line-height:1.5;"></div>',
-    [['Save', function () { aitmSaveTxtGo(places); }, false, '#238636'], ['Download instead', function () { aitmSaveTxtGo(null); }, true]]);
+    [['Save', function () { aitmSaveTxtGo(places); }, false, '#238636', 'enter'], ['Download instead', function () { aitmSaveTxtGo(null); }, true]]);
   var inp = card.querySelector('#aitm-sv-name');
   var show = function () { var b = inp.value.trim(); card.querySelector('#aitm-sv-files').textContent = b ? 'Flightplans_' + b + '.txt · Aircraft_' + b + '.txt · Airports_' + b + '.txt' : ''; card.querySelector('#aitm-sv-msg').textContent = ''; aitm._svConfirm = null; };
   inp.addEventListener('input', show); show();
