@@ -915,7 +915,7 @@ function aitmOpenTxt(O) {
 }
 // folders Chrome allows right now — never asks
 async function aitmOtGrantedRoots() {
-  var out = [], c = [];
+  var out = (aitm._freshDirs || []).slice(), c = [];          // picked in the Windows folder window this session
   try { var fp = await aitmKvGet('fpRoot'); if (fp) c.push(fp); c = c.concat((await aitmKvGet('txtDirs')) || []); } catch (e) {}
   if (aitm._srcDir && aitm._srcDir.h) c.push(aitm._srcDir.h);
   var st = await Promise.all(c.map(function (h) { return aitmQP(h); }));     // all at once: at most 1.5 s
@@ -1130,27 +1130,50 @@ async function aitmOpenTxtPicked(O, files) {
     if (kind === 'fp') fp = files[i]; else if (kind === 'ac') ac = files[i]; else if (kind === 'ap') ap = files[i];
   }
   if (!fp) { aitmToast('Select the Flightplans_….txt file.', true); return; }
-  var src = null;
   var wrap = function (f) { return f ? { name: f.name, getFile: function () { return Promise.resolve(f); } } : null; };
-  var go = function () { return aitmOtDone(O, wrap(fp), wrap(ac), wrap(ap), src); };
+  aitmTxtCompanions(fp, ac, ap, function (r) { aitmOtDone(O, wrap(fp), wrap(r.ac), wrap(r.ap), r.src); });
+}
+// Aircraft_/Airports_ for a picked Flightplans_ file (also used by the AI Generator's import): from a folder Chrome
+// allows (asks nothing); otherwise — Chrome lets the page read a folder only after it was picked in the Windows
+// folder window (its permission question does not answer on the user's PC) — one dialog: choose the flight plan
+// folder once per session (then always automatic), pick Aircraft_ by hand, or load without it.
+async function aitmTxtCompanions(fp, ac, ap, done) {
+  var src = null;
   if (!ac) {
-    // Aircraft_/Airports_ from the folders Chrome still allows — at most 5 s, then one more click
     aitmToast('Looking for Aircraft_ next to ' + fp.name + ' …');
     var sib = null;
-    try { sib = await Promise.race([aitmFindTxtSiblings(fp), new Promise(function (r) { setTimeout(function () { r(null); }, 5000); })]); } catch (e) { sib = null; }
-    if (sib) {
-      if (sib.ac) ac = await sib.ac.getFile();
+    try { sib = await Promise.race([aitmFindTxtSiblings(fp), new Promise(function (r) { setTimeout(function () { r(null); }, 8000); })]); } catch (e) { sib = null; }
+    if (sib && sib.ac) {
+      ac = await sib.ac.getFile();
       if (!ap && sib.ap) ap = await sib.ap.getFile();
       src = { h: sib.dir, label: sib.label };
     }
   }
-  if (ac) { await go(); return; }
+  var go = function () { done({ ac: ac, ap: ap, src: src }); };
+  if (ac) { go(); return; }
   var want = 'Aircraft' + fp.name.replace(/^flightplans/i, '');
-  aitmModal('One more click: ' + aitmEsc(want),
-    '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome does not let the page take <b>' + aitmEsc(want) + '</b> from the folder by itself. '
-    + 'Click <b>Select ' + aitmEsc(want) + '</b> and pick it (Airports_ too, if you like — Ctrl+click).<br>'
-    + '<span style="color:var(--txt3);">Faster next time: in the first window select Flightplans_ and Aircraft_ together (Ctrl+click).</span></div>',
-    [['Select ' + want, function () {
+  var chooseFolder = function () {
+    window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }).then(async function (d) {
+      aitm._freshDirs = (aitm._freshDirs || []).concat([d]);
+      try { await aitmKvSet('fpRoot', d); } catch (e) {}
+      var msg = document.getElementById('aitm-ac-msg'); if (msg) { msg.style.color = 'var(--txt3)'; msg.textContent = 'Looking for ' + want + ' in “' + d.name + '” …'; }
+      var sib2 = await aitmFindTxtSiblings(fp);
+      if (!sib2 || !sib2.ac) {
+        msg = document.getElementById('aitm-ac-msg');
+        if (msg) { msg.style.color = '#f0b400'; msg.textContent = fp.name + ' is not inside “' + d.name + '” — choose the folder that holds it (or one above).'; }
+        return;
+      }
+      ac = await sib2.ac.getFile(); if (!ap && sib2.ap) ap = await sib2.ap.getFile();
+      src = { h: sib2.dir, label: sib2.label };
+      aitmCloseModal(); go();
+    }, function () {});
+  };
+  aitmModal('Load ' + aitmEsc(want) + ' automatically',
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">To take <b>Aircraft_</b> and <b>Airports_</b> from the same folder by itself, Chrome needs your flight plan folder '
+    + '<b>once per session</b>: click <b>Choose folder…</b>, pick <b>Fligthplans - Fictional and vintage</b> (or the folder of this file), '
+    + 'then “Select folder” and “View files”. After that every Flightplans_ you open comes with its Aircraft_.</div>'
+    + '<div id="aitm-ac-msg" style="font-size:12px;color:var(--txt3);margin-top:8px;"></div>',
+    [['Choose folder…', chooseFolder], ['Select ' + want + ' by hand', function () {
       var old2 = document.getElementById('aitm-txt-input2'); if (old2) old2.remove();
       var i2 = document.createElement('input'); i2.id = 'aitm-txt-input2'; i2.type = 'file'; i2.accept = '.txt'; i2.multiple = true; i2.style.display = 'none';
       document.body.appendChild(i2);
@@ -1159,7 +1182,7 @@ async function aitmOpenTxtPicked(O, files) {
         aitmCloseModal(); go();
       });
       i2.click();
-    }], ['Load without it', function () { aitmCloseModal(); go(); }, true]]);
+    }, true], ['Load without it', function () { aitmCloseModal(); go(); }, true]]);
 }
 function aitmReadText(file) {
   return file.arrayBuffer().then(function (b) {

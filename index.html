@@ -7436,10 +7436,12 @@ async function aiGenAlImportFiles(fileList){
   if (!files.length) return;
   const txt=files.filter(f=>/\.txt$/i.test(f.name));
   if (!txt.length) { aiGenAlImportXls(files[0]); return; }
-  // only Flightplans_ picked: Aircraft_ of the same name from its folder, where Chrome still allows it (no question)
+  // only Flightplans_ picked: Aircraft_ of the same name from its folder (as in Open txt of the AI Traffic Manager:
+  // automatic once the flight plan folder was chosen in this session, else one dialog)
   const fp=txt.find(f=>/^flightplans/i.test(f.name));
-  if (fp && !txt.some(f=>/^aircraft/i.test(f.name)) && typeof aitmFindTxtSiblings==='function') {
-    try { const sib=await aitmFindTxtSiblings(fp); if (sib && sib.ac) txt.push(await sib.ac.getFile()); } catch(e) {}
+  if (fp && !txt.some(f=>/^aircraft/i.test(f.name)) && typeof aitmTxtCompanions==='function') {
+    aitmTxtCompanions(fp, null, null, r => { if (r.ac) txt.push(r.ac); aiGenAlImportTTools(txt); });
+    return;
   }
   aiGenAlImportTTools(txt);
 }
@@ -13434,7 +13436,7 @@ window.addEventListener('focus', () => {
   if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
 });
 </script>
-<script src="aitm.js?v=20261120u"></script>
+<script src="aitm.js?v=20261120v"></script>
 <script src="mobile.js"></script>
 </body>
 </html>
