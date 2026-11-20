@@ -7430,12 +7430,17 @@ function aiGenAlImportClick() {
     try { inp.click(); } catch (x) {}
   });
 }
-function aiGenAlImportFiles(fileList){
+async function aiGenAlImportFiles(fileList){
   const files=[...(fileList||[])];
   if (!files.length) return;
   const txt=files.filter(f=>/\.txt$/i.test(f.name));
-  if (txt.length) aiGenAlImportTTools(txt);
-  else aiGenAlImportXls(files[0]);
+  if (!txt.length) { aiGenAlImportXls(files[0]); return; }
+  // only Flightplans_ picked: Aircraft_ of the same name from its folder, where Chrome still allows it (no question)
+  const fp=txt.find(f=>/^flightplans/i.test(f.name));
+  if (fp && !txt.some(f=>/^aircraft/i.test(f.name)) && typeof aitmFindTxtSiblings==='function') {
+    try { const sib=await aitmFindTxtSiblings(fp); if (sib && sib.ac) txt.push(await sib.ac.getFile()); } catch(e) {}
+  }
+  aiGenAlImportTTools(txt);
 }
 
 // Multi-stop flights (both schedule modes). Row B continues the flight of row A when B
@@ -13428,7 +13433,7 @@ window.addEventListener('focus', () => {
   if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
 });
 </script>
-<script src="aitm.js?v=20261120r"></script>
+<script src="aitm.js?v=20261120s"></script>
 <script src="mobile.js"></script>
 </body>
 </html>
