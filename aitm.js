@@ -900,18 +900,66 @@ function aitmOtDone(O, fpH, acH, apH, src) {
 // still allows the folder (checked ahead, without asking) → the list as before; otherwise → the Windows file
 // window opens directly, like Open BGL. Aircraft_/Airports_ of the same name are then taken from the folders
 // Chrome still allows (without asking); if that is not possible, one more click picks Aircraft_.
+// queryPermission with a verdict for a DEAD folder entry: on the user's PC the folders saved before a Chrome update
+// never answer (checked in his Chrome: old entries hang, a folder picked again answers at once).
+function aitmQPx(h, mode) {
+  return Promise.race([
+    Promise.resolve().then(function () { return h.queryPermission({ mode: mode || 'read' }); }).catch(function () { return 'broken'; }),
+    new Promise(function (r) { setTimeout(function () { r('broken'); }, 1500); })
+  ]);
+}
+// Read ahead (page load, tab opened, back in the window) so the click knows at once what to do; dead entries are
+// dropped, so they are chosen again once and never block anything again.
 function aitmOtPrefetch() {
   if (!window.showDirectoryPicker) return Promise.resolve();
-  return aitmKvGet('fpRoot').then(function (h) {
-    if (!h) { aitm._otGranted = false; return; }
-    return aitmQP(h).then(function (st) { aitm._otGranted = st === 'granted'; });
-  }).catch(function () { aitm._otGranted = false; });
+  return Promise.all([aitmKvGet('fpRoot'), aitmKvGet('txtDirs')]).then(function (v) {
+    var h = v[0], dirs = v[1] || [];
+    var checks = [h ? aitmQPx(h) : Promise.resolve('none')].concat(dirs.map(function (d) { return aitmQPx(d); }));
+    return Promise.all(checks).then(function (st) {
+      if (st[0] === 'broken') { aitmKvSet('fpRoot', null); h = null; st[0] = 'none'; }
+      var keep = dirs.filter(function (d, i) { return st[i + 1] !== 'broken'; });
+      if (keep.length !== dirs.length) aitmKvSet('txtDirs', keep);
+      aitm._fpH = h; aitm._otState = st[0];
+      aitm._otGranted = st[0] === 'granted';
+    });
+  }).catch(function () { aitm._otState = 'none'; });
 }
+// Open txt — one click: the list of only the Flightplans_ files; a click on one loads it with Aircraft_ and Airports_.
+//  · Chrome allows the flight plan folder → the list at once
+//  · after a Chrome restart → Chrome's question, asked inside this click: "Allow on every visit" = never again
+//  · no folder yet (or its entry was dead) → the Windows folder window once: pick "Fligthplans - Fictional and vintage"
 function aitmOpenTxt(O) {
   O = O || {};
-  if (window.showDirectoryPicker && aitm._otGranted) { aitmOpenTxtList0(O); return; }
-  if (O.input) { O.input(); return; }
-  aitmOpenTxtInput(O);
+  if (!window.showDirectoryPicker) { if (O.input) O.input(); else aitmOpenTxtInput(O); return; }
+  var st = aitm._otState, h = aitm._fpH;
+  if (st === 'granted' && h) { aitmOpenTxtList0(O); return; }
+  if (h && (st === 'prompt' || st === 'denied')) {
+    var p; try { p = h.requestPermission({ mode: 'read' }); } catch (e) { p = Promise.reject(e); }
+    Promise.race([p.catch(function () { return 'denied'; }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 30000); })]).then(function (r) {
+      if (r === 'granted') { aitm._otState = 'granted'; aitmOpenTxtList0(O); return; }
+      aitmModal((O.name || 'Open txt'), '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome did not allow the flight plan folder. Choose it again (Windows folder window) — '
+        + 'and next time pick <b>“Allow on every visit”</b> in Chrome’s question.</div>',
+        [['Choose folder…', function () { aitmCloseModal(); aitmOtPickRoot(O); }], ['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }, true]]);
+    });
+    return;
+  }
+  if (st === undefined) { aitmOpenTxtList0(O); return; }          // not read yet (first second after loading)
+  aitmOtPickRoot(O);
+}
+// the Windows folder window — your flight plan folder, once (Chrome then asks "View files?")
+function aitmOtPickRoot(O) {
+  aitmToast('Choose your flight plan folder once — e.g. “Fligthplans - Fictional and vintage” (all its sub folders count).');
+  var p; try { p = window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); } catch (e) { p = Promise.reject(e); }
+  p.then(async function (d) {
+    try { await aitmKvSet('fpRoot', d); } catch (e) {}
+    aitm._fpH = d; aitm._otState = 'granted'; aitm._otGranted = true;
+    aitm._freshDirs = [d];
+    aitmOpenTxtList0(O);
+  }, function (e) {
+    if (e && e.name === 'AbortError') { aitmToast(''); return; }
+    aitmModal((O.name || 'Open txt'), '<div style="font-size:13px;color:var(--txt2);">Chrome did not open the folder window: ' + aitmEsc(e && e.message || String(e)) + '</div>',
+      [['Pick the files…', function () { aitmCloseModal(); if (O.input) O.input(); else aitmOpenTxtInput(O); }]]);
+  });
 }
 // folders Chrome allows right now — never asks
 async function aitmOtGrantedRoots() {
@@ -945,11 +993,12 @@ async function aitmOpenTxtList0(O) {
   var say = O.say || aitmToast, nm = O.name || 'Open txt';
   if (!window.showDirectoryPicker) { if (O.input) O.input(); else aitmOpenTxtInput(); return; }
   var roots = [], fpRoot = await aitmKvGet('fpRoot'), extra = (await aitmKvGet('txtDirs')) || [];
+  var TO = function (pr) { return Promise.race([pr, new Promise(function (r) { setTimeout(function () { r(null); }, 1500); })]); };
   if (fpRoot) roots.push(fpRoot);
   for (var i = 0; i < extra.length; i++) {
     var dup = false;
-    for (var j = 0; j < roots.length && !dup; j++) { try { if (await roots[j].isSameEntry(extra[i])) dup = true; else if (await roots[j].resolve(extra[i])) dup = true; } catch (e) {} }
-    if (!dup) roots.push(extra[i]);
+    for (var j = 0; j < roots.length && !dup; j++) { try { if (await TO(roots[j].isSameEntry(extra[i]))) dup = true; else if (await TO(roots[j].resolve(extra[i]))) dup = true; } catch (e) {} }
+    if (!dup && (await aitmQPx(extra[i])) !== 'broken') roots.push(extra[i]);
   }
   if (!roots.length) {
     aitmModal(aitmEsc(nm) + ' — your flight plan folder',
@@ -2697,7 +2746,13 @@ async function aitmCompile() {
   if (dir && window.showDirectoryPicker) {
     // Chrome's permission question does not answer on the user's PC: no waiting for it. Allowed → written at
     // once; otherwise a dialog: choose the folder (the Windows window gives the OK) or download.
-    if ((await aitmQP(dir, 'readwrite')) === 'granted') { if (await write(dir)) return; }
+    var pst = await aitmQPx(dir, 'readwrite');
+    if (pst === 'prompt' || pst === 'denied') {
+      // after a Chrome restart: Chrome's question ("Allow on every visit" = never again)
+      try { pst = await Promise.race([dir.requestPermission({ mode: 'readwrite' }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 30000); })]); } catch (e) { pst = 'denied'; }
+    }
+    if (pst === 'broken') { try { await aitmKvSet('outFolder', null); } catch (e) {} }   // dead entry: chosen again once below
+    if (pst === 'granted') { if (await write(dir)) return; }
     aitmModal('Compile — write into “' + aitmEsc(dir.name) + '”',
       '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">' + aitmEsc(name) + ' is compiled (' + aitmEsc(info) + ').<br>'
       + 'Chrome does not let the page write into <b>' + aitmEsc(dir.name) + '</b> right now. Click <b>Choose folder…</b> and pick it again in the Windows window '
