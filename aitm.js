@@ -950,21 +950,56 @@ function aitmOtDone(O, fpH, acH, apH, src) {
   if (O && O.onPick) return Promise.resolve(O.onPick(fpH, acH, apH, src));
   return aitmLoadTxtHandles(fpH, acH, apH).then(function () { if (src) aitm._srcDir = src; });
 }
-async function aitmOpenTxt(O) {
+// The flight plan folder and whether Chrome still allows it are read AHEAD (tab opened, back in the window), so
+// that a click on Open txt knows at once what to do: Chrome only opens its folder window directly inside a click.
+function aitmOtPrefetch() {
+  return aitmKvGet('fpRoot').then(function (h) {
+    aitm._fpRootH = h || null;
+    if (!h) { aitm._fpPerm = 'none'; return; }
+    return h.queryPermission({ mode: 'read' }).then(function (st) { aitm._fpPerm = st; }, function () { aitm._fpPerm = 'prompt'; });
+  }).catch(function () {});
+}
+function aitmOtLog(m) { try { console.info('[Open txt] ' + m); } catch (e) {} }
+// something went wrong: say it in a dialog (never "nothing happens"), with two ways that always work
+function aitmOtTrouble(O, why) {
+  aitmOtLog('trouble: ' + why);
+  aitmModal((O && O.name) || 'Open txt',
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">' + why + '</div>',
+    [['Choose the flight plan folder…', function () {
+      window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }).then(function (n) {
+        return aitmKvSet('fpRoot', n).then(function () { aitm._fpRootH = n; aitm._fpPerm = 'granted'; aitmCloseModal(); aitmOpenTxt(O); });
+      }, function (e) { if (!(e && e.name === 'AbortError')) aitmOtLog('folder window: ' + (e && e.message)); });
+    }], ['Pick the files…', function () { aitmCloseModal(); if (O && O.input) O.input(); else aitmOpenTxtInput(); }, true]]);
+}
+function aitmOpenTxt(O) {
   O = O || {};
-  var nm = O.name || 'Open txt';
   if (!window.showDirectoryPicker) { if (O.input) O.input(); else aitmOpenTxtInput(); return; }
+  aitmOtLog('click · folder ' + (aitm._fpRootH ? aitm._fpRootH.name : '?') + ' · Chrome: ' + (aitm._fpPerm || 'not read yet'));
+  // Chrome forgot its OK for the flight plan folder (after a restart …): the Windows folder window opens right
+  // away, inside this click, at that folder — "Select folder" + "View files" gives it back, then the list.
+  if (aitm._fpRootH && aitm._fpPerm && aitm._fpPerm !== 'granted') {
+    var t0 = Date.now();
+    var pick = function (opt) { return window.showDirectoryPicker(opt); };
+    var p;
+    try { p = pick({ id: 'aitm-fproot', mode: 'read', startIn: aitm._fpRootH }); } catch (e) { p = Promise.reject(e); }
+    p.then(function (n) {
+      return aitmKvSet('fpRoot', n).then(function () { aitm._fpRootH = n; aitm._fpPerm = 'granted'; aitmOpenTxtGo(O); });
+    }, function (e) {
+      if (e && e.name === 'AbortError' && Date.now() - t0 > 600) return;          // you closed the folder window
+      aitmOtTrouble(O, 'Chrome did not open the folder window (' + aitmEsc(e && e.message || String(e)) + ').<br>Choose the flight plan folder here — or pick the files directly.');
+    });
+    return;
+  }
+  aitmOpenTxtGo(O).catch(function (e) { aitmOtTrouble(O, 'Open txt failed: ' + aitmEsc(e && e.message || String(e))); });
+}
+async function aitmOpenTxtGo(O) {
+  var nm = O.name || 'Open txt';
   var roots = [], fpRoot = await aitmKvGet('fpRoot'), extra = (await aitmKvGet('txtDirs')) || [];
-  // Chrome forgot its OK for the flight plan folder (e.g. after a restart): the Windows folder window opens
-  // right away at that folder — "Select folder" + "View files" gives it back. (Chrome's own question did not
-  // show on the user's PC, and the page then waited without any sign.)
-  if (fpRoot && (await fpRoot.queryPermission({ mode: 'read' })) !== 'granted') {
-    try { fpRoot = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read', startIn: fpRoot }); }
-    catch (e) {
-      if (e && e.name === 'AbortError') return;
-      try { fpRoot = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); } catch (e2) { return; }
-    }
-    await aitmKvSet('fpRoot', fpRoot);
+  aitm._fpRootH = fpRoot || null;
+  if (fpRoot) {
+    aitm._fpPerm = await fpRoot.queryPermission({ mode: 'read' });
+    // not known ahead: one more click (Chrome opens its folder window only directly inside a click)
+    if (aitm._fpPerm !== 'granted') { aitmOtTrouble(O, 'Chrome needs your flight plan folder “<b>' + aitmEsc(fpRoot.name) + '</b>” once more: click <b>Choose the flight plan folder…</b>, then “Select folder” and “View files”.'); return; }
   }
   if (fpRoot) roots.push(fpRoot);
   for (var i = 0; i < extra.length; i++) {
@@ -1242,7 +1277,7 @@ function aitmInit() {
       aitmLnaState().then(function (st) { aitm._lna = st; aitm._lnaKnown = true; aitmFleetCheck('open'); });
     });
     // back in this window (after deleting an aircraft or changing a title in Explorer / MSFS): check again
-    window.addEventListener('focus', function () { if (aitmVisible()) aitmFleetCheck('focus'); });
+    window.addEventListener('focus', function () { aitmOtPrefetch(); if (aitmVisible()) aitmFleetCheck('focus'); });
     document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && aitmVisible()) aitmFleetCheck('focus'); });
     aitmKvSet('acFolders', []);
     document.addEventListener('keydown', function (e) {
@@ -1261,6 +1296,7 @@ function aitmInit() {
   aitmRenderAll();
   if (!aitm.logoUrl) aitmFindLogo();
   if (aitm._lnaKnown) aitmFleetCheck('open');               // the tab is opened again: still installed?
+  aitmOtPrefetch();                                           // Open txt knows at once whether Chrome allows the folder
 }
 function aitmRenderAll() {
   if (!document.getElementById('aitm-legs')) return;
@@ -3263,3 +3299,5 @@ async function aitmImOpen(i) {
 }
 
 if (typeof module !== 'undefined') module.exports.ui = { aitmTypeSig: aitmTypeSig, aitmSplitBase: aitmSplitBase, aitmCfgEntries: aitmCfgEntries };
+// read ahead once the page is there (Import TTools in the AI Generator uses Open txt as well)
+setTimeout(function () { if (window.showDirectoryPicker && typeof aitmOtPrefetch === 'function') aitmOtPrefetch(); }, 1200);
