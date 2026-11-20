@@ -743,6 +743,7 @@ function aitmReadAircraftFolder() {
     aitm.sources = (aitm.sources || []).filter(function (x) { return x.name !== root; })
       .concat([{ name: root, src: src, cfg: ncfg, liveries: entries.length, files: files.length, at: Date.now() }]);
     await aitmKvSet('fleetCache', { at: Date.now(), list: aitm.fleet, sources: aitm.sources, meta: aitm.fleetMeta });
+    aitm.fleetOk = aitm.fleetAt = Date.now(); aitm._checkErr = null;
     aitmFleetIndex(); aitmRenderAll();
     aitm.logos = null; aitmFindLogo(false);
     var lost = aitm.ac.filter(function (a) { return wasInst[a.n] && !aitmInstalled(a.title); });
@@ -760,6 +761,70 @@ async function aitmForgetSource(name) {
   if (aitm.fleetMeta) delete aitm.fleetMeta[name];
   await aitmKvSet('fleetCache', { at: Date.now(), list: aitm.fleet, sources: aitm.sources, meta: aitm.fleetMeta || {} });
   aitmFleetIndex(); aitmRenderAll(); aitmFoldersDialog();
+}
+// ── Are the plan's aircraft still installed? ──
+// The installed list is a copy (Rotation Map's scan, kept in this browser). So that an aircraft you deleted, or
+// whose title you changed, does not stay green, the list is read again — fresh, in the background — whenever
+// the AI Traffic Manager is opened, a plan is loaded, or you come back to this window (at most every 30 s).
+// aitm.fleetOk: time of the last successful read in this page session. Without it (Rotation Map not running,
+// Chrome does not allow the background request) the dots are yellow: "installed at the last check, not checked now".
+function aitmVisible() { var v = document.getElementById('view-aitm'); return !!(v && v.style.display !== 'none' && v.offsetParent !== null); }
+function aitmCanCheck() {
+  var rmOk = false; try { rmOk = localStorage.getItem('aitm_rm_ok') === '1'; } catch (e) {}
+  return rmOk || aitm._lna === 'granted';
+}
+function aitmFleetCheck(why) {
+  if (aitm._updating) return;
+  if (!aitmCanCheck()) { aitm._checkErr = aitm._checkErr || 'manual'; aitmRenderAircraft(); aitmRenderFleet(); return; }
+  var now = Date.now(), gap = why === 'focus' ? 120000 : 30000;   // Rotation Map reads every aircraft.cfg again: not on every window switch
+  if (aitm._lastCheckTry && now - aitm._lastCheckTry < gap) { if (why === 'load') setTimeout(function () { aitmWarnMissing(); }, 50); return; }
+  aitm._lastCheckTry = now;
+  aitmUpdateInstalled({ silent: true });
+}
+// placeholder titles of the AI Generator (no aircraft assigned yet) — red, but no "no longer installed" warning
+function aitmIsPlaceholder(t) { return /^AC#\d+$/i.test(t) || /^AIGAIM_[A-Z0-9]{2,4}\s+\S+\s+NCv2$/.test(t); }
+function aitmMissingAc() {
+  if (!aitm.fleet.length) return [];
+  return aitm.ac.filter(function (a) { return a.title && !aitmIsPlaceholder(a.title) && !aitmInstalled(a.title); });
+}
+// a warning (once for each set of missing aircraft) — with the new title when only the title was changed:
+// same package, folder and texture as before, now under another title
+function aitmWarnMissing(oldFleet, tries) {
+  if (!aitm.fleet.length || !aitm.fleetOk) return;
+  var miss = aitmMissingAc();
+  if (!miss.length) { aitm._warnSig = ''; return; }
+  var sig = (aitm.fileBase || '') + '|' + miss.map(function (a) { return a.n + ':' + a.title.toLowerCase(); }).join('|');
+  if (sig === aitm._warnSig || !aitmVisible()) return;
+  if (document.getElementById('aitm-modal')) { if ((tries || 0) < 20) setTimeout(function () { aitmWarnMissing(oldFleet, (tries || 0) + 1); }, 1500); return; }
+  aitm._warnSig = sig;
+  var old = {}; (oldFleet || aitm._prevFleet || []).forEach(function (e) { old[String(e.title).toLowerCase()] = e; });
+  var renamed = {};
+  miss.forEach(function (a) {
+    var o = old[a.title.toLowerCase()]; if (!o) return;
+    var c = aitm.fleet.filter(function (e) { return !old[String(e.title).toLowerCase()] && (e.root || '') === (o.root || '') && (e.folder || '') === (o.folder || '') && (e.texture || '') === (o.texture || ''); });
+    if (c.length === 1) renamed[a.n] = c[0];
+  });
+  var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
+  var nRen = Object.keys(renamed).length;
+  aitmModal('⚠ Aircraft no longer installed',
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.6;margin-bottom:10px;">' + (miss.length === 1 ? 'This aircraft' : 'These ' + miss.length + ' aircraft') + ' of the plan ' + (miss.length === 1 ? 'is' : 'are')
+    + ' not installed in MSFS (anymore) — deleted, or the title was changed. ' + (miss.length === 1 ? 'Its' : 'Their') + ' flight plans would not appear in the sim.</div>'
+    + '<div style="max-height:300px;overflow:auto;border:1px solid var(--bdr);border-radius:6px;padding:6px 10px;">'
+    + miss.map(function (a) {
+        var r = renamed[a.n];
+        return '<div style="display:flex;gap:8px;align-items:baseline;padding:3px 0;font-size:12px;">'
+          + '<span style="width:8px;height:8px;border-radius:50%;background:#f85149;flex-shrink:0;align-self:center;"></span>'
+          + '<span style="font-family:monospace;color:var(--txt3);min-width:44px;">AC#' + a.n + '</span>'
+          + '<span style="flex:1;min-width:0;"><b style="color:#fff;">' + aitmEsc(a.title) + '</b> <span style="color:var(--txt3);">· ' + (use[a.n] || 0) + ' FP</span>'
+          + (r ? '<br><span style="color:#f0b400;">title changed → ' + aitmEsc(r.title) + '</span>' : '') + '</span></div>';
+      }).join('') + '</div>'
+    + '<div style="font-size:12px;color:var(--txt3);margin-top:10px;line-height:1.6;">' + (nRen ? 'Use the new title' + (nRen > 1 ? 's' : '') + ' — or d' : 'D')
+    + 'rag the right livery from the AI aircraft fleet (right) onto the red aircraft.</div>',
+    nRen ? [['Use the new title' + (nRen > 1 ? 's' : ''), function () {
+      Object.keys(renamed).forEach(function (n) { var a = aitm.ac.filter(function (x) { return String(x.n) === String(n); })[0], e = renamed[n]; if (a && e) { a.title = e.title; if (e.speed) a.speed = e.speed; a.wing = e.wing || 0; } });
+      aitmCloseModal(); aitmConsolidateAc(); aitmSave(); aitmRenderAll();
+      aitmToast('New title' + (nRen > 1 ? 's' : '') + ' set: ' + Object.keys(renamed).map(function (n) { return 'AC#' + n + ' ' + renamed[n].title; }).join(', ') + '.');
+    }, false, null, 'enter']] : []);
 }
 function aitmFleetIndex() {
   aitm.byTitle = {};
@@ -856,6 +921,7 @@ function aitmGuessCode() {
   return best;
 }
 function aitmLoad(d) {
+  setTimeout(function () { aitm._warnSig = ''; aitmFleetCheck('load'); }, 400);   // are its aircraft installed?
   aitm.ac = d.aircraft; aitm.plans = d.plans; aitm.apx = d.apx || {}; aitm.sortSig = ''; aitm.checkSig = ''; aitm.compiledSig = ''; aitm.savedSig = ''; aitm.checkErrs = 0; aitm._srcDir = null;
   aitmNormAc();
   var merged = aitmConsolidateAc();                         // the same aircraft twice → one AC#
@@ -1361,12 +1427,14 @@ function aitmInit() {
     aitm.inited = true;
     aitmRestore();
     aitmKvGet('fleetCache').then(function (c) {
-      if (c && c.list && !aitm.fleet.length) { aitm.fleet = c.list.filter(function (e) { return e.root; }); aitm.sources = c.sources || []; aitm.fleetMeta = c.meta || {}; aitmFleetIndex(); aitmRenderAll(); }
+      if (c && c.list && !aitm.fleet.length) { aitm.fleet = c.list.filter(function (e) { return e.root; }); aitm.sources = c.sources || []; aitm.fleetMeta = c.meta || {}; aitm.fleetAt = c.at || null; aitmFleetIndex(); aitmRenderAll(); }
       // once Rotation Map has answered: read the installed aircraft again whenever the tab is opened
       // (background request only - no window pops up when the tab opens; Chrome must allow it, see aitmLnaState)
-      var rmOk = false; try { rmOk = localStorage.getItem('aitm_rm_ok') === '1'; } catch (e) {}
-      aitmLnaState().then(function (st) { aitm._lna = st; if (rmOk || st === 'granted') aitmUpdateInstalled({ silent: true }); });
+      aitmLnaState().then(function (st) { aitm._lna = st; aitm._lnaKnown = true; aitmFleetCheck('open'); });
     });
+    // back in this window (after deleting an aircraft or changing a title in Explorer / MSFS): check again
+    window.addEventListener('focus', function () { if (aitmVisible()) aitmFleetCheck('focus'); });
+    document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && aitmVisible()) aitmFleetCheck('focus'); });
     aitmKvSet('acFolders', []);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') aitmCloseModal();
@@ -1383,6 +1451,7 @@ function aitmInit() {
   }
   aitmRenderAll();
   if (!aitm.logoUrl) aitmFindLogo();
+  if (aitm._lnaKnown) aitmFleetCheck('open');               // the tab is opened again: still installed?
   aitmOtPrefetch();                            // Open txt: list (Chrome allows the folder) or the Windows window
 }
 function aitmRenderAll() {
@@ -1468,7 +1537,11 @@ function aitmPlanHtml(p, i) {
     + '<span class="aitm-tn" title="' + aitmEsc(tn) + '">' + aitmEsc(tn || '?') + '</span>'
     + '<span class="aitm-3d aitm-pl3d" title="Show ' + aitmEsc(a ? a.title : 'this aircraft') + ' in the 3D viewer (Rotation map\\Viewer, opened by Rotation Map on this PC)">3D</span> '
     + (sel ? '<span class="aitm-pldel" title="Delete this flight plan' + (aitm.sel.length > 1 ? ' (and the other selected ones)' : '') + ' — or press Del">🗑</span> ' : '')
-    + '<span class="aitm-chip" data-i="' + i + '" title="Click to give this flight plan (or all selected ones) another AC#">AC#' + p.ac + '</span>'
+    + (function () {
+        var miss = a && aitm.fleet.length && !aitmInstalled(a.title);
+        return '<span class="aitm-chip" data-i="' + i + '"' + (miss ? ' style="color:#f85149;border-color:#f85149;"' : '')
+          + ' title="' + (miss ? aitmEsc(a.title) + ' is NOT INSTALLED — deleted, or its title was changed. ' : '') + 'Click to give this flight plan (or all selected ones) another AC#">AC#' + p.ac + '</span>';
+      })()
     + '<span>, ' + aitmEsc(p.reg) + ', ' + (p.pct || 1) + '%, ' + aitmEsc(String(p.period).toUpperCase()) + ', ' + p.rules + ', ' + parts.join(', ') + '</span></div>';
 }
 function aitmRenderLegs() {
@@ -1553,13 +1626,25 @@ function aitmRenderAirports() {
       + '<span style="font-family:monospace;text-align:right;color:' + (n ? '#fff' : 'var(--txt3)') + ';">' + fmtN(n) + '</span></div>';
   }).join('') : '';
 }
+function aitmFleetStale() { return aitm.fleet.length > 0 && !aitm.fleetOk && (!!aitm._checkErr || !aitmCanCheck()); }
+function aitmFleetWhen() {
+  if (!aitm.fleetAt) return 'unknown';
+  var d = new Date(aitm.fleetAt), now = new Date(), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  return d.toDateString() === now.toDateString() ? 'today ' + hm : d.getDate() + '.' + (d.getMonth() + 1) + '. ' + hm;
+}
+function aitmCheckErrText() {
+  var e = aitm._checkErr;
+  return e === 'offline' ? 'Rotation Map not reachable — not running on this PC?' : e === 'timeout' ? 'Rotation Map did not answer in time'
+    : e === 'empty' ? 'Rotation Map found no aircraft' : e === 'old' ? 'Rotation Map older than 4.12.1' : 'press ⟳ Update installed aircraft';
+}
 function aitmRenderAircraft() {
   var el = document.getElementById('aitm-acs'); if (!el) return;
   var use = {}; aitm.plans.forEach(function (p) { use[p.ac] = (use[p.ac] || 0) + 1; });
   el.innerHTML = aitm.ac.map(function (a, i) {
-    var inst = aitmInstalled(a.title);
-    var dot = inst ? '#3fb950' : (aitm.fleet.length ? '#f85149' : 'var(--txt3)');
-    var tip = inst ? 'Installed (' + inst.src + ' · ' + inst.folder + ')' : (aitm.fleet.length ? 'Not found among your installed aircraft — drag one from the right' : 'Connect your aircraft folders on the right to check');
+    var inst = aitmInstalled(a.title), stale = !!inst && aitmFleetStale();
+    var dot = inst ? (stale ? '#d29922' : '#3fb950') : (aitm.fleet.length ? '#f85149' : 'var(--txt3)');
+    var tip = inst ? (stale ? 'Installed at the last check (' + aitmFleetWhen() + ') — not checked now (' + aitmCheckErrText() + '). Press ⟳ Update installed aircraft.' : 'Installed (' + inst.src + ' · ' + inst.folder + ')')
+      : (aitm.fleet.length ? (aitmIsPlaceholder(a.title) ? 'No aircraft assigned yet' : 'NOT INSTALLED — deleted, or its title was changed') + ' — drag the right livery from the fleet list onto it' : 'Connect your aircraft folders on the right to check');
     return '<div class="aitm-ac' + ((aitm.acSel || []).indexOf(a.n) >= 0 ? ' sel' : '') + '" data-i="' + i + '" title="' + aitmEsc(tip) + ' · click = select (Shift/Ctrl for more) · right-click = delete · double-click for more">'
       + '<span style="font-family:monospace;color:var(--txt3);min-width:22px;flex-shrink:0;">' + a.n + '</span>'
       + '<span style="width:8px;height:8px;border-radius:50%;background:' + dot + ';flex-shrink:0;"></span>'
@@ -1643,7 +1728,13 @@ function aitmRenderFleet() {
   }).join('') + (hidden ? '<div style="padding:8px 12px;color:#f0b400;font-size:12px;">' + hidden + ' more under <a href="#" style="color:#58a6ff;" onclick="aitmSetFleetSrc(\'all\');return false;">All</a> — the ' + (aitm.fleetSrc === 'aig' ? 'AIG' : 'Own') + ' switch hides them.</div>'
     : shown.length ? '' : '<div style="padding:12px;color:var(--txt3);font-size:12px;">Nothing matches “' + aitmEsc(q) + '”.</div>');
   if (st) st.title = hits.length > shown.length ? 'Only the first ' + shown.length + ' are listed — type more to narrow the search' : '';
-  if (st) st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' · first ' + shown.length : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
+  if (st) {
+    st.textContent = hits.length + ' of ' + aitm.fleet.length + (hits.length > shown.length ? ' · first ' + shown.length : '') + (aitm.fleetSel.length ? ' · ' + aitm.fleetSel.length + ' selected' : '');
+    var age = document.createElement('span');
+    if (aitmFleetStale()) { age.textContent = ' · ⚠ not checked since ' + aitmFleetWhen(); age.style.cssText = 'color:#f0b400;font-weight:600;'; age.title = 'The list of installed aircraft is from ' + aitmFleetWhen() + ' — ' + aitmCheckErrText() + '. Deleted aircraft or changed titles show only after ⟳ Update installed aircraft.'; }
+    else if (aitm.fleetOk) { age.textContent = ' · checked ' + aitmFleetWhen().replace(/^today /, ''); age.title = 'Installed aircraft read again ' + aitmFleetWhen() + ' (checked again when you open this tab or come back to the window)'; }
+    st.appendChild(age);
+  }
 }
 function aitmRenderBottom() {
   aitmUpdateCompileBtn();
@@ -2333,11 +2424,20 @@ async function aitmUpdateInstalled(opt) {
   if (btn) { btn.disabled = false; btn.textContent = lbl; }
   if (d.err) {
     if (viaFetch && !opt.silent) { try { localStorage.removeItem('aitm_rm_ok'); } catch (e) {} }   // next time: through the window
+    aitm._checkErr = d.err; aitmRenderAircraft(); aitmRenderFleet();           // dots: yellow (not checked now)
     if (!opt.silent) aitmRmProblem(d.err, d.msg, viaFetch);
     return;
   }
   if (viaFetch) { try { localStorage.setItem('aitm_rm_ok', '1'); } catch (e) {} }
   var entries = (d.models || []).filter(function (m) { return m.title; }).map(aitmEntryFromRM);
+  // nothing found at all (Community folder not reachable …): keep the last list instead of turning everything red
+  if (!entries.length && hadFleet) {
+    aitm._checkErr = 'empty'; aitmRenderAircraft(); aitmRenderFleet();
+    if (!opt.silent) aitmToast('Rotation Map found no installed aircraft at all — check the Community folders in its settings. The last list is kept.', true);
+    return;
+  }
+  var oldFleet = aitm.fleet.slice();
+  aitm._prevFleet = oldFleet; aitm.fleetOk = aitm.fleetAt = Date.now(); aitm._checkErr = null;
   var by = {};
   entries.forEach(function (e) { var s = by[e.root] = by[e.root] || { dirs: {}, n: 0, src: e.src }; s.dirs[e.folder] = 1; s.n++; });
   aitm.fleet = entries;
@@ -2348,6 +2448,7 @@ async function aitmUpdateInstalled(opt) {
   var missing = aitm.ac.filter(function (a) { return !aitmInstalled(a.title); });
   var addedL = hadFleet ? entries.filter(function (e) { return !oldTitles[String(e.title).toLowerCase()]; }) : [], added = addedL.length;
   aitm._lastRead = { root: 'Rotation Map', at: Date.now(), liveries: entries.length, added: added, lost: lost.map(function (a) { return { n: a.n, title: a.title }; }) };
+  aitmWarnMissing(oldFleet);
   if (opt.silent && !lost.length) return;
   aitmToast('✓ Installed aircraft updated: ' + entries.length + ' liveries in ' + aitm.sources.length + ' package' + (aitm.sources.length === 1 ? '' : 's')
     + (added ? ' · ' + added + ' new: ' + addedL.slice(0, 4).map(function (e) { return e.title; }).join(', ') + (added > 4 ? ' …' : '') : hadFleet ? ' · no new titles' : '')
