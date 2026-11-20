@@ -5497,8 +5497,9 @@ async function localLogosInit(ask) {
     const dir = await logoUploadDirGet();
     if (!dir) { _localLogoState = 'none'; localLogosPill(); return false; }
     let p = 'prompt';
-    try { p = await dir.queryPermission({ mode: 'read' }); } catch(e) {}
-    if (p !== 'granted' && ask) { try { p = await dir.requestPermission({ mode: 'read' }); } catch(e) {} }
+    // Chrome's permission calls sometimes never answer on the user's PC: never wait long for them
+    try { p = (typeof aitmQP === 'function') ? await aitmQP(dir) : await dir.queryPermission({ mode: 'read' }); } catch(e) {}
+    if (p !== 'granted' && ask) { try { p = (typeof aitmPermOk === 'function') ? ((await aitmPermOk(dir)) ? 'granted' : 'prompt') : await dir.requestPermission({ mode: 'read' }); } catch(e) {} }
     if (p !== 'granted') { _localLogoState = 'prompt'; localLogosPill(); return false; }
     const ix = {};
     for await (const e of dir.values()) {
@@ -12079,7 +12080,7 @@ async function rotMergeLoadRoot(ask) {
   const list = document.getElementById('rmg-list'); if(!list) return;
   if(!rotMerge.root){ rotMergeRenderFolder(); list.innerHTML='<div style="padding:14px;color:var(--txt2);line-height:1.6;">Choose the folder with your flight plans once (e.g. <b>CRE flightplans</b>) — it is remembered.<br><button class="aitm-btn" style="margin-top:8px;" onclick="rotMergePickFolder()">Choose folder…</button></div>'; return; }
   rotMergeRenderFolder();
-  let ok = (await rotMerge.root.queryPermission({mode:'readwrite'}))==='granted';
+  let ok = ((typeof aitmQP === 'function') ? await aitmQP(rotMerge.root, 'readwrite') : await rotMerge.root.queryPermission({mode:'readwrite'}))==='granted';
   if(!ok && ask) ok = await aitmPermOk(rotMerge.root, true);
   if(!ok){ list.innerHTML='<div style="padding:14px;color:var(--txt2);">Chrome needs your OK to read and write in <b>'+aitmEsc(rotMerge.root.name)+'</b>.<br><button class="aitm-btn" style="margin-top:8px;" onclick="aitmPermOk(rotMerge.root,true).then(function(ok){ if(ok) rotMergeLoadRoot(false); })">Allow</button></div>'; return; }
   list.innerHTML='<div style="padding:14px;color:var(--txt3);">Looking for flight plans …</div>';
@@ -13433,7 +13434,7 @@ window.addEventListener('focus', () => {
   if (v === 'rotations' || (a && a.style.display !== 'none')) aiwsCheck('focus');
 });
 </script>
-<script src="aitm.js?v=20261120s"></script>
+<script src="aitm.js?v=20261120t"></script>
 <script src="mobile.js"></script>
 </body>
 </html>

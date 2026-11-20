@@ -692,10 +692,20 @@ function aitmCfgEntries(cfgText, fmText, folder, src) {
 // Chrome treats *.cfg as a "dangerous" file type on Windows and hides it from folder access
 // (showDirectoryPicker). The classic folder upload of the browser still hands them over —
 // nothing is sent anywhere, the page only reads aircraft.cfg / flight_model.cfg locally.
+// On the user's PC Chrome's queryPermission / requestPermission for a stored folder sometimes never answer —
+// every click that waited for them did nothing. So: never wait longer than a moment ('prompt' = not allowed).
+function aitmQP(h, mode) {
+  return Promise.race([
+    Promise.resolve().then(function () { return h.queryPermission({ mode: mode || 'read' }); }).catch(function () { return 'prompt'; }),
+    new Promise(function (r) { setTimeout(function () { r('prompt'); }, 1500); })
+  ]);
+}
 async function aitmPermOk(h, write) {
-  var opt = { mode: write ? 'readwrite' : 'read' };
-  if ((await h.queryPermission(opt)) === 'granted') return true;
-  try { return (await h.requestPermission(opt)) === 'granted'; } catch (e) { return false; }
+  var mode = write ? 'readwrite' : 'read';
+  if ((await aitmQP(h, mode)) === 'granted') return true;
+  try {
+    return (await Promise.race([h.requestPermission({ mode: mode }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 15000); })])) === 'granted';
+  } catch (e) { return false; }
 }
 function aitmReadAircraftFolder() {
   var inp = document.createElement('input');
@@ -894,7 +904,7 @@ function aitmOtPrefetch() {
   if (!window.showDirectoryPicker) return Promise.resolve();
   return aitmKvGet('fpRoot').then(function (h) {
     if (!h) { aitm._otGranted = false; return; }
-    return h.queryPermission({ mode: 'read' }).then(function (st) { aitm._otGranted = st === 'granted'; }, function () { aitm._otGranted = false; });
+    return aitmQP(h).then(function (st) { aitm._otGranted = st === 'granted'; });
   }).catch(function () { aitm._otGranted = false; });
 }
 function aitmOpenTxt(O) {
@@ -908,7 +918,8 @@ async function aitmOtGrantedRoots() {
   var out = [], c = [];
   try { var fp = await aitmKvGet('fpRoot'); if (fp) c.push(fp); c = c.concat((await aitmKvGet('txtDirs')) || []); } catch (e) {}
   if (aitm._srcDir && aitm._srcDir.h) c.push(aitm._srcDir.h);
-  for (var i = 0; i < c.length; i++) { try { if ((await c[i].queryPermission({ mode: 'read' })) === 'granted') out.push(c[i]); } catch (e) {} }
+  var st = await Promise.all(c.map(function (h) { return aitmQP(h); }));     // all at once: at most 1.5 s
+  for (var i = 0; i < c.length; i++) if (st[i] === 'granted') out.push(c[i]);
   return out;
 }
 // Aircraft_/Airports_ next to a picked Flightplans_ file, in the folders Chrome allows (same name and size)
@@ -1039,7 +1050,7 @@ async function aitmOpenTxtPicker(O) {
     try { for (var k = 0; k < pp.length - 1; k++) sd = await sd.getDirectoryHandle(pp[k]); src = { h: sd, label: [dir.name].concat(pp.slice(0, -1)).join(' \\ ') }; } catch (e) {}
     await aitmOtDone(O, f, acH || sib[1], apH || sib[2], src);
   };
-  if (known && (await known.queryPermission({ mode: 'read' })) === 'granted') { await go(known); return; }
+  if (known && (await aitmQP(known)) === 'granted') { await go(known); return; }
   aitmModal('One more click: allow the folder',
     '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome lets the page read only the file you picked (<b>' + aitmEsc(anyH.name) + '</b>). '
     + 'To load <b>Flightplans' + aitmEsc(suffix) + '</b>, <b>Aircraft' + aitmEsc(suffix) + '</b> and <b>Airports' + aitmEsc(suffix) + '</b> together, '
@@ -1094,44 +1105,61 @@ async function aitmLoadTxt(fpFile, acFile, apFile) {
 // still allows their folder; otherwise one more click picks them (or select all of them at once)
 function aitmOpenTxtInput(O) {
   O = O || {};
+  // the input stays in the page while Windows' window is open (a detached one can lose its "change" event)
+  var old = document.getElementById('aitm-txt-input'); if (old) old.remove();
   var inp = document.createElement('input');
-  inp.type = 'file'; inp.accept = '.txt'; inp.multiple = true;
-  inp.onchange = async function () {
-    var files = Array.prototype.slice.call(inp.files || []), fp = null, ac = null, ap = null;
-    for (var i = 0; i < files.length; i++) {
-      var t = await aitmReadText(files[i]), n = files[i].name;
-      var kind = /^flightplans/i.test(n) ? 'fp' : /^aircraft/i.test(n) ? 'ac' : /^airports/i.test(n) ? 'ap'
-        : /AC#\d+\s*,[^,\n]*,\s*\d+%/i.test(t) ? 'fp' : /AC#\d+\s*,\s*\d*\s*,\s*"/i.test(t) ? 'ac' : /^[A-Z0-9]{3,4},[NS]\d/m.test(t) ? 'ap' : '';
-      if (kind === 'fp') fp = files[i]; else if (kind === 'ac') ac = files[i]; else if (kind === 'ap') ap = files[i];
-    }
-    if (!fp) { aitmToast('Select the Flightplans_….txt file.', true); return; }
-    var src = null;
-    if (!ac || !ap) {
-      aitmToast('Looking for Aircraft_ and Airports_ next to ' + fp.name + ' …');
-      var sib = await aitmFindTxtSiblings(fp);
-      if (sib) {
-        if (!ac && sib.ac) ac = await sib.ac.getFile();
-        if (!ap && sib.ap) ap = await sib.ap.getFile();
-        src = { h: sib.dir, label: sib.label };
-      }
-    }
-    var wrap = function (f) { return f ? { name: f.name, getFile: function () { return Promise.resolve(f); } } : null; };
-    var go = function () { aitmOtDone(O, wrap(fp), wrap(ac), wrap(ap), src); };
-    if (ac) { go(); return; }
-    var want = 'Aircraft' + fp.name.replace(/^flightplans/i, '');
-    aitmModal('One more click: ' + aitmEsc(want),
-      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome does not let the page look into the folder of <b>' + aitmEsc(fp.name) + '</b> by itself. '
-      + 'Click <b>Select ' + aitmEsc(want) + '</b> and pick it in the same folder (Airports_ too, if you like — Ctrl+click).</div>',
-      [['Select ' + want, function () {
-        var i2 = document.createElement('input'); i2.type = 'file'; i2.accept = '.txt'; i2.multiple = true;
-        i2.onchange = function () {
-          Array.prototype.slice.call(i2.files || []).forEach(function (f) { if (/^aircraft/i.test(f.name)) ac = f; else if (/^airports/i.test(f.name)) ap = f; });
-          aitmCloseModal(); go();
-        };
-        i2.click();
-      }], ['Load without it', function () { aitmCloseModal(); go(); }, true]]);
-  };
+  inp.id = 'aitm-txt-input'; inp.type = 'file'; inp.accept = '.txt'; inp.multiple = true; inp.style.display = 'none';
+  document.body.appendChild(inp);
+  aitm._txtInput = inp;
+  inp.addEventListener('change', function () {
+    aitmOpenTxtPicked(O, Array.prototype.slice.call(inp.files || [])).catch(function (e) {
+      try { console.error('[Open txt]', e); } catch (x) {}
+      aitmToast('Open txt: ' + (e && e.message || e), true);
+      aitmModal('Open txt', '<div style="font-size:13px;color:var(--txt2);">The file could not be opened: <b>' + aitmEsc(e && e.message || String(e)) + '</b></div>', []);
+    });
+  });
   inp.click();
+}
+async function aitmOpenTxtPicked(O, files) {
+  aitmToast('Reading ' + files.map(function (f) { return f.name; }).join(', ') + ' …');
+  var fp = null, ac = null, ap = null;
+  for (var i = 0; i < files.length; i++) {
+    var t = await aitmReadText(files[i]), n = files[i].name;
+    var kind = /^flightplans/i.test(n) ? 'fp' : /^aircraft/i.test(n) ? 'ac' : /^airports/i.test(n) ? 'ap'
+      : /AC#\d+\s*,[^,\n]*,\s*\d+%/i.test(t) ? 'fp' : /AC#\d+\s*,\s*\d*\s*,\s*"/i.test(t) ? 'ac' : /^[A-Z0-9]{3,4},[NS]\d/m.test(t) ? 'ap' : '';
+    if (kind === 'fp') fp = files[i]; else if (kind === 'ac') ac = files[i]; else if (kind === 'ap') ap = files[i];
+  }
+  if (!fp) { aitmToast('Select the Flightplans_….txt file.', true); return; }
+  var src = null;
+  var wrap = function (f) { return f ? { name: f.name, getFile: function () { return Promise.resolve(f); } } : null; };
+  var go = function () { return aitmOtDone(O, wrap(fp), wrap(ac), wrap(ap), src); };
+  if (!ac) {
+    // Aircraft_/Airports_ from the folders Chrome still allows — at most 5 s, then one more click
+    aitmToast('Looking for Aircraft_ next to ' + fp.name + ' …');
+    var sib = null;
+    try { sib = await Promise.race([aitmFindTxtSiblings(fp), new Promise(function (r) { setTimeout(function () { r(null); }, 5000); })]); } catch (e) { sib = null; }
+    if (sib) {
+      if (sib.ac) ac = await sib.ac.getFile();
+      if (!ap && sib.ap) ap = await sib.ap.getFile();
+      src = { h: sib.dir, label: sib.label };
+    }
+  }
+  if (ac) { await go(); return; }
+  var want = 'Aircraft' + fp.name.replace(/^flightplans/i, '');
+  aitmModal('One more click: ' + aitmEsc(want),
+    '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome does not let the page take <b>' + aitmEsc(want) + '</b> from the folder by itself. '
+    + 'Click <b>Select ' + aitmEsc(want) + '</b> and pick it (Airports_ too, if you like — Ctrl+click).<br>'
+    + '<span style="color:var(--txt3);">Faster next time: in the first window select Flightplans_ and Aircraft_ together (Ctrl+click).</span></div>',
+    [['Select ' + want, function () {
+      var old2 = document.getElementById('aitm-txt-input2'); if (old2) old2.remove();
+      var i2 = document.createElement('input'); i2.id = 'aitm-txt-input2'; i2.type = 'file'; i2.accept = '.txt'; i2.multiple = true; i2.style.display = 'none';
+      document.body.appendChild(i2);
+      i2.addEventListener('change', function () {
+        Array.prototype.slice.call(i2.files || []).forEach(function (f) { if (/^aircraft/i.test(f.name)) ac = f; else if (/^airports/i.test(f.name)) ap = f; });
+        aitmCloseModal(); go();
+      });
+      i2.click();
+    }], ['Load without it', function () { aitmCloseModal(); go(); }, true]]);
 }
 function aitmReadText(file) {
   return file.arrayBuffer().then(function (b) {
@@ -2711,7 +2739,7 @@ async function aitmSaveTxt() {
   var places = [];
   if (aitm._srcDir) places.push({ h: aitm._srcDir.h, label: aitm._srcDir.label, why: 'the folder it was opened from' });
   var fpRoot = await aitmKvGet('fpRoot');
-  if (fpRoot && !aitm._srcDir && (await fpRoot.queryPermission({ mode: 'read' })) === 'granted') {
+  if (fpRoot && !aitm._srcDir && (await aitmQP(fpRoot)) === 'granted') {
     var f = await aitmFindTxtDir(fpRoot, base0);
     if (f) places.push({ h: f.h, label: [fpRoot.name].concat(f.path).join(' \\ '), why: 'where Flightplans_' + base0 + '.txt is' });
   }
@@ -2857,7 +2885,7 @@ async function aitmLogoIndex(ask) {
     }
   }
   for (var i = 0; i < l.length; i++) {
-    var ok = (await l[i].queryPermission({ mode: 'read' })) === 'granted';
+    var ok = (await aitmQP(l[i])) === 'granted';
     if (!ok && ask) ok = await aitmPermOk(l[i]);
     if (ok) await walk(l[i], 3);
   }
