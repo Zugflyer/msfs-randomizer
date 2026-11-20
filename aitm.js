@@ -997,30 +997,17 @@ async function aitmOpenTxt(O) {
         [['Choose folder…', chooseAgain], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
       return;
     }
+    // only ASK Chrome (no question yet): a folder without permission does not block the others. Chrome's own
+    // question (requestPermission) comes only from a click on "Allow access" in the list — it sometimes never
+    // shows when asked without a fresh click, and the dialog then waited forever.
     var need = [];
     for (var r = 0; r < roots.length; r++) {
       var st = 'prompt'; try { st = await T(roots[r].queryPermission({ mode: 'read' }), 4000, 'x'); } catch (e) {}
       if (st === 'granted') ok.push(roots[r]); else need.push(roots[r]);
     }
-    if (need.length) {
-      stage('Chrome asks whether this page may read “<b style="color:#fff;">' + aitmEsc(need[0].name) + '</b>” — answer its question at the <b>top left, next to the address bar</b> '
-        + '(“Allow on every visit” = no more questions).');
-      for (var k = 0; k < need.length; k++) { try { if ((await need[k].requestPermission({ mode: 'read' })) === 'granted') ok.push(need[k]); } catch (e) {} }
-    }
+    aitm._otNeed = need;
   } catch (e) { fail(e && e.message || String(e)); return; }
   if (!document.getElementById('aitm-ot')) return;
-  if (!ok.length) {
-    // no silent stop: Chrome's question was missed or refused → ask again with a fresh click, or choose anew
-    aitmModal(aitmEsc(nm) + ' — allow the flight plan folder',
-      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Chrome does not let the page read “<b>' + aitmEsc(roots[0].name) + '</b>” right now. '
-      + 'Click <b>Allow</b> and confirm Chrome’s question — or choose the folder again.</div>',
-      [['Allow', async function () {
-        var any = false;
-        for (var r2 = 0; r2 < roots.length; r2++) { if (await aitmPermOk(roots[r2])) any = true; }
-        if (any) { aitmCloseModal(); aitmOpenTxt(O); } else say('Chrome still does not allow it — choose the folder again.', true);
-      }], ['Choose folder again…', chooseAgain, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
-    return;
-  }
   stage('Reading the folders …');
   var list = [];
   async function walk(d, root, path, depth) {
@@ -1043,10 +1030,45 @@ async function aitmOpenTxt(O) {
   aitm._otList = list;
   var box = document.getElementById('aitm-ot'); if (!box) return;
   if (!list.length && werr.length) { fail('Could not read ' + werr.join(' · ')); return; }
-  box.innerHTML = '<input id="aitm-ot-q" class="aitm-in" placeholder="Search name or folder …" style="width:100%;box-sizing:border-box;margin-bottom:8px;" oninput="aitmOpenTxtList()">'
-    + '<div id="aitm-ot-list" style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;"></div>';
+  box.innerHTML = aitmOtNeedHtml()
+    + '<input id="aitm-ot-q" class="aitm-in" placeholder="Search name or folder …" style="width:100%;box-sizing:border-box;margin-bottom:8px;" oninput="aitmOpenTxtList()">'
+    + '<div id="aitm-ot-list" style="max-height:58vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;"></div>';
   aitmOpenTxtList();
   setTimeout(function () { var qi = document.getElementById('aitm-ot-q'); if (qi) qi.focus(); }, 30);
+}
+// folders Chrome does not let the page read right now: a notice above the list with two ways out
+function aitmOtNeedHtml() {
+  return (aitm._otNeed || []).map(function (h, k) {
+    return '<div style="border:1px solid rgba(210,153,34,.6);background:rgba(210,153,34,.08);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.6;">'
+      + '<span style="color:#f0b400;">⚠ Chrome needs your OK to read “<b style="color:#fff;">' + aitmEsc(h.name) + '</b>” again</span> — its flight plans are missing below.<br>'
+      + '<button class="aitm-btn" style="margin-top:5px;" onclick="aitmOtReselect(' + k + ')" title="Opens the Windows folder window at this folder: click “Select folder”, then “View files”">📂 Choose this folder again…</button> '
+      + '<button class="aitm-btn" style="margin-top:5px;" onclick="aitmOtAllow(' + k + ')" title="Chrome’s question appears at the top left, next to the address bar">Allow access</button> '
+      + '<span id="aitm-ot-need-' + k + '" style="color:var(--txt3);"></span></div>';
+  }).join('');
+}
+// Chrome's own question (a bubble next to the address bar); if it does not show within 8 s: say so
+async function aitmOtAllow(k) {
+  var h = (aitm._otNeed || [])[k], msg = document.getElementById('aitm-ot-need-' + k); if (!h) return;
+  if (msg) msg.textContent = 'Chrome’s question: top left, next to the address bar …';
+  var res = await Promise.race([h.requestPermission({ mode: 'read' }).catch(function () { return 'denied'; }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 8000); })]);
+  if (res === 'granted') { aitmCloseModal(); aitmOpenTxt(aitm._otOpts); return; }
+  msg = document.getElementById('aitm-ot-need-' + k);
+  if (msg) { msg.style.color = '#f0b400'; msg.textContent = res === 'timeout' ? 'Chrome did not show its question — use “Choose this folder again…”.' : 'Not allowed — use “Choose this folder again…”.'; }
+}
+// the Windows folder window (opens at that folder): picking it gives the permission and replaces the stored folder
+async function aitmOtReselect(k) {
+  var h = (aitm._otNeed || [])[k]; if (!h) return;
+  var n = null;
+  try { n = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read', startIn: h }); }
+  catch (e) { if (e && e.name === 'AbortError') return; try { n = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); } catch (e2) { return; } }
+  var same = async function (a, b) { try { return await a.isSameEntry(b); } catch (e) { return false; } };
+  var fp = await aitmKvGet('fpRoot'), done = false;
+  if (fp && await same(fp, h)) { await aitmKvSet('fpRoot', n); done = true; }
+  var d = (await aitmKvGet('txtDirs')) || [], out = [];
+  for (var i = 0; i < d.length; i++) { if (await same(d[i], h)) { if (!done) out.push(n); done = true; } else out.push(d[i]); }
+  if (!done) { if (fp) out.push(n); else await aitmKvSet('fpRoot', n); }
+  await aitmKvSet('txtDirs', out);
+  aitmCloseModal(); aitmOpenTxt(aitm._otOpts);
 }
 function aitmOpenTxtList() {
   var el = document.getElementById('aitm-ot-list'); if (!el) return;
@@ -1057,7 +1079,7 @@ function aitmOpenTxtList() {
     return '<div onclick="aitmOpenTxtPick(' + p[1] + ')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;gap:16px;align-items:baseline;" onmouseenter="this.style.background=\'var(--surf3)\'" onmouseleave="this.style.background=\'\'">'
       + '<span style="color:#fff;font-weight:600;white-space:nowrap;">' + aitmEsc(x.name.replace(/\.txt$/i, '')) + '</span>'
       + '<span style="color:var(--txt3);font-size:11px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(x.label) + (x.ac ? '' : ' · <span style="color:#d29922;">no Aircraft_</span>') + '</span></div>';
-  }).join('') : '<div style="padding:12px;color:var(--txt3);">' + ((aitm._otList || []).length ? 'Nothing matches.' : 'No Flightplans_….txt in these folders.') + '</div>';
+  }).join('') : '<div style="padding:12px;color:var(--txt3);">' + ((aitm._otList || []).length ? 'Nothing matches.' : (aitm._otNeed || []).length ? 'No list yet — Chrome has to allow the folder above first.' : 'No Flightplans_….txt in these folders.') + '</div>';
 }
 async function aitmOpenTxtPick(i) {
   var x = (aitm._otList || [])[i]; if (!x) return;
@@ -1102,7 +1124,12 @@ async function aitmOpenTxtPicker(O) {
     [['Allow folder', async function () {
       try {
         var dir = known;
-        if (dir) { if (!(await aitmPermOk(dir))) return; }
+        if (dir) {
+          var res = 'granted';
+          if ((await dir.queryPermission({ mode: 'read' })) !== 'granted')
+            res = await Promise.race([dir.requestPermission({ mode: 'read' }).catch(function () { return 'denied'; }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 8000); })]);
+          if (res !== 'granted') { known = null; say(res === 'timeout' ? 'Chrome did not show its question — click “Allow folder” again and choose the folder in the Windows window.' : 'Not allowed — click “Allow folder” again and choose the folder in the Windows window.', true); return; }
+        }
         else {
           dir = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read', startIn: anyH });
           path = await dir.resolve(anyH);
