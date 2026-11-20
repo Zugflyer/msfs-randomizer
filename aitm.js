@@ -2324,13 +2324,43 @@ function aitmModal(title, body, buttons, wide) {
     + '<div id="aitm-modal-btns" style="margin-top:16px;display:flex;justify-content:flex-end;gap:8px;"></div>';
   pop.appendChild(card); document.body.appendChild(pop);
   var bb = card.querySelector('#aitm-modal-btns');
+  // a pure message (nothing to choose, nothing to fill in): Enter closes it (keydown handler below)
+  pop._ack = !(buttons || []).length;
+  // the button that opened the dialog keeps no focus behind it (Enter would press it again)
+  try { if (document.activeElement && !pop.contains(document.activeElement)) document.activeElement.blur(); } catch (e) {}
   (buttons || []).concat([['Close', aitmCloseModal, true]]).forEach(function (b) {
     var btn = document.createElement('button'); btn.textContent = b[0];
     btn.style.cssText = 'font-size:12px;font-weight:600;padding:6px 16px;border-radius:6px;cursor:pointer;' + (b[2] ? 'border:1px solid var(--bdr);background:transparent;color:var(--txt2);' : 'border:none;background:' + (b[3] || 'var(--acc)') + ';color:#fff;');
     btn.onclick = b[1]; bb.appendChild(btn);
+    if (b[1] === aitmCloseModal && pop._ack) {
+      // "Close ↵" while the body has nothing to fill in or choose (bodies filled later are watched)
+      var body = card.children[1], focused = false;
+      var mark = function () {
+        var ack = !aitmModalBusy(body);
+        btn.innerHTML = ack ? 'Close <span style="opacity:.6;font-weight:400;">↵</span>' : 'Close';
+        btn.title = ack ? 'Enter' : '';
+        btn.style.borderColor = ack ? 'var(--acc)' : 'var(--bdr)'; btn.style.color = ack ? '#fff' : 'var(--txt2)';
+        if (ack && !focused) { focused = true; setTimeout(function () { try { if (!aitmModalBusy(body)) btn.focus({ preventScroll: true }); } catch (e) {} }, 0); }
+        if (!ack && document.activeElement === btn) btn.blur();      // filled in later: Enter no longer closes
+      };
+      mark();
+      try { new MutationObserver(mark).observe(body, { childList: true, subtree: true }); } catch (e) {}
+    }
   });
   return card;
 }
+// something to fill in or choose inside the dialog body → Enter does not close it
+function aitmModalBusy(body) { return !!(body && body.querySelector('input:not([type=hidden]),select,textarea,button,[contenteditable="true"]')); }
+// Enter = Close for a pure message (only a Close button, nothing to fill in), so no trip to the mouse
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+  var pop = document.getElementById('aitm-modal'); if (!pop || !pop._ack) return;
+  var card = pop.firstChild, t = e.target;
+  if (t && pop.contains(t) && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName)) return;
+  if (card && aitmModalBusy(card.children[1])) return;
+  e.preventDefault(); e.stopPropagation();
+  aitmCloseModal();
+}, true);
 function aitmCloseModal() { var p = document.getElementById('aitm-modal'); if (p) p.remove(); aitm._updDlg = false; }
 function aitmToast(msg, warn) {
   var el = document.getElementById('aitm-status'); if (!el) return;
