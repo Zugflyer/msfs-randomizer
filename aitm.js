@@ -952,63 +952,43 @@ function aitmOtDone(O, fpH, acH, apH, src) {
 }
 async function aitmOpenTxt(O) {
   O = O || {};
-  var say = O.say || aitmToast, nm = O.name || 'Open txt';
+  var nm = O.name || 'Open txt';
   if (!window.showDirectoryPicker) { if (O.input) O.input(); else aitmOpenTxtInput(); return; }
+  var roots = [], fpRoot = await aitmKvGet('fpRoot'), extra = (await aitmKvGet('txtDirs')) || [];
+  // Chrome forgot its OK for the flight plan folder (e.g. after a restart): the Windows folder window opens
+  // right away at that folder — "Select folder" + "View files" gives it back. (Chrome's own question did not
+  // show on the user's PC, and the page then waited without any sign.)
+  if (fpRoot && (await fpRoot.queryPermission({ mode: 'read' })) !== 'granted') {
+    try { fpRoot = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read', startIn: fpRoot }); }
+    catch (e) {
+      if (e && e.name === 'AbortError') return;
+      try { fpRoot = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); } catch (e2) { return; }
+    }
+    await aitmKvSet('fpRoot', fpRoot);
+  }
+  if (fpRoot) roots.push(fpRoot);
+  for (var i = 0; i < extra.length; i++) {
+    var dup = false;
+    for (var j = 0; j < roots.length && !dup; j++) { try { if (await roots[j].isSameEntry(extra[i])) dup = true; else if (await roots[j].resolve(extra[i])) dup = true; } catch (e) {} }
+    if (!dup) roots.push(extra[i]);
+  }
+  if (!roots.length) {
+    aitmModal(aitmEsc(nm) + ' — your flight plan folder',
+      '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Choose your flight plan folder <b>once</b> — best the top one, '
+      + '<span style="font-family:monospace;">…\\Fligthplans - Fictional and vintage\\CRE flightplans</span>. '
+      + 'Then <b>' + aitmEsc(nm) + '</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
+      [['Choose folder…', async function () {
+        try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
+      }], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
+    return;
+  }
+  var ok = [];                                       // other folders Chrome does not allow right now are left out
+  for (var r = 0; r < roots.length; r++) { try { if ((await roots[r].queryPermission({ mode: 'read' })) === 'granted') ok.push(roots[r]); } catch (e) {} }
   aitm._otOpts = O;
-  var otherFolder = async function () {
-    try { var h = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read' }); var d = (await aitmKvGet('txtDirs')) || []; d.push(h); await aitmKvSet('txtDirs', d); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
-  };
-  var chooseAgain = async function () {
-    try { var h = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); await aitmKvSet('fpRoot', h); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
-  };
-  aitm._otChoose = chooseAgain;
-  // The dialog opens AT ONCE: Chrome's storage, its folder question (a small bubble next to the address bar)
-  // or a slow OneDrive folder must never look like "nothing happens".
-  aitmModal(O.title || 'Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);line-height:1.6;">Looking for your flight plan folders …</div>',
-    [['Other folder…', otherFolder, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []), 'wide');
-  var stage = function (html) { var b = document.getElementById('aitm-ot'); if (b) b.innerHTML = html; return !!b; };
-  var T = function (p, ms, what) {
-    return Promise.race([p, new Promise(function (res, rej) { setTimeout(function () { rej(new Error(what)); }, ms); })]);
-  };
-  var fail = function (msg) {
-    try { console.warn('[Open txt]', msg); } catch (e) {}
-    stage('<div style="color:#f0b400;margin-bottom:8px;">⚠ ' + aitmEsc(msg) + '</div>'
-      + '<button class="aitm-btn" onclick="aitm._otChoose&&aitm._otChoose()">Choose the flight plan folder again…</button> '
-      + '<span style="color:var(--txt3);">or pick the Flightplans_ file directly (button below).</span>');
-  };
-  var roots = [], ok = [];
-  try {
-    var fpRoot = await T(aitmKvGet('fpRoot'), 6000, 'Chrome’s storage did not answer (reading the saved flight plan folder).');
-    var extra = (await T(aitmKvGet('txtDirs'), 6000, 'Chrome’s storage did not answer.')) || [];
-    if (fpRoot) roots.push(fpRoot);
-    for (var i = 0; i < extra.length; i++) {
-      var dup = false;
-      for (var j = 0; j < roots.length && !dup; j++) {
-        try { if (await T(roots[j].isSameEntry(extra[i]), 3000, 'x')) dup = true; else if (await T(roots[j].resolve(extra[i]), 3000, 'x')) dup = true; } catch (e) {}
-      }
-      if (!dup) roots.push(extra[i]);
-    }
-    if (!document.getElementById('aitm-ot')) return;                 // closed meanwhile
-    if (!roots.length) {
-      aitmModal(aitmEsc(nm) + ' — your flight plan folder',
-        '<div style="font-size:13px;color:var(--txt2);line-height:1.7;">Choose your flight plan folder <b>once</b> — best the top one, '
-        + '<span style="font-family:monospace;">…\\Fligthplans - Fictional and vintage\\CRE flightplans</span>. '
-        + 'Then <b>' + aitmEsc(nm) + '</b> lists only the <b>Flightplans_</b> files of it and its sub folders, and loads Aircraft_ and Airports_ with them.</div>',
-        [['Choose folder…', chooseAgain], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []));
-      return;
-    }
-    // only ASK Chrome (no question yet): a folder without permission does not block the others. Chrome's own
-    // question (requestPermission) comes only from a click on "Allow access" in the list — it sometimes never
-    // shows when asked without a fresh click, and the dialog then waited forever.
-    var need = [];
-    for (var r = 0; r < roots.length; r++) {
-      var st = 'prompt'; try { st = await T(roots[r].queryPermission({ mode: 'read' }), 4000, 'x'); } catch (e) {}
-      if (st === 'granted') ok.push(roots[r]); else need.push(roots[r]);
-    }
-    aitm._otNeed = need;
-  } catch (e) { fail(e && e.message || String(e)); return; }
-  if (!document.getElementById('aitm-ot')) return;
-  stage('Reading the folders …');
+  aitmModal(O.title || 'Open txt — Flightplans_ files', '<div id="aitm-ot" style="font-size:12px;color:var(--txt2);">Reading the folders …</div>',
+    [['Other folder…', async function () {
+      try { var h = await window.showDirectoryPicker({ id: 'aitm-txtdir', mode: 'read' }); var d = (await aitmKvGet('txtDirs')) || []; d.push(h); await aitmKvSet('txtDirs', d); aitmCloseModal(); aitmOpenTxt(O); } catch (e) {}
+    }, true], ['Pick a file instead…', function () { aitmCloseModal(); aitmOpenTxtPicker(O); }, true]].concat(O.more || []), 'wide');
   var list = [];
   async function walk(d, root, path, depth) {
     var files = {}, subs = [];
@@ -1024,51 +1004,14 @@ async function aitmOpenTxt(O) {
     });
     for (var s = 0; s < subs.length; s++) await walk(subs[s], root, path.concat([subs[s].name]), depth - 1);
   }
-  var werr = [];
-  for (var q = 0; q < ok.length; q++) { try { await walk(ok[q], ok[q], [], 5); } catch (e) { werr.push(ok[q].name + ': ' + (e && e.message || e)); } }
+  for (var q = 0; q < ok.length; q++) { try { await walk(ok[q], ok[q], [], 5); } catch (e) {} }
   list.sort(function (a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1; });
   aitm._otList = list;
   var box = document.getElementById('aitm-ot'); if (!box) return;
-  if (!list.length && werr.length) { fail('Could not read ' + werr.join(' · ')); return; }
-  box.innerHTML = aitmOtNeedHtml()
-    + '<input id="aitm-ot-q" class="aitm-in" placeholder="Search name or folder …" style="width:100%;box-sizing:border-box;margin-bottom:8px;" oninput="aitmOpenTxtList()">'
-    + '<div id="aitm-ot-list" style="max-height:58vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;"></div>';
+  box.innerHTML = '<input id="aitm-ot-q" class="aitm-in" placeholder="Search name or folder …" style="width:100%;box-sizing:border-box;margin-bottom:8px;" oninput="aitmOpenTxtList()">'
+    + '<div id="aitm-ot-list" style="max-height:62vh;overflow:auto;border:1px solid var(--bdr);border-radius:6px;"></div>';
   aitmOpenTxtList();
   setTimeout(function () { var qi = document.getElementById('aitm-ot-q'); if (qi) qi.focus(); }, 30);
-}
-// folders Chrome does not let the page read right now: a notice above the list with two ways out
-function aitmOtNeedHtml() {
-  return (aitm._otNeed || []).map(function (h, k) {
-    return '<div style="border:1px solid rgba(210,153,34,.6);background:rgba(210,153,34,.08);border-radius:6px;padding:8px 10px;margin-bottom:8px;line-height:1.6;">'
-      + '<span style="color:#f0b400;">⚠ Chrome needs your OK to read “<b style="color:#fff;">' + aitmEsc(h.name) + '</b>” again</span> — its flight plans are missing below.<br>'
-      + '<button class="aitm-btn" style="margin-top:5px;" onclick="aitmOtReselect(' + k + ')" title="Opens the Windows folder window at this folder: click “Select folder”, then “View files”">📂 Choose this folder again…</button> '
-      + '<button class="aitm-btn" style="margin-top:5px;" onclick="aitmOtAllow(' + k + ')" title="Chrome’s question appears at the top left, next to the address bar">Allow access</button> '
-      + '<span id="aitm-ot-need-' + k + '" style="color:var(--txt3);"></span></div>';
-  }).join('');
-}
-// Chrome's own question (a bubble next to the address bar); if it does not show within 8 s: say so
-async function aitmOtAllow(k) {
-  var h = (aitm._otNeed || [])[k], msg = document.getElementById('aitm-ot-need-' + k); if (!h) return;
-  if (msg) msg.textContent = 'Chrome’s question: top left, next to the address bar …';
-  var res = await Promise.race([h.requestPermission({ mode: 'read' }).catch(function () { return 'denied'; }), new Promise(function (r) { setTimeout(function () { r('timeout'); }, 8000); })]);
-  if (res === 'granted') { aitmCloseModal(); aitmOpenTxt(aitm._otOpts); return; }
-  msg = document.getElementById('aitm-ot-need-' + k);
-  if (msg) { msg.style.color = '#f0b400'; msg.textContent = res === 'timeout' ? 'Chrome did not show its question — use “Choose this folder again…”.' : 'Not allowed — use “Choose this folder again…”.'; }
-}
-// the Windows folder window (opens at that folder): picking it gives the permission and replaces the stored folder
-async function aitmOtReselect(k) {
-  var h = (aitm._otNeed || [])[k]; if (!h) return;
-  var n = null;
-  try { n = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read', startIn: h }); }
-  catch (e) { if (e && e.name === 'AbortError') return; try { n = await window.showDirectoryPicker({ id: 'aitm-fproot', mode: 'read' }); } catch (e2) { return; } }
-  var same = async function (a, b) { try { return await a.isSameEntry(b); } catch (e) { return false; } };
-  var fp = await aitmKvGet('fpRoot'), done = false;
-  if (fp && await same(fp, h)) { await aitmKvSet('fpRoot', n); done = true; }
-  var d = (await aitmKvGet('txtDirs')) || [], out = [];
-  for (var i = 0; i < d.length; i++) { if (await same(d[i], h)) { if (!done) out.push(n); done = true; } else out.push(d[i]); }
-  if (!done) { if (fp) out.push(n); else await aitmKvSet('fpRoot', n); }
-  await aitmKvSet('txtDirs', out);
-  aitmCloseModal(); aitmOpenTxt(aitm._otOpts);
 }
 function aitmOpenTxtList() {
   var el = document.getElementById('aitm-ot-list'); if (!el) return;
@@ -1079,7 +1022,7 @@ function aitmOpenTxtList() {
     return '<div onclick="aitmOpenTxtPick(' + p[1] + ')" style="padding:7px 12px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.05);display:flex;justify-content:space-between;gap:16px;align-items:baseline;" onmouseenter="this.style.background=\'var(--surf3)\'" onmouseleave="this.style.background=\'\'">'
       + '<span style="color:#fff;font-weight:600;white-space:nowrap;">' + aitmEsc(x.name.replace(/\.txt$/i, '')) + '</span>'
       + '<span style="color:var(--txt3);font-size:11px;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + aitmEsc(x.label) + (x.ac ? '' : ' · <span style="color:#d29922;">no Aircraft_</span>') + '</span></div>';
-  }).join('') : '<div style="padding:12px;color:var(--txt3);">' + ((aitm._otList || []).length ? 'Nothing matches.' : (aitm._otNeed || []).length ? 'No list yet — Chrome has to allow the folder above first.' : 'No Flightplans_….txt in these folders.') + '</div>';
+  }).join('') : '<div style="padding:12px;color:var(--txt3);">' + ((aitm._otList || []).length ? 'Nothing matches.' : 'No Flightplans_….txt in these folders.') + '</div>';
 }
 async function aitmOpenTxtPick(i) {
   var x = (aitm._otList || [])[i]; if (!x) return;
