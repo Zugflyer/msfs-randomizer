@@ -7089,7 +7089,7 @@ async function aiGenAlImportXls(file) {
     // implausible block times (usually a wrong NIGHT / day offset in the sheet)
     if (timed) {
       const longOnes=aiGenAlLegs.filter(l=>legs.includes(l)).map(l=>({ l, b:alKnownBlock(l,'out') })).filter(x=>alBlockTooLong(x.b));
-      if (longOnes.length) msg+=' · ⚠ block time over 20 h: '+longOnes.slice(0,3).map(x=>x.l.dep[0]+'→'+x.l.arr[0]+' '+x.b+' (NIGHT '+(x.l.arrDayOff>0?'+':'')+(x.l.arrDayOff||0)+')').join(', ')+' — check the day offset';
+      if (longOnes.length) msg+=' · ⚠ block time over 23 h: '+longOnes.slice(0,3).map(x=>x.l.dep[0]+'→'+x.l.arr[0]+' '+x.b+' (NIGHT '+(x.l.arrDayOff>0?'+':'')+(x.l.arrDayOff||0)+')').join(', ')+' — check the day offset';
     }
     if (noTimes) msg+=' · '+noTimes+' without times (please complete)';
     if (parsed.problems.length) {
@@ -7613,7 +7613,9 @@ function alRandomChainLeg(rows, noRet) {
 }
 
 // a block time no airliner flies (> 20 h): almost always a wrong day offset (NIGHT +2 instead of +1)
-function alBlockTooLong(b) { const m=String(b||'').match(/^(\d+):(\d{2})$/); return !!(m && (+m[1])*60+(+m[2]) > 20*60); }
+// over 23 h = almost surely a wrong arrival day (+1 / +2); the longest real flights take up to ~22 h
+// (Qantas "Project Sunrise" Sydney–London / –New York with the A350-1000)
+function alBlockTooLong(b) { const m=String(b||'').match(/^(\d+):(\d{2})$/); return !!(m && (+m[1])*60+(+m[2]) > 23*60); }
 function alKnownBlock(leg, dir) {
   const out = dir!=='ret';
   const fromAp = out ? leg.dep : leg.arr;
@@ -8665,7 +8667,7 @@ function _renderAiGenAlLegsNow() {
       bd.title='Block time computed from DEP and ARR (time zones and day offset considered)';
       const tooLong = alBlockTooLong(kb);
       bd.style.cssText='width:46px;box-sizing:border-box;font-size:11px;font-family:monospace;color:'+(kb?'#3fb950':'var(--txt3)')+';font-weight:'+(kb?700:400)+';border:1px solid '+(kb?'rgba(63,185,80,.4)':'rgba(255,255,255,.12)')+';background:rgba(63,185,80,.07);border-radius:4px;text-align:center;padding:2px 3px;';
-      if (tooLong) { bd.style.color='#f85149'; bd.style.borderColor='#f85149'; bd.style.background='rgba(248,81,73,.12)'; bd.title='Block time over 20 hours — check the arrival day offset (+1 / +2)'; }
+      if (tooLong) { bd.style.color='#f85149'; bd.style.borderColor='#f85149'; bd.style.background='rgba(248,81,73,.12)'; bd.title='Block time over 23 hours — check the arrival day offset (+1 / +2)'; }
       cell.appendChild(sp); cell.appendChild(bd); cell.appendChild(L);
       return cell;
     }
