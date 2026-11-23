@@ -5297,6 +5297,8 @@ window.addEventListener('load', async () => {
   renderLegs();
   initDashFCLogo();
   await loadApOverrides();
+  // your own airports (Data → airport editor) are known now: a Sceneries table already open shows their names
+  try { const v=document.getElementById('view-sceneries'); if (v && v.style.display!=='none' && Array.isArray(sceneriesData)) { renderSceneriesTable(); drawSceneriesMap(); } } catch(e) {}
   await loadLogosFromSupabase();
   // API key modal backdrop
   var akm = document.getElementById('apikey-modal');
@@ -12803,7 +12805,7 @@ function buildSceneryRow(row, ri) {
   const tdIcao=document.createElement('td');
   tdIcao.style.cssText='padding:0;border-bottom:1px solid #dfe4ec;vertical-align:top;';
   const icaoInp=document.createElement('input');
-  icaoInp.type='text'; icaoInp.value=row.icao||''; icaoInp.maxLength=4; icaoInp.placeholder='ICAO';
+  icaoInp.type='text'; icaoInp.value=row.icao||''; icaoInp.maxLength=7; icaoInp.placeholder='ICAO';   // MSFS idents can be longer than 4 (e.g. F0378 Clipperton)
   icaoInp.style.cssText='width:100%;box-sizing:border-box;background:transparent;border:none;outline:none;color:#1d2433;font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:8px 12px;font-family:var(--ff);';
   icaoInp.oninput=()=>{ row.icao=icaoInp.value=icaoInp.value.toUpperCase(); };
   icaoInp.onblur=()=>{
