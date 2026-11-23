@@ -677,12 +677,19 @@ if(q==='1'||(q!=='0'&&s!=='0'&&phone))document.documentElement.classList.add('m'
         <div id="sceneries-map" style="width:100%;height:100%;"></div>
       </div>
       <div style="width:520px;min-width:520px;display:flex;flex-direction:column;overflow:hidden;">
-        <div style="padding:12px 18px 6px;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;">
+        <div style="padding:12px 18px 6px;flex-shrink:0;display:flex;align-items:center;gap:10px;">
           <div style="font-size:15px;font-weight:700;color:#fff;">My Add-on Sceneries</div>
           <span id="sceneries-status" style="font-size:11px;color:#3fb950;"></span>
+          <div style="flex:1;"></div>
+          <button id="sceneries-sort" onclick="sceneriesSort()" title="Sort entries alphabetically by ICAO"
+            style="font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;">⇅ Sort A–Z</button>
         </div>
-        <div style="flex:1;overflow-y:auto;padding:6px 18px 18px;">
-          <div id="sceneries-table"></div>
+        <!-- list + an index at the right edge (▲ top · A–Z · ▼ bottom) instead of a scroll bar -->
+        <div style="flex:1;min-height:0;display:flex;">
+          <div id="sceneries-scroll" style="flex:1;min-width:0;overflow-y:auto;padding:6px 6px 18px 18px;scrollbar-width:none;">
+            <div id="sceneries-table"></div>
+          </div>
+          <div id="sceneries-rail" style="width:30px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;padding:6px 0 10px;user-select:none;"></div>
         </div>
       </div>
     </div>
@@ -12747,16 +12754,7 @@ function renderSceneriesTable() {
   const host = document.getElementById('sceneries-table'); if (!host) return;
   host.innerHTML='';
 
-  const bar=document.createElement('div');
-  bar.style.cssText='display:flex;justify-content:flex-end;margin-bottom:6px;';
-  const sortBtn=document.createElement('button');
-  sortBtn.textContent='⇅ Sort A–Z';
-  sortBtn.title='Sort entries alphabetically by ICAO';
-  sortBtn.style.cssText='font-size:11px;font-weight:600;padding:5px 12px;border-radius:var(--r);border:1px solid var(--bdr2);background:transparent;color:var(--txt2);cursor:pointer;';
-  sortBtn.onclick=sceneriesSort;
-  bar.appendChild(sortBtn);
-  host.appendChild(bar);
-
+  // (the Sort A–Z button sits in the header above, always visible)
   const table=document.createElement('table');
   table.style.cssText='width:100%;border-collapse:separate;border-spacing:0;background:#f4f6fa;border-radius:8px;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.35);';
 
@@ -12778,9 +12776,60 @@ function renderSceneriesTable() {
   host.appendChild(table);
 
   const hint=document.createElement('div');
-  hint.textContent='Type a 4-letter ICAO — the airport name fills in automatically. Press Tab in the last row to add another.';
+  hint.textContent='Type the ICAO — the airport name fills in automatically. Press Tab in the last row to add another.';
   hint.style.cssText='font-size:10px;color:var(--txt3);margin-top:6px;';
   host.appendChild(hint);
+  renderSceneriesRail();
+}
+
+// Index at the right edge of the list: ▲ = top, A–Z = first airport with that letter (or the next letter that has
+// one), ▼ = bottom. Letters without airports are dimmed; the letter of the rows in view is highlighted.
+(function () { try { const st=document.createElement('style'); st.textContent='#sceneries-scroll::-webkit-scrollbar{display:none;}'; document.head.appendChild(st); } catch(e) {} })();
+function renderSceneriesRail() {
+  const rail = document.getElementById('sceneries-rail'), sc = document.getElementById('sceneries-scroll');
+  if (!rail || !sc) return;
+  const firstRow = {};
+  [...document.querySelectorAll('#sceneries-table tbody tr')].forEach((tr, i) => {
+    const c = ((sceneriesData[i] && sceneriesData[i].icao) || '').charAt(0).toUpperCase();
+    if (/[A-Z]/.test(c) && !firstRow[c]) firstRow[c] = tr;
+  });
+  const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+  const st = 'width:26px;text-align:center;font-size:12px;font-weight:700;line-height:1;padding:2px 0;border-radius:4px;cursor:pointer;';
+  rail.innerHTML = '<div data-j="top" title="Top of the list" style="'+st+'font-size:13px;color:#c9b8ff;">▲</div>'
+    + letters.map(c => '<div data-j="'+c+'" title="'+(firstRow[c] ? 'Jump to '+c : 'No airport with '+c+' — jumps to the next letter')+'" style="'+st+'color:'+(firstRow[c] ? 'var(--txt)' : 'var(--txt3)')+';opacity:'+(firstRow[c] ? 1 : .35)+';">'+c+'</div>').join('')
+    + '<div data-j="bottom" title="End of the list" style="'+st+'font-size:13px;color:#c9b8ff;">▼</div>';
+  const go = j => {
+    if (j === 'top') { sc.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (j === 'bottom') { sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); return; }
+    let k = letters.indexOf(j), tr = null;
+    while (k < letters.length && !(tr = firstRow[letters[k]])) k++;          // no such letter: the next one that exists
+    if (!tr) { sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' }); return; }
+    const top = tr.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 4;
+    sc.scrollTo({ top, behavior: 'smooth' });
+  };
+  // press = jump; dragging over the index jumps along with the pointer
+  rail.onpointerdown = e => {
+    const d = e.target.closest && e.target.closest('[data-j]');
+    if (d) { rail._last = d.dataset.j; go(d.dataset.j); }
+    try { rail.setPointerCapture(e.pointerId); } catch (x) {}
+    rail._drag = true; e.preventDefault();
+  };
+  rail.onpointerup = rail.onpointercancel = () => { rail._drag = false; rail._last = null; };
+  rail.onpointermove = e => {
+    if (!rail._drag) return;
+    const el = document.elementFromPoint(rail.getBoundingClientRect().left + 13, e.clientY);
+    const d = el && el.closest && el.closest('#sceneries-rail [data-j]');
+    if (d && d.dataset.j.length === 1 && d.dataset.j !== rail._last) { rail._last = d.dataset.j; go(d.dataset.j); }
+  };
+  // highlight the letter of the first row in view
+  const mark = () => {
+    const top = sc.getBoundingClientRect().top + 8;
+    let cur = '';
+    for (const c of letters) { const tr = firstRow[c]; if (tr && tr.getBoundingClientRect().top <= top + 30) cur = c; }
+    rail.querySelectorAll('[data-j]').forEach(d => { const on = d.dataset.j === cur; d.style.background = on ? 'rgba(123,97,255,.35)' : 'transparent'; });
+  };
+  sc.onscroll = () => { cancelAnimationFrame(sc._raf); sc._raf = requestAnimationFrame(mark); };
+  mark();
 }
 
 function buildSceneryRow(row, ri) {
