@@ -1872,18 +1872,30 @@ function dashClearField(side) {
 }
 
 // ── shared search helper ──
+// One search for every airport field (dashboard, logbook, AI Generator …): exact ICAO / IATA first, then codes that
+// start with it, then the city, then the name — and among equal ones the airports with an IATA code (airline
+// airports, e.g. KSAN for "San Diego") before small strips.
 function apSearchSorted(q) {
+  q = String(q || '').trim().toUpperCase();
   if (q.length < 2) return [];
-  const matches = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
-    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
-  );
-  matches.sort((a,b) => {
-    const s = r => r[0]===q?0:r[0].startsWith(q)?1:(r[1]===q?0:r[1]&&r[1].startsWith(q)?2:3);
-    return s(a)-s(b);
-  });
-  return matches.slice(0,10);
+  const rank = r => {
+    const city = (r[7] || '').toUpperCase(), name = (r[2] || '').toUpperCase();
+    if (r[0] === q) return 0;
+    if (r[1] && r[1] === q) return 1;
+    if (r[0].startsWith(q)) return 2;
+    if (r[1] && r[1].startsWith(q)) return 3;
+    if (city === q) return 4;
+    if (city.startsWith(q) || name.startsWith(q)) return 5;
+    if (city.includes(q) || name.includes(q)) return 6;
+    return -1;
+  };
+  const hits = [];
+  for (const r of DB_SCHED) { const k = rank(r); if (k >= 0) hits.push([k, r]); }
+  hits.sort((a, b) => a[0] - b[0]
+    || ((b[1][1] ? 1 : 0) - (a[1][1] ? 1 : 0))                                   // with IATA code first
+    || ((/\bINT(ERNATIONA)?L\b/i.test(b[1][2]) ? 1 : 0) - (/\bINT(ERNATIONA)?L\b/i.test(a[1][2]) ? 1 : 0))
+    || (a[1][0].length - b[1][0].length));
+  return hits.slice(0, 10).map(h => h[1]);
 }
 
 function suggestHtml(ap) {
@@ -2789,11 +2801,7 @@ function catAddSearch(val) {
   const box = document.getElementById('cat-add-suggest');
   if (!box) return;
   if (q.length < 2) { box.style.display = 'none'; catAddSelectedAp = null; return; }
-  const hits = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
-    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
-  ).slice(0, 10);
+  const hits = apSearchSorted(q);
   if (!hits.length) { box.style.display = 'none'; return; }
   box.innerHTML = hits.map(ap =>
     `<div class="leg-sug-item" onmousedown="catAddSelectAp(event,'${ap[0]}')">
@@ -2915,11 +2923,7 @@ function lbSuggest(inputEl, side) {
   if (!box) return;
   lbSelectedAps[side] = null;
   if (q.length < 2) { box.style.display = 'none'; return; }
-  const hits = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
-    r[7].toUpperCase().includes(q)
-  ).slice(0, 10);
+  const hits = apSearchSorted(q);                     // KSAN first for "KSAN", for "San Diego" too
   if (!hits.length) { box.style.display = 'none'; return; }
   box.innerHTML = hits.map(ap =>
     `<div class="leg-sug-item" onmousedown="lbSelectAp(event,'${ap[0]}','${side}')">
@@ -3304,20 +3308,7 @@ function apBox(ap) {
 }
 
 // ── Airport search autocomplete ──
-function apSearch(q) {
-  q = (q || '').trim().toUpperCase();
-  if (q.length < 2) return [];
-  const hits = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().startsWith(q) ||
-    r[2].toUpperCase().includes(q) || r[7].toUpperCase().includes(q)
-  );
-  hits.sort((a, b) => {
-    const s = r => r[0]===q?0:r[0].startsWith(q)?1:(r[1]===q?0:r[1]&&r[1].startsWith(q)?2:3);
-    return s(a) - s(b);
-  });
-  return hits.slice(0, 10);
-}
+function apSearch(q) { return apSearchSorted(q); }
 
 function buildSuggestBox(inputEl, onSelect) {
   // Create a suggest dropdown bound to this input
@@ -4628,10 +4619,7 @@ function lbEditSuggest(inputEl, side) {
   if (!box) return;
   _lbEditAps[side] = null;
   if (q.length < 2) { box.style.display = 'none'; return; }
-  const hits = DB_SCHED.filter(r =>
-    r[0].startsWith(q) || (r[1] && r[1].startsWith(q)) ||
-    r[2].toUpperCase().startsWith(q) || r[7].toUpperCase().includes(q)
-  ).slice(0, 10);
+  const hits = apSearchSorted(q);
   if (!hits.length) { box.style.display = 'none'; return; }
   box.innerHTML = hits.map(ap =>
     `<div class="leg-sug-item" onmousedown="lbEditSelectAp(event,'${ap[0]}','${side}')">
@@ -9325,9 +9313,7 @@ function aiGenApSuggest(inp) {
   const q = inp.value.trim().toUpperCase();
   const box = document.getElementById('aigen-ap-suggest');
   if (q.length < 2) { box.style.display='none'; return; }
-  const hits = DB_SCHED.filter(r =>
-    r[0].startsWith(q)||(r[1]&&r[1].startsWith(q))||r[2].toUpperCase().startsWith(q)||r[7].toUpperCase().includes(q)
-  ).slice(0,10);
+  const hits = apSearchSorted(q);
   if (!hits.length) { box.style.display='none'; return; }
   box.innerHTML = hits.map(ap =>
     `<div class="leg-sug-item" onmousedown="aiGenSelectAp(event,'${ap[0]}')">
