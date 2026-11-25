@@ -5009,6 +5009,39 @@ let lbMap = null;       // world map
 let lbMapEu = null;    // Europe zoom
 let lbMapLayers = [];
 let lbMapEuLayers = [];
+// Maps: all flights, or only the open ones (blue — not landed yet). Stored per browser.
+let lbMapOpenOnly = (() => { try { return localStorage.getItem('lb_map_open_only') === '1'; } catch(e) { return false; } })();
+function lbMapShows(f) { return !lbMapOpenOnly || !!f.planned; }
+function lbSetMapOpenOnly(v) {
+  lbMapOpenOnly = !!v;
+  try { localStorage.setItem('lb_map_open_only', lbMapOpenOnly ? '1' : '0'); } catch(e) {}
+  document.querySelectorAll('.lb-open-toggle').forEach(lbOpenToggleUI);
+  drawLbMap();
+}
+function lbOpenToggleUI(box) {
+  box.querySelectorAll('button').forEach(b => {
+    const on = (b.dataset.v === '1') === lbMapOpenOnly;
+    b.style.background = on ? (b.dataset.v === '1' ? '#4a9eda' : '#30363d') : 'transparent';
+    b.style.color = on ? '#fff' : '#8b949e';
+  });
+}
+// a small switch in the top right corner of a map: "All flights | Open only" — both maps follow it
+function lbAddOpenToggle(map) {
+  const C = L.Control.extend({ options: { position: 'topright' }, onAdd: function () {
+    const box = L.DomUtil.create('div', 'lb-open-toggle');
+    box.style.cssText = 'display:flex;background:rgba(13,17,23,.88);border:1px solid #30363d;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.5);';
+    box.innerHTML = '<button data-v="0" title="All flights: landed (grey) and open (blue)">All flights</button>'
+      + '<button data-v="1" title="Only the flights not landed yet (blue)">Open only</button>';
+    box.querySelectorAll('button').forEach(b => {
+      b.style.cssText = 'font:600 11px system-ui,sans-serif;padding:6px 11px;border:none;cursor:pointer;';
+      b.onclick = e => { L.DomEvent.stopPropagation(e); lbSetMapOpenOnly(b.dataset.v === '1'); };
+    });
+    L.DomEvent.disableClickPropagation(box); L.DomEvent.disableScrollPropagation(box);
+    lbOpenToggleUI(box);
+    return box;
+  } });
+  new C().addTo(map);
+}
 let lbSelectedAirport = null; // ICAO of selected airport on logbook map
 
 // Default views of the two lower maps (fitted once, to the size of their boxes; both can be moved)
@@ -5056,6 +5089,7 @@ function initLbMapEu() {
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
     { attribution: '', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMapEu);
+  lbAddOpenToggle(lbMapEu);
   setTimeout(function() { if (lbMapEu) lbMapEu.invalidateSize(); }, 200);
 }
 
@@ -5082,7 +5116,7 @@ function drawLbMapEu() {
 
   var airportMapEu = {};
   logbookFlights.forEach(function(f) {
-    if (!f.dep_lat || !f.arr_lat) return;
+    if (!f.dep_lat || !f.arr_lat || !lbMapShows(f)) return;
     const dc = [f.dep_lat, f.dep_lon];
     const ac = [f.arr_lat, f.arr_lon];
     var matchesSel = sel && (f.dep_icao === sel || f.arr_icao === sel);
@@ -5154,6 +5188,7 @@ function initLbMap() {
   if (!el || lbMap) return;
   lbMap = L.map('lb-map', { center: [30, 10], zoom: 2, minZoom: 1, zoomControl: true, zoomSnap: 0.1, zoomDelta: 0.5 });
   lbViewInfo(lbMap);
+  lbAddOpenToggle(lbMap);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
     { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(lbMap);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png?key=cb1_2jh4_1_80614381a365cf8e9fe57522',
@@ -5183,7 +5218,7 @@ function drawLbMap() {
   var airportMap = {};
 
   logbookFlights.forEach(function(f) {
-    if (!f.dep_lat || !f.arr_lat) return;
+    if (!f.dep_lat || !f.arr_lat || !lbMapShows(f)) return;
     var dc = [f.dep_lat, f.dep_lon];
     var ac = [f.arr_lat, f.arr_lon];
     var matchesSel = sel && (f.dep_icao === sel || f.arr_icao === sel);
